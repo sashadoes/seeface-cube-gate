@@ -126,3 +126,5 @@ is done, copy `src/components/cube/*` back into
 - Agents run through `.github/workflows/claude.yml` when someone writes `@claude` in an issue or PR.
 - One issue = one PR. Keep PRs focused, and run `npm run build` (and `npm run typecheck` once it's green) before you push.
 - Don't edit `reference/`.
+- **Deploys:** every push/merge to `main` builds and publishes to https://seeface1.world via `.github/workflows/deploy.yml` (GitHub Pages). Keep `main` green: a broken build means a broken live site. `public/CNAME` holds the domain; don't delete it.
+- **Open branch:** `feature/win-form` has the win check + Instagram winner form (Web3Forms key still missing, not wired into `App.tsx`).
