@@ -1,0 +1,213 @@
+// Visuals for apparitions.ts. All behind the cube, under the fog, no pointer events.
+
+.apparitions {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+// --- dust motes
+.app-mote {
+  position: absolute;
+  bottom: -10px;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.8);
+  opacity: 0;
+  animation: app-mote linear infinite;
+}
+
+@keyframes app-mote {
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: 0.7; }
+  90% { opacity: 0.5; }
+  100% { transform: translate(var(--drift), -105vh); opacity: 0; }
+}
+
+// --- ghost
+.app-ghost {
+  position: absolute;
+  left: 0;
+  width: clamp(70px, 14vw, 140px);
+  filter: blur(1.5px) drop-shadow(0 0 18px rgba(255, 255, 255, 0.45));
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  animation-name: app-ghost-cross, app-ghost-bob;
+  animation-timing-function: linear, ease-in-out;
+  animation-iteration-count: 1, infinite;
+  animation-fill-mode: forwards, none;
+  transition: opacity 0.6s, filter 0.6s;
+
+  svg {
+    display: block;
+    width: 100%;
+    transform: scaleX(var(--flip));
+  }
+
+  &.shy {
+    opacity: 0.05;
+    filter: blur(6px);
+  }
+}
+
+@keyframes app-ghost-cross {
+  from { translate: var(--from) 0; }
+  to { translate: var(--to) 0; }
+}
+
+@keyframes app-ghost-bob {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-22px) rotate(3deg); }
+}
+
+// --- companion cube (lives inside #cubeWrapper, which has perspective)
+.app-orbit {
+  position: absolute;
+  left: 50%;
+  top: 100px;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  animation: app-orbit linear infinite;
+}
+
+@keyframes app-orbit {
+  from { transform: rotateX(var(--tilt)) rotateY(0deg); }
+  to { transform: rotateX(var(--tilt)) rotateY(360deg); }
+}
+
+.app-mini {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  margin: -25px 0 0 -25px;
+  transform-style: preserve-3d;
+  transform: translateZ(var(--radius));
+  animation: app-mini-spin 4s linear infinite;
+
+  i {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-style: normal;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.85);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.75)), rgba(0, 0, 0, 0.7);
+    outline: 1px solid rgba(0, 0, 0, 0.95);
+    backface-visibility: visible;
+  }
+
+  i:nth-child(1) { transform: translateZ(25px); }
+  i:nth-child(2) { transform: rotateY(180deg) translateZ(25px); }
+  i:nth-child(3) { transform: rotateY(90deg) translateZ(25px); }
+  i:nth-child(4) { transform: rotateY(-90deg) translateZ(25px); }
+  i:nth-child(5) { transform: rotateX(90deg) translateZ(25px); }
+  i:nth-child(6) { transform: rotateX(-90deg) translateZ(25px); }
+}
+
+@keyframes app-mini-spin {
+  from { transform: translateZ(var(--radius)) rotateX(0) rotateY(0); }
+  to { transform: translateZ(var(--radius)) rotateX(360deg) rotateY(720deg); }
+}
+
+// --- eyes in the fog
+.app-eyes {
+  position: absolute;
+  display: flex;
+  gap: 14px;
+  transform: scale(var(--scale));
+  animation: app-eyes-open 0.5s ease-out both;
+
+  .eye {
+    width: 26px;
+    height: 13px;
+    border-radius: 50% / 60%;
+    background: radial-gradient(circle at 50% 50%, #fff6d8 0%, #ffd27a 45%, #a85a00 100%);
+    box-shadow: 0 0 14px 3px rgba(255, 190, 80, 0.55);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    animation: app-blink 3.4s infinite;
+  }
+
+  b {
+    width: 7px;
+    height: 11px;
+    border-radius: 50%;
+    background: #000;
+    transition: transform 0.12s;
+  }
+
+  &.closing .eye {
+    animation: app-eyes-close 0.6s forwards;
+  }
+}
+
+@keyframes app-eyes-open {
+  from { opacity: 0; }
+  to { opacity: 0.9; }
+}
+
+@keyframes app-blink {
+  0%, 44%, 50%, 100% { transform: scaleY(1); }
+  47% { transform: scaleY(0.05); }
+}
+
+@keyframes app-eyes-close {
+  to { transform: scaleY(0.02); opacity: 0; }
+}
+
+// --- shadow figure at the end of the tunnel
+.app-figure {
+  position: absolute;
+  top: 50%;
+  width: 46px;
+  transform-origin: bottom center;
+  transform: translate(-50%, -100%) scale(var(--scale));
+  filter: blur(1px) drop-shadow(0 0 10px rgba(0, 0, 0, 0.9));
+  opacity: 0;
+  animation: app-figure 6s ease-in-out forwards;
+
+  svg {
+    display: block;
+    width: 100%;
+  }
+}
+
+@keyframes app-figure {
+  0% { opacity: 0; }
+  20%, 70% { opacity: 0.75; }
+  72% { opacity: 0.1; }
+  74% { opacity: 0.75; }
+  100% { opacity: 0; }
+}
+
+// --- floating logo
+.app-logo {
+  position: absolute;
+  left: -40vw;
+  width: clamp(120px, 26vw, 260px);
+  opacity: 0;
+  filter: blur(0.5px) drop-shadow(0 0 14px rgba(255, 255, 255, 0.5));
+  animation: app-logo 16s ease-in-out forwards;
+}
+
+@keyframes app-logo {
+  0% { transform: translateX(0) rotate(var(--rot)); opacity: 0; }
+  15% { opacity: 0.4; }
+  85% { opacity: 0.4; }
+  100% { transform: translateX(150vw) rotate(calc(var(--rot) * -1)); opacity: 0; }
+}
+
+// Keep the cube above the apparitions layer: #cubeWrapper gets a transform from
+// alive.ts (its own stacking context), so lift its static parent explicitly.
+#shakeCube {
+  position: relative;
+  z-index: 2;
+}

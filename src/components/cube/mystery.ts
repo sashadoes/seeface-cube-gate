@@ -8,6 +8,7 @@ import { randomIntFromInterval as rnd } from "../helper.js";
 import { nudgeWalls, newRoomSkin } from "./alive";
 import { previous, recordSpin } from "./memory";
 import { RARE_SIGIL, SIGILS, snapshot } from "./rewards";
+import { apparitionsStep } from "./apparitions";
 import { track } from "../../analytics";
 import "./Mystery.scss";
 
@@ -241,6 +242,7 @@ export function initMystery(opts: { viewport: Viewport }) {
   document.body.append(layer, black);
   // Returning visitors start deeper in the mystery and are greeted.
   step = Math.min(previous.visits * 2, 8);
+  if (step > 0) setTimeout(() => apparitionsStep(step), 1500);
   scheduleIdle();
 }
 
@@ -248,6 +250,7 @@ export function initMystery(opts: { viewport: Viewport }) {
 export function mysteryStep() {
   step += 1;
   recordSpin(step);
+  apparitionsStep(step);
   scheduleIdle();
 
   // the golden face is its own roll, so it keeps turning up
