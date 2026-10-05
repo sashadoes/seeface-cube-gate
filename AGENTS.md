@@ -120,3 +120,9 @@ The original page wrapper is `reference/evershop-original/extension-src/pages/fr
 is done, copy `src/components/cube/*` back into
 `../my-evershop-app/extensions/sample/src/components/cube/`, and copy the assets into
 `../my-evershop-app/public/`. EverShop compiles the extension's `src` → `dist` in `npm run dev`.
+
+## Working on GitHub
+
+- Agents run through `.github/workflows/claude.yml` when someone writes `@claude` in an issue or PR.
+- One issue = one PR. Keep PRs focused, and run `npm run build` (and `npm run typecheck` once it's green) before you push.
+- Don't edit `reference/`.
