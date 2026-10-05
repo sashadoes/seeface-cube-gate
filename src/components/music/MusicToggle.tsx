@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Howl } from "howler";
+import { track } from "../../analytics";
+import { watchMusic } from "../../engagement";
 import "./MusicToggle.scss";
 
 // Background music: the owner's own track, looping forever, played exactly as
@@ -28,6 +30,8 @@ function writePref(on: boolean) {
   }
 }
 
+let startedOnce = false;
+
 // Keep taps on the switch from spinning the cube or entering a digit.
 const swallow = (e: React.SyntheticEvent) => e.stopPropagation();
 
@@ -46,11 +50,18 @@ export default function MusicToggle() {
       loop: true,
       volume: VOLUME,
       preload: true,
-      onplay: () => setPlaying(true),
+      onplay: () => {
+        setPlaying(true);
+        if (!startedOnce) {
+          startedOnce = true;
+          track("music-playing"); // sound actually came out
+        }
+      },
       onpause: () => setPlaying(false),
       onstop: () => setPlaying(false),
     });
     musicRef.current = music;
+    watchMusic(() => music.playing());
     return () => {
       music.unload();
     };
@@ -92,6 +103,7 @@ export default function MusicToggle() {
   }, []);
 
   const set = (next: boolean) => {
+    if (next !== onRef.current) track(next ? "music-on" : "music-off");
     setOn(next);
     writePref(next);
     const m = musicRef.current;

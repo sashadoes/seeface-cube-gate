@@ -155,3 +155,4 @@ Removed on request (they're in git history if ever wanted back; ask the owner fi
 - **No ghosts. No red room / Twin Peaks room visuals.**
 - No real-money gambling, purchases or deceptive odds, ever.
 - **SEO:** `index.html` has the title/description ("seeface1 — a mystery project"), canonical, Open Graph/Twitter cards (`public/og-image.jpg`, 1200×630), and JSON-LD (WebSite + Organization "seeface1", alternate names see/face / seeface). A visually hidden `<header class="sr-only">` holds the h1 for search engines and screen readers (the no-text-on-screen rule still holds). `public/robots.txt`, `public/sitemap.xml` (update `lastmod` on big changes), `public/site.webmanifest`. When the Instagram handle is known, add it to `sameAs` in the JSON-LD.
+- **Engagement analytics:** `src/engagement.ts`: visible-time milestones `time-15s/30s/1m/2m/3m/5m/10m/20m`; music events `music-playing` (first real playback), `music-30s/1m/3m/7m` (listened time), `music-on/off` (switch).
