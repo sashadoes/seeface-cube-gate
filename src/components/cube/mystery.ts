@@ -7,13 +7,15 @@ import { Howl } from "howler";
 import { randomIntFromInterval as rnd } from "../helper.js";
 import { nudgeWalls, newRoomSkin } from "./alive";
 import { previous, recordSpin } from "./memory";
+import { RARE_SIGIL, SIGILS, snapshot } from "./rewards";
 import { track } from "../../analytics";
 import "./Mystery.scss";
 
 type Viewport = { torqueX: number; torqueY: number };
 
 const NUMBERS = ["1", "2", "3", "4", "5", "6"];
-const SYMBOLS = ["♠", "∑", "♖", "♘", "♕", "▲", "☽", "☾", "♔", "◐", "✶", "⌘", "?", "1"];
+// ♔ is deliberately missing: it only appears on the rare golden face
+const SYMBOLS = ["♠", "∑", "♖", "♘", "♕", "▲", "☽", "☾", "◐", "✶", "⌘", "?", "1"];
 
 let viewport: Viewport | null = null;
 let step = 0;
@@ -203,6 +205,27 @@ export function oracleReveal(text: string) {
   }, 1500);
 }
 
+/** Golden face: a missing sigil glows on one face for a few seconds. Lock it in time to collect it. */
+function goldenFace() {
+  const missing = SIGILS.filter((g) => !snapshot().found.includes(g));
+  if (!missing.length) return;
+  const glyph = missing.includes(RARE_SIGIL) && chance(0.5) ? RARE_SIGIL : pick(missing);
+  const list = faces().filter((f) => !f.classList.contains("golden"));
+  const face = pick(list);
+  if (!face) return;
+  const before = face.innerHTML;
+  face.innerHTML = glyph;
+  face.classList.add("golden");
+  syncActiveDigit();
+  sfx.bell.play();
+  buzz([15, 40, 15]);
+  setTimeout(() => {
+    face.classList.remove("golden");
+    if (face.innerHTML === glyph) face.innerHTML = before;
+    syncActiveDigit();
+  }, rnd(2600, 4200));
+}
+
 // Pools unlock as the player goes deeper.
 const EARLY = [bigDigit, shake, wallsSpeed, fogSurge];
 const MIDDLE = [shuffleFaces, ghost, scrambleCode, invertWalls, possessed, newSkin];
@@ -242,6 +265,9 @@ export function mysteryStep() {
   step += 1;
   recordSpin(step);
   scheduleIdle();
+
+  // the golden face is its own roll, so it keeps turning up
+  if (step >= 3 && chance(0.09)) goldenFace();
 
   // ~1 in 40 spins once deep enough, at most once per visit
   if (step >= 6 && chance(1 / 40)) {

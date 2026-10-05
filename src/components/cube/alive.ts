@@ -11,6 +11,7 @@
 // How input maps onto the room is randomised per visit, so it never feels the same twice.
 import { randomIntFromInterval as rnd } from "../helper.js";
 import { memory } from "./memory";
+import { isComplete } from "./rewards";
 
 type Viewport = {
   torqueX: number;
@@ -122,9 +123,11 @@ function frame(now: number) {
     const beatT = ((now / 60000) * bpm) % 1;
     const thump = Math.exp(-((beatT - 0.05) ** 2) / 0.002) + 0.6 * Math.exp(-((beatT - 0.22) ** 2) / 0.002);
     const glow = 6 + thump * (10 + energy * 22);
-    const r = Math.round(lerp(140, 255, energy));
-    const g = Math.round(lerp(220, 40, energy));
-    const b = Math.round(lerp(255, 60, energy));
+    // the full sigil set turns the cube's glow gold-white for good
+    const done = isComplete();
+    const r = done ? 255 : Math.round(lerp(140, 255, energy));
+    const g = done ? 236 : Math.round(lerp(220, 40, energy));
+    const b = done ? 170 : Math.round(lerp(255, 60, energy));
     const a = (0.25 + thump * 0.45) * (1 - idle * 0.7);
     cube.style.filter = `drop-shadow(0 0 ${glow.toFixed(1)}px rgba(${r},${g},${b},${a.toFixed(2)}))`;
 

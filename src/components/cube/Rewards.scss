@@ -1,0 +1,146 @@
+// Sigil collection bar (top right), golden face, logo reveal.
+
+.sigil-bar {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  pointer-events: none;
+  text-align: right;
+  font-family: "Times New Roman", Times, serif;
+}
+
+.sigils {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.sigil {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.28);
+  border: 1px dotted rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.82);
+  transition: color 0.8s, text-shadow 0.8s, border-color 0.8s;
+
+  &.found {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.55);
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.85);
+  }
+
+  &.fresh {
+    animation: sigil-fresh 2.2s ease-out;
+  }
+
+  .complete & {
+    color: #fff3c4;
+    border-color: #ffe27a;
+    text-shadow: 0 0 10px #ffd84a;
+  }
+}
+
+@keyframes sigil-fresh {
+  0% { transform: scale(3.2); color: #ffe27a; text-shadow: 0 0 24px #ffd84a; }
+  35% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.streak {
+  margin-top: 5px;
+  display: flex;
+  gap: 3px;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 9px;
+
+  .notch {
+    width: 2px;
+    height: 9px;
+    background: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+    transform: skewX(-12deg);
+  }
+
+  .cracked {
+    margin-left: 4px;
+    font-size: 11px;
+    color: #ffe27a;
+    text-shadow: 0 0 6px #ffd84a;
+  }
+}
+
+// Golden face: a rare sigil on one face for a few seconds. Lock it in time to collect.
+.cube > div > div.cube-image.golden {
+  color: #ffe27a !important;
+  text-shadow: 0 0 14px #ffd84a, 0 0 30px #ff9d00 !important;
+  animation: golden-pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes golden-pulse {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.8); }
+}
+
+// Logo reveal: the room goes dark and the seeface1 logo rises out of it.
+.reward-reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 970;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.55) 0%, #000 70%);
+  pointer-events: none;
+  animation: reveal-in 1.2s ease-out both;
+
+  img {
+    width: min(70vw, 70vh, 560px);
+    filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.7));
+    animation: reveal-logo 4.2s ease-out both;
+  }
+
+  &.grand {
+    background: radial-gradient(circle, rgba(60, 40, 0, 0.6) 0%, #000 72%);
+
+    img {
+      filter: drop-shadow(0 0 30px #ffd84a) drop-shadow(0 0 60px rgba(255, 157, 0, 0.6));
+      animation: reveal-logo-grand 7s ease-out both;
+    }
+  }
+
+  &.leaving {
+    animation: reveal-out 1.2s ease-in both;
+  }
+}
+
+@keyframes reveal-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes reveal-out {
+  to { opacity: 0; filter: blur(12px); }
+}
+
+@keyframes reveal-logo {
+  0% { opacity: 0; transform: scale(0.6) translateY(40px); filter: blur(16px); }
+  40% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0) drop-shadow(0 0 22px rgba(255, 255, 255, 0.7)); }
+  100% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes reveal-logo-grand {
+  0% { opacity: 0; transform: scale(0.3) rotate(-25deg); filter: blur(20px); }
+  30% { opacity: 1; transform: scale(1.1) rotate(0); }
+  45% { transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.08); }
+}
+
+// On phones the music box is top-left; keep sigils top-right but smaller.
+@media (max-width: 480px) {
+  .sigils { gap: 4px; }
+  .sigil { width: 19px; height: 19px; font-size: 13px; }
+}

@@ -14,6 +14,7 @@ import "./ScriptLoader.js";
 import { track } from "../../analytics";
 import { initMystery, mysteryStep, buzz } from "./mystery";
 import { initAlive } from "./alive";
+import { collect, checkDailyCode } from "./rewards";
 
 import "./CubeStyle.scss";
 
@@ -710,8 +711,12 @@ export default function Cube() {
       var activeNumber = document.getElementsByClassName("active")[0].innerHTML;
       var codeInput = window.document.getElementById("cube-code");
 
+      // locking a symbol face collects it as a sigil (if not found yet)
+      collect(activeNumber);
+
       if (codeInput) {
         var totalCode = codeInput.innerHTML + activeNumber;
+        checkDailyCode(totalCode, CubeBehave.dailyPass);
 
         if (totalCode.length < CubeBehave.maxSteps) {
           new Howl({
