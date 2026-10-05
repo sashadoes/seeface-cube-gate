@@ -702,6 +702,18 @@ export default function Cube() {
       if (codeInput) {
         var totalCode = codeInput.innerHTML + activeNumber;
 
+        // Win: today's code typed in a row. Open the walls, then let App show
+        // the Instagram form. Temporary until the game state machine (issue #2).
+        if (!CubeBehave.win && totalCode.includes(CubeBehave.dailyPass)) {
+          CubeBehave.win = true;
+          codeInput.innerHTML = totalCode;
+          window.removeEventListener("mouseup", myFunction, false);
+          new Howl({ src: ["/sounds/MagicClick1.mp3"], autoplay: true, volume: 0.6 });
+          openWallpaper();
+          setTimeout(() => window.dispatchEvent(new CustomEvent("cube-win")), 1800);
+          return;
+        }
+
         if (totalCode.length < CubeBehave.maxSteps) {
           new Howl({
             src: ["/sounds/CodeClickInput.mp3"],

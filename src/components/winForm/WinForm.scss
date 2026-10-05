@@ -1,0 +1,71 @@
+.win-overlay {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  cursor: default;
+}
+
+.win-form {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+  color: #bdbdbd;
+
+  h1 {
+    color: #00ffa6f3;
+    font-size: 2.4rem;
+    margin-bottom: 16px;
+    text-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5), 9px 9px 11px rgba(243, 5, 5, 0.473),
+      17px 17px 19px rgba(86, 245, 12, 0.5);
+  }
+
+  p {
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+
+  form {
+    display: flex;
+    gap: 8px;
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    padding: 12px;
+    font-size: 16px;
+    color: #eee;
+    background: #111;
+    border: 1px solid #333;
+    outline: none;
+
+    &:focus {
+      border-color: #00ffa6;
+    }
+  }
+
+  button {
+    padding: 12px 18px;
+    font-size: 16px;
+    color: #000;
+    background: #00ffa6;
+    border: 0;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+  }
+
+  .win-handle {
+    color: #00ffa6;
+    font-size: 1.4rem;
+  }
+
+  .win-error {
+    color: #ff5050;
+    margin-top: 12px;
+  }
+}
