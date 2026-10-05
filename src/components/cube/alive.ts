@@ -10,6 +10,7 @@
 //
 // How input maps onto the room is randomised per visit, so it never feels the same twice.
 import { randomIntFromInterval as rnd } from "../helper.js";
+import { memory } from "./memory";
 
 type Viewport = {
   torqueX: number;
@@ -48,7 +49,8 @@ let t0 = performance.now();
 
 // Per-visit personality: randomised once, sometimes flips.
 const persona = {
-  curious: chance(0.5), // lean toward the pointer, or shy away from it
+  // lean toward the pointer, or shy away; it gets colder the more often you return
+  curious: chance(memory.visits > 2 ? 0.25 : 0.5),
   hueAxis: chance(0.5) ? "x" : "y", // which rotation axis tints the room
   hueRange: rnd(40, 160), // how far colours can drift
   invertSpin: chance(0.3), // tunnel flows against the spin instead of with it
@@ -96,6 +98,7 @@ function frame(now: number) {
   energy = lerp(energy, target, target > energy ? 0.25 : 0.02);
   calm = lerp(calm, 1 - energy, 0.005);
   const idle = clamp((now - lastActive - 4000) / 8000, 0, 1); // 0 active → 1 ignored
+  lastIdle = idle;
 
   // violent spin → sometimes the room changes its skin
   if (energy > 0.75 && chance(0.004)) swapGeneratedImage();
@@ -157,6 +160,13 @@ function frame(now: number) {
   if (fog && !fog.classList.contains("mystery-fog")) fog.style.opacity = (0.75 + idle * 0.25 - energy * 0.4).toFixed(2);
 
   requestAnimationFrame(frame);
+}
+
+let lastIdle = 0;
+
+/** Current mood, for the music: energy 0..1 (how hard they play), idle 0..1. */
+export function getMood() {
+  return { energy, idle: lastIdle };
 }
 
 // ---------------------------------------------------------------- api

@@ -12,7 +12,7 @@ import dailyPasses from "../../config/dailyPass.json";
 
 import "./ScriptLoader.js";
 import { track } from "../../analytics";
-import { initMystery, mysteryStep } from "./mystery";
+import { initMystery, mysteryStep, buzz } from "./mystery";
 import { initAlive } from "./alive";
 
 import "./CubeStyle.scss";
@@ -721,6 +721,7 @@ export default function Cube() {
             volume: 0.5,
           }).play();
           codeInput.innerHTML = totalCode;
+          buzz(12);
           CubeBehave.records[CubeBehave.round].push(codeInput);
         } else {
           new Howl({

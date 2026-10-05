@@ -137,3 +137,7 @@ is done, copy `src/components/cube/*` back into
 - **Walls:** chess pattern = random generated images (picsum, a new random seed per visit) + the see/face logo as a semi-transparent watermark (`public/imgs/seeface-chess-mixed.png`). Logo source: `public/imgs/seeface-logo.png`.
 - **Music:** `src/components/music/MusicToggle.tsx`. A hidden YouTube player loops "1 Hour of Twin Peaks Ambient Music" (The Dream Sequencer), with an old-Tumblr style on/off switch top-left. It starts on the first press. Note: YouTube's terms say embedded players shouldn't be hidden, and ads may play. Swap it for a licensed MP3 (a looping Howl) when one is available.
 - **Analytics:** GoatCounter (https://seeface1.goatcounter.com), events in `src/analytics.ts`.
+- **Memory:** `src/components/cube/memory.ts` (localStorage `seeface-memory`). Returning visitors are greeted with a whisper, start deeper in the mystery, and get a colder (more often shy) cube.
+- **Red room:** a rare event in `mystery.ts` (about 1 in 40 spins after step 6, at most once per visit, tracked as `red-room`).
+- **Reactive music:** `MusicToggle` reads `getMood()` from `alive.ts`. Volume swells with energy; playback slows to 0.75× when idle and speeds to 1.25× when spun hard.
+- **Vibration:** `buzz()` in `mystery.ts` (Android only): a tick per digit, plus patterns on shake and the red room.

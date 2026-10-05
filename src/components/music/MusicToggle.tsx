@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getMood } from "../cube/alive";
 import "./MusicToggle.scss";
 
 // Background music: "1 Hour of Twin Peaks Ambient Music" (The Dream Sequencer)
@@ -112,6 +113,29 @@ export default function MusicToggle() {
       window.removeEventListener("touchstart", start, true);
       window.removeEventListener("keydown", start, true);
     };
+  }, []);
+
+  // The music follows the cube: it swells when people spin hard, slows and
+  // fades when the cube is ignored.
+  useEffect(() => {
+    let rate = 1;
+    let vol = VOLUME;
+    const timer = setInterval(() => {
+      const p = playerRef.current;
+      if (!onRef.current || !p?.getPlayerState || p.getPlayerState() !== 1) return;
+      const { energy, idle } = getMood();
+      const targetVol = Math.round(idle > 0.5 ? 22 : VOLUME + energy * 40);
+      if (Math.abs(targetVol - vol) >= 3) {
+        vol += Math.sign(targetVol - vol) * 3; // fade gently
+        p.setVolume(vol);
+      }
+      const targetRate = idle > 0.6 ? 0.75 : energy > 0.7 ? 1.25 : 1;
+      if (targetRate !== rate) {
+        rate = targetRate;
+        p.setPlaybackRate?.(rate);
+      }
+    }, 250);
+    return () => clearInterval(timer);
   }, []);
 
   const set = (next: boolean) => {
