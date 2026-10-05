@@ -12,6 +12,7 @@ import dailyPasses from "../../config/dailyPass.json";
 
 import "./ScriptLoader.js";
 import { track } from "../../analytics";
+import { initMystery, mysteryStep } from "./mystery";
 
 import "./CubeStyle.scss";
 
@@ -694,6 +695,8 @@ export default function Cube() {
       element: document.getElementsByClassName("cube")[0],
     });
 
+    initMystery({ viewport });
+
     setFade("in", "cubeWrapper");
 
     var firstSpin = true;
@@ -736,7 +739,8 @@ export default function Cube() {
         }
       }
 
-      runCubeBehave();
+      // was runCubeBehave(): fixed round-based effects; now random mystery events
+      mysteryStep();
 
       //shuffleActiveCube();
 

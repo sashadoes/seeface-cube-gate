@@ -496,9 +496,11 @@ section {
   position: relative;
   width: 100%;
   height: 50vh;
-  background-image: url("https://picsum.photos/600?tip=0");
-  background-size: 40px 40px;
-  animation: pan 4s linear infinite;
+  // chess: see/face logo squares + randomly generated image squares
+  background-image: url("/imgs/seeface-chess-mixed.png"),
+    url("https://picsum.photos/600?tip=0");
+  background-size: var(--chess-size) var(--chess-size), 40px 40px;
+  animation: pan var(--pan-speed) linear infinite;
   opacity: 0.9;
 }
 
@@ -506,18 +508,27 @@ section {
   position: relative;
   width: 100%;
   height: 50vh;
-  background-image: url("https://picsum.photos/600?tip=1");
-  background-size: 40px 40px;
-  animation: pan 4s linear infinite;
+  // chess: see/face logo squares + randomly generated image squares
+  background-image: url("/imgs/seeface-chess-mixed.png"),
+    url("https://picsum.photos/600?tip=1");
+  background-size: var(--chess-size) var(--chess-size), 40px 40px;
+  animation: pan var(--pan-speed) linear infinite;
   opacity: 0.8;
+}
+
+// Chess wallpaper: 2x2 tile of the see/face logo, black/white alternating.
+// --pan-speed is changed at runtime by the mystery events (mystery.ts).
+:root {
+  --chess-size: 160px;
+  --pan-speed: 8s;
 }
 
 @keyframes pan {
   0% {
-    background-position: 0;
+    background-position: 0 0;
   }
   100% {
-    background-position: 40px;
+    background-position: var(--chess-size) 0;
   }
 }
 

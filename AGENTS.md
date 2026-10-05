@@ -128,3 +128,11 @@ is done, copy `src/components/cube/*` back into
 - Don't edit `reference/`.
 - **Deploys:** every push/merge to `main` builds and publishes to https://seeface1.world via `.github/workflows/deploy.yml` (GitHub Pages). Keep `main` green: a broken build means a broken live site. `public/CNAME` holds the domain; don't delete it.
 - **Open branch:** `feature/win-form` has the win check + Instagram winner form (Web3Forms key still missing, not wired into `App.tsx`).
+
+## Current state (2026-10-05)
+
+- **The cube is the first screen.** The riddle (`components/welcomeForm`) is no longer in the flow (`App.tsx`).
+- **Mystery engine:** `src/components/cube/mystery.ts` + `Mystery.scss`. After every spin it may trigger random events (whispers, giant digits, shake, the cube spinning by itself, face shuffle, ghost cube, stolen digit, tunnel speed/reverse, inverted walls, blackout, glitch, fog surge). Odds and the event pool grow with depth, and idle visitors get whispers. This replaces the old `runCubeBehave()`.
+- **Walls:** chess pattern = random generated images (picsum) + the see/face logo as a semi-transparent watermark (`public/imgs/seeface-chess-mixed.png`). Logo source: `public/imgs/seeface-logo.png`.
+- **Music:** `src/components/music/MusicToggle.tsx`. A hidden YouTube player loops "1 Hour of Twin Peaks Ambient Music" (The Dream Sequencer), with an old-Tumblr style on/off switch top-left. It starts on the first press. Note: YouTube's terms say embedded players shouldn't be hidden, and ads may play. Swap it for a licensed MP3 (a looping Howl) when one is available.
+- **Analytics:** GoatCounter (https://seeface1.goatcounter.com), events in `src/analytics.ts`.

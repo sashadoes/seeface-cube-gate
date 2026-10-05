@@ -1,0 +1,111 @@
+// Visuals for mystery.ts events.
+
+.mystery-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.mystery-black {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.05s;
+}
+
+.mystery-whisper {
+  position: absolute;
+  font-family: "Times New Roman", Times, serif;
+  font-style: italic;
+  font-size: clamp(14px, 2.4vw, 22px);
+  letter-spacing: 2px;
+  text-transform: lowercase;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.8), 0 0 2px #000;
+  opacity: 0;
+  animation: mystery-whisper 4.2s ease-in-out forwards;
+}
+
+@keyframes mystery-whisper {
+  0% { opacity: 0; filter: blur(6px); }
+  20% { opacity: 0.9; filter: blur(0); }
+  70% { opacity: 0.75; }
+  100% { opacity: 0; filter: blur(4px); }
+}
+
+.mystery-digit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "Times New Roman", Times, serif;
+  font-size: min(70vw, 70vh);
+  line-height: 1;
+  color: #fff;
+  mix-blend-mode: difference;
+  opacity: 0;
+  animation: mystery-digit 1.6s ease-out forwards;
+}
+
+@keyframes mystery-digit {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.4); }
+  12% { opacity: 0.85; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+}
+
+.mystery-shake {
+  animation: mystery-shake 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes mystery-shake {
+  10%, 90% { transform: translate(-2px, 1px) rotate(-1deg); }
+  20%, 80% { transform: translate(4px, -2px) rotate(2deg); }
+  30%, 50%, 70% { transform: translate(-8px, 3px) rotate(-3deg); }
+  40%, 60% { transform: translate(8px, -3px) rotate(3deg); }
+}
+
+#wallpaper.mystery-reverse .pattern .face {
+  animation-direction: reverse;
+}
+
+#wallpaper.mystery-invert .pattern .face {
+  filter: invert(1);
+}
+
+#wallpaper .pattern .face {
+  transition: filter 0.6s;
+}
+
+body.mystery-glitch #wrapper {
+  animation: mystery-glitch 0.12s steps(2) infinite;
+  filter: invert(1) hue-rotate(110deg) contrast(1.6);
+}
+
+@keyframes mystery-glitch {
+  0% { transform: translate(0, 0); clip-path: inset(0 0 0 0); }
+  33% { transform: translate(-6px, 2px); clip-path: inset(12% 0 30% 0); }
+  66% { transform: translate(5px, -3px); clip-path: inset(40% 0 8% 0); }
+  100% { transform: translate(0, 0); clip-path: inset(0 0 0 0); }
+}
+
+.fogwrapper {
+  transition: opacity 1.8s;
+}
+
+.fogwrapper.mystery-fog {
+  opacity: 1;
+  filter: blur(1px) brightness(1.8) saturate(0.4);
+
+  #foglayer_01,
+  #foglayer_02,
+  #foglayer_03 {
+    opacity: 0.85 !important;
+    animation-play-state: paused;
+  }
+}
