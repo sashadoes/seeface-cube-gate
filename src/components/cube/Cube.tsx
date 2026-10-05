@@ -328,6 +328,14 @@ function unlockAudioOnPress() {
   window.addEventListener(type, unlockAudioOnPress, { capture: true })
 );
 
+// The cube only makes sound while its page is actually open on screen:
+// switching tabs, minimising or locking the phone silences every effect.
+const muteWhenHidden = () => Howler.mute(document.hidden);
+document.addEventListener("visibilitychange", muteWhenHidden);
+window.addEventListener("pagehide", () => Howler.mute(true));
+window.addEventListener("pageshow", muteWhenHidden);
+muteWhenHidden();
+
 export default function Cube() {
   useEffect(() => {
     var events = new Events();

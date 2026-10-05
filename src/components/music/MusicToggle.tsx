@@ -58,6 +58,8 @@ export default function MusicToggle() {
   const [playing, setPlaying] = useState(false);
   const playerRef = useRef<any>(null);
   const onRef = useRef(on);
+  // the visitor pressed before the YouTube player finished loading
+  const wantsStart = useRef(false);
   onRef.current = on;
 
   // Create the hidden player once.
@@ -79,7 +81,10 @@ export default function MusicToggle() {
           playsinline: 1,
         },
         events: {
-          onReady: (e: any) => e.target.setVolume(VOLUME),
+          onReady: (e: any) => {
+            e.target.setVolume(VOLUME);
+            if (wantsStart.current && onRef.current && !document.hidden) e.target.playVideo();
+          },
           onStateChange: (e: any) => {
             setPlaying(e.data === YT.PlayerState.PLAYING);
             // Belt and braces: restart if the loop ever stops at the end.
@@ -100,7 +105,12 @@ export default function MusicToggle() {
   // on the first press anywhere (the same press that spins the cube).
   useEffect(() => {
     const start = () => {
-      if (onRef.current) playerRef.current?.playVideo?.();
+      const p = playerRef.current;
+      if (p?.playVideo && p.getPlayerState) {
+        if (onRef.current) p.playVideo();
+      } else {
+        wantsStart.current = true; // start as soon as the player is ready
+      }
       window.removeEventListener("pointerdown", start, true);
       window.removeEventListener("touchstart", start, true);
       window.removeEventListener("keydown", start, true);
@@ -112,6 +122,28 @@ export default function MusicToggle() {
       window.removeEventListener("pointerdown", start, true);
       window.removeEventListener("touchstart", start, true);
       window.removeEventListener("keydown", start, true);
+    };
+  }, []);
+
+  // Silence when the page isn't open on screen; pick up again on return.
+  useEffect(() => {
+    let wasPlaying = false;
+    const onVisibility = () => {
+      const p = playerRef.current;
+      if (!p?.getPlayerState) return;
+      if (document.hidden) {
+        wasPlaying = p.getPlayerState() === 1;
+        if (wasPlaying) p.pauseVideo();
+      } else if (wasPlaying && onRef.current) {
+        p.playVideo();
+      }
+    };
+    const onHide = () => playerRef.current?.pauseVideo?.();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onHide);
     };
   }, []);
 
