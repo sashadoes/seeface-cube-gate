@@ -1,6 +1,23 @@
-html {
-  background-color: rgb(255, 137, 33);
-  color: black;
+// Native-app feel: the page itself never scrolls, bounces, zooms or selects.
+// The cube owns every touch.
+html,
+body,
+#root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  background-color: #000;
+  color: #fff;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
 }
 
 

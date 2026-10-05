@@ -430,7 +430,9 @@ export default function Cube() {
 
     function bindEvent(element, type, handler) {
       if (element.addEventListener) {
-        element.addEventListener(type, handler, false);
+        // touch handlers must be non-passive, otherwise preventDefault() is
+        // ignored and iOS/Android scroll the page instead of spinning the cube
+        element.addEventListener(type, handler, type.startsWith("touch") ? { passive: false } : false);
       } else {
         element.attachEvent("on" + type, handler);
       }
@@ -762,7 +764,8 @@ export default function Cube() {
       //openWallpaper();
     };
 
-    window.addEventListener("mouseup", myFunction, false);
+    // pointerup (not mouseup): phones only fake mouseup for taps, never after a drag
+    window.addEventListener("pointerup", myFunction, false);
 
     // initStars();
 

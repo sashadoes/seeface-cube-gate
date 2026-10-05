@@ -24,6 +24,7 @@ type Viewport = {
 const CHESS = "/imgs/seeface-chess-mixed.png";
 const BASE_SCALE = 0.8; // .viewport's own scale in CubeStyle.scss
 const BASE_CHESS = 160; // px, matches --chess-size
+const FLOW = 0.7; // overall tunnel speed (owner: 30% slower)
 
 const chance = (p: number) => Math.random() < p;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -142,7 +143,7 @@ function frame(now: number) {
   // --- room: tunnel flow follows the spin
   const flow = persona.invertSpin ? -1 : 1;
   if (Math.abs(vp.torqueX) > 1.5) wallDir = Math.sign(vp.torqueX) * flow;
-  const speed = (18 + energy * 520) * (1 - idle * 0.85) * speedMul; // px per second
+  const speed = (18 + energy * 520) * (1 - idle * 0.85) * speedMul * FLOW; // px per second
   wallOffset = (wallOffset + wallDir * speed * dt) % (BASE_CHESS * 100);
   const size = BASE_CHESS * (1 + energy * 0.35);
   walls.forEach((w) => {

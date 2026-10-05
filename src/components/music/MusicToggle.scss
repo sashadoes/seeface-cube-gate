@@ -1,16 +1,6 @@
 // Old-Tumblr mysterious blog music widget: tiny type, lowercase, a spinning
 // disc and a marquee. Sits above the fog and the cube.
 
-.bg-music-hidden {
-  position: fixed;
-  left: -9999px;
-  top: 0;
-  width: 200px;
-  height: 200px;
-  overflow: hidden;
-  pointer-events: none;
-}
-
 .music-box {
   position: fixed;
   top: 12px;
