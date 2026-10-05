@@ -1,0 +1,102 @@
+// Old-Tumblr "ask me anything": a tiny link that opens a dotted box.
+.ask-cube {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  font-family: "Times New Roman", Times, serif;
+  font-style: italic;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  text-transform: lowercase;
+  color: #cfcfcf;
+  text-align: right;
+}
+
+.ask-link {
+  all: unset;
+  cursor: pointer;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.88);
+  border: 1px dotted #6d6d6d;
+  opacity: 0.8;
+  transition: opacity 0.3s, text-shadow 0.3s;
+  animation: ask-flicker 7s infinite;
+
+  &:hover {
+    opacity: 1;
+    color: #fff;
+    text-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+  }
+
+  .is-open & {
+    animation: none;
+  }
+}
+
+.ask-box {
+  margin-top: 6px;
+  width: min(270px, calc(100vw - 24px));
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px dotted #6d6d6d;
+  text-align: left;
+  display: grid;
+  gap: 7px;
+
+  label {
+    color: #8d8d8d;
+  }
+
+  input {
+    font: inherit;
+    font-style: normal;
+    font-size: 16px; // 16px stops iOS zooming in on focus
+    color: #fff;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px dotted #888;
+    padding: 4px 0;
+    outline: none;
+
+    &:focus {
+      border-bottom-color: #fff;
+    }
+
+    &::placeholder {
+      color: #555;
+      font-style: italic;
+    }
+  }
+
+  button {
+    all: unset;
+    justify-self: end;
+    cursor: pointer;
+    color: #fff;
+    border-bottom: 1px dotted #fff;
+
+    &:disabled {
+      color: #555;
+      border-bottom-color: #555;
+      cursor: default;
+    }
+  }
+}
+
+// On phones the music box sits top-left, so tuck the ask link under it.
+@media (max-width: 480px) {
+  .ask-cube {
+    top: 70px;
+    left: 12px;
+    right: auto;
+    text-align: left;
+  }
+}
+
+@keyframes ask-flicker {
+  0%, 92%, 100% { opacity: 0.8; }
+  93% { opacity: 0.2; }
+  95% { opacity: 0.9; }
+  96% { opacity: 0.3; }
+}

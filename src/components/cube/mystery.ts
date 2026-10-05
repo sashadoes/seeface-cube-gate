@@ -6,7 +6,7 @@
 import { Howl } from "howler";
 import { randomIntFromInterval as rnd } from "../helper.js";
 import { nudgeWalls, newRoomSkin } from "./alive";
-import { greeting, previous, recordSpin } from "./memory";
+import { previous, recordSpin } from "./memory";
 import { track } from "../../analytics";
 import "./Mystery.scss";
 
@@ -14,31 +14,6 @@ type Viewport = { torqueX: number; torqueY: number };
 
 const NUMBERS = ["1", "2", "3", "4", "5", "6"];
 const SYMBOLS = ["♠", "∑", "♖", "♘", "♕", "▲", "☽", "☾", "♔", "◐", "✶", "⌘", "?", "1"];
-
-const WHISPERS = [
-  "it sees you",
-  "not this face",
-  "count again",
-  "who is the 1?",
-  "closer",
-  "you were here before",
-  "wrong side",
-  "6 is lying",
-  "turn it back",
-  "it remembers your hands",
-  "keep spinning",
-  "the gate is listening",
-  "almost",
-  "don't trust the moon",
-  "behind you",
-  "see / face",
-  "it was always one",
-  "the floor is moving",
-  "you missed one",
-  "again",
-];
-
-const IDLE_WHISPERS = ["still there?", "it is waiting", "spin", "don't leave", "we can see you"];
 
 let viewport: Viewport | null = null;
 let step = 0;
@@ -69,19 +44,6 @@ function syncActiveDigit() {
 }
 
 // ---------------------------------------------------------------- events
-
-/** A cryptic line fades in somewhere on screen. */
-function whisper(text = pick(WHISPERS)) {
-  const el = document.createElement("div");
-  el.className = "mystery-whisper";
-  el.textContent = text;
-  el.style.left = rnd(8, 62) + "vw";
-  el.style.top = rnd(10, 78) + "vh";
-  el.style.transform = `rotate(${rnd(-12, 12)}deg)`;
-  layer.appendChild(el);
-  pick([sfx.magic1, sfx.magic2]).play();
-  setTimeout(() => el.remove(), 4200);
-}
 
 /** A giant digit flashes over everything. */
 function bigDigit() {
@@ -153,7 +115,6 @@ function scrambleCode() {
     if (++n > 12) {
       clearInterval(timer);
       code.innerHTML = steal ? original.slice(0, -1) : original;
-      if (steal) whisper("you missed one");
     }
   }, 45);
 }
@@ -219,7 +180,7 @@ function redRoom() {
   track("red-room");
   const room = document.createElement("div");
   room.className = "mystery-redroom";
-  room.innerHTML = '<div class="curtains"></div><div class="chevron"></div><div class="redroom-text">you are in the room now</div>';
+  room.innerHTML = '<div class="curtains"></div><div class="chevron"></div>';
   document.body.appendChild(room);
   sfx.bell.play();
   buzz([60, 80, 60, 80, 200]);
@@ -227,8 +188,23 @@ function redRoom() {
   setTimeout(() => room.remove(), 6400);
 }
 
+/** The cube answers a question: it spins by itself, the faces scramble, then the answer surfaces. */
+export function oracleReveal(text: string) {
+  possessed();
+  shuffleFaces();
+  buzz([20, 60, 20]);
+  setTimeout(() => {
+    const el = document.createElement("div");
+    el.className = "mystery-oracle";
+    el.textContent = text;
+    layer.appendChild(el);
+    sfx.bell.play();
+    setTimeout(() => el.remove(), 6500);
+  }, 1500);
+}
+
 // Pools unlock as the player goes deeper.
-const EARLY = [whisper, bigDigit, shake, wallsSpeed, fogSurge];
+const EARLY = [bigDigit, shake, wallsSpeed, fogSurge];
 const MIDDLE = [shuffleFaces, ghost, scrambleCode, invertWalls, possessed, newSkin];
 const DEEP = [blackout, glitch, shuffleFaces, possessed];
 
@@ -241,8 +217,8 @@ function poolForStep() {
 function scheduleIdle() {
   clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
-    if (chance(0.6)) whisper(pick(IDLE_WHISPERS));
-    else possessed();
+    if (chance(0.5)) possessed();
+    else shake();
     scheduleIdle();
   }, rnd(14000, 26000));
 }
@@ -258,8 +234,6 @@ export function initMystery(opts: { viewport: Viewport }) {
   document.body.append(layer, black);
   // Returning visitors start deeper in the mystery and are greeted.
   step = Math.min(previous.visits * 2, 8);
-  const hello = greeting();
-  if (hello) setTimeout(() => whisper(hello), 2500);
   scheduleIdle();
 }
 

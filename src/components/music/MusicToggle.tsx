@@ -167,8 +167,7 @@ export default function MusicToggle() {
           <span className="music-disc" />
           <div className="music-marquee">
             <span>
-              ♫ now playing: twin peaks ambient ~ the dream sequencer ~ do not
-              turn around ~
+              ♫ now playing: twin peaks ambient ~ the dream sequencer ~
             </span>
           </div>
         </div>
