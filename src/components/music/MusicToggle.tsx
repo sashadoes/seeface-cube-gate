@@ -9,7 +9,7 @@ import "./MusicToggle.scss";
 // once the visitor touches the page.
 const TRACK = "/music/girl_on_the_line_v1.mp3";
 const TRACK_NAME = "girl on the line";
-const VOLUME = 0.6;
+const VOLUME = 1; // full, original volume
 const STORAGE_KEY = "seeface-music";
 
 function readPref(): boolean {
