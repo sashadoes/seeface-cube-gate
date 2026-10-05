@@ -312,6 +312,18 @@ function checkWin() {
 
 Howler.autoUnlock = true;
 
+// Howler only unlocks audio on "click", but spinning the cube is a drag, which
+// never fires a click, so the game stayed silent. Resume the AudioContext on the
+// first press instead (mousedown/touchstart count as a user gesture).
+function unlockAudioOnPress() {
+  if (Howler.ctx && Howler.ctx.state !== "running") {
+    Howler.ctx.resume();
+  }
+}
+["pointerdown", "mousedown", "touchstart", "keydown"].forEach((type) =>
+  window.addEventListener(type, unlockAudioOnPress, { capture: true })
+);
+
 export default function Cube() {
   useEffect(() => {
     var events = new Events();
