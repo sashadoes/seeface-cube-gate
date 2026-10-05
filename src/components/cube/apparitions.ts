@@ -2,8 +2,9 @@
 // Progression never ends: after the last unlock, every 10 spins brings a "wave"
 // and everything grows a little stronger (capped so phones stay smooth).
 //
-//   4+  dust motes        14+ companion cube orbits   28+ shadow figure (closer each time)
-//   8+  ghost drifts by   20+ eyes open in the fog     36+ the seeface1 logo floats through
+//   4+  dust motes        20+ eyes open in the fog     36+ the seeface1 logo floats through
+//   14+ companion cube    28+ shadow figure (closer each time)
+//   (no ghosts: removed at the owner's request)
 //
 // No text, ever. Everything sits behind the cube and under the fog.
 import { randomIntFromInterval as rnd } from "../helper.js";
@@ -24,7 +25,6 @@ const unlocked = new Set<string>();
 
 const MAX_MOTES = 36;
 const MAX_COMPANIONS = 3;
-const MAX_GHOSTS = 4;
 
 function ensureLayer() {
   if (layer) return layer;
@@ -67,37 +67,6 @@ function addMotes(n: number) {
     m.style.animationDelay = -rnd(0, 20) + "s";
     host.appendChild(m);
   }
-}
-
-const GHOST_SVG = `<svg viewBox="0 0 120 160" aria-hidden="true"><defs><radialGradient id="gg" cx="50%" cy="35%" r="70%"><stop offset="0%" stop-color="#fff" stop-opacity=".95"/><stop offset="70%" stop-color="#dfe8ef" stop-opacity=".55"/><stop offset="100%" stop-color="#cfd8df" stop-opacity="0"/></radialGradient></defs><path d="M60 6C30 6 14 30 14 62v78c0 6 6 8 10 3l9-10 9 12c3 4 7 4 10 0l8-11 8 11c3 4 7 4 10 0l9-12 9 10c4 5 10 3 10-3V62C106 30 90 6 60 6Z" fill="url(#gg)"/><ellipse cx="44" cy="58" rx="8" ry="12" fill="#000" opacity=".85"/><ellipse cx="76" cy="58" rx="8" ry="12" fill="#000" opacity=".85"/><ellipse cx="60" cy="88" rx="7" ry="10" fill="#000" opacity=".6"/></svg>`;
-
-/** A ghost drifts across the room. It fades away if the pointer comes close. */
-function ghost() {
-  const host = ensureLayer();
-  if (host.querySelectorAll(".app-ghost").length >= MAX_GHOSTS) return;
-  const g = document.createElement("div");
-  g.className = "app-ghost";
-  g.innerHTML = GHOST_SVG;
-  const fromLeft = chance(0.5);
-  const top = rnd(8, 55);
-  const dur = rnd(11, 19);
-  g.style.top = top + "vh";
-  g.style.setProperty("--from", fromLeft ? "-25vw" : "110vw");
-  g.style.setProperty("--to", fromLeft ? "110vw" : "-25vw");
-  g.style.setProperty("--flip", fromLeft ? "1" : "-1");
-  g.style.animationDuration = dur + "s, 3.2s";
-  host.appendChild(g);
-  // shy: fade when the pointer is near
-  const shy = setInterval(() => {
-    const r = g.getBoundingClientRect();
-    const dx = pointerX * window.innerWidth - (r.left + r.width / 2);
-    const dy = pointerY * window.innerHeight - (r.top + r.height / 2);
-    g.classList.toggle("shy", Math.hypot(dx, dy) < 160);
-  }, 150);
-  setTimeout(() => {
-    clearInterval(shy);
-    g.remove();
-  }, dur * 1000);
 }
 
 /** A small black-glass cube orbiting the big one. Persistent. */
@@ -180,7 +149,6 @@ export function apparitionsStep(depth: number) {
   ensureLayer();
 
   if (depth >= 4 && unlock("motes")) addMotes(14);
-  if (depth >= 8 && unlock("ghost")) ghost();
   if (depth >= 14 && unlock("companion")) addCompanion();
   if (depth >= 20 && unlock("eyes")) eyes();
   if (depth >= 28 && unlock("figure")) figure();
@@ -188,7 +156,6 @@ export function apparitionsStep(depth: number) {
 
   // ongoing: the deeper, the more often things show up
   const heat = Math.min(depth / 60, 1);
-  if (depth >= 8 && chance(0.06 + heat * 0.14)) ghost();
   if (depth >= 20 && chance(0.04 + heat * 0.1)) eyes();
   if (depth >= 28 && chance(0.03 + heat * 0.05)) figure();
   if (depth >= 36 && chance(0.02 + heat * 0.04)) floatingLogo();
@@ -199,8 +166,6 @@ export function apparitionsStep(depth: number) {
     track(`depth-${depth - (depth % 10)}`);
     addMotes(4);
     addCompanion();
-    ghost();
-    setTimeout(ghost, 1400);
     setTimeout(eyes, 600);
     setTimeout(figure, 2200);
     setTimeout(floatingLogo, 3000);

@@ -28,42 +28,6 @@
   100% { transform: translate(var(--drift), -105vh); opacity: 0; }
 }
 
-// --- ghost
-.app-ghost {
-  position: absolute;
-  left: 0;
-  width: clamp(70px, 14vw, 140px);
-  filter: blur(1.5px) drop-shadow(0 0 18px rgba(255, 255, 255, 0.45));
-  opacity: 0.55;
-  mix-blend-mode: screen;
-  animation-name: app-ghost-cross, app-ghost-bob;
-  animation-timing-function: linear, ease-in-out;
-  animation-iteration-count: 1, infinite;
-  animation-fill-mode: forwards, none;
-  transition: opacity 0.6s, filter 0.6s;
-
-  svg {
-    display: block;
-    width: 100%;
-    transform: scaleX(var(--flip));
-  }
-
-  &.shy {
-    opacity: 0.05;
-    filter: blur(6px);
-  }
-}
-
-@keyframes app-ghost-cross {
-  from { translate: var(--from) 0; }
-  to { translate: var(--to) 0; }
-}
-
-@keyframes app-ghost-bob {
-  0%, 100% { transform: translateY(0) rotate(-3deg); }
-  50% { transform: translateY(-22px) rotate(3deg); }
-}
-
 // --- companion cube (lives inside #cubeWrapper, which has perspective)
 .app-orbit {
   position: absolute;

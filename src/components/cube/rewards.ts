@@ -120,3 +120,23 @@ export function checkDailyCode(code: string, dailyPass: string) {
   save();
   reveal(false);
 }
+
+// ------------------------------------------------------------ devil's game
+
+/** Burn one collected sigil (devil's game lost). Returns the glyph, or null. */
+export function loseSigil(): string | null {
+  if (!state.found.length || state.complete) return null;
+  const i = Math.floor(Math.random() * state.found.length);
+  const [lost] = state.found.splice(i, 1);
+  save();
+  return lost;
+}
+
+/** Grant a random missing sigil (devil's game won). Returns the glyph, or null. */
+export function grantMissing(): string | null {
+  const missing = SIGILS.filter((g) => !state.found.includes(g));
+  if (!missing.length) return null;
+  const g = missing[Math.floor(Math.random() * missing.length)];
+  collect(g);
+  return g;
+}

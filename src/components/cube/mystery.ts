@@ -9,6 +9,7 @@ import { nudgeWalls, newRoomSkin } from "./alive";
 import { previous, recordSpin } from "./memory";
 import { RARE_SIGIL, SIGILS, snapshot } from "./rewards";
 import { apparitionsStep } from "./apparitions";
+import { devilOffer } from "./devil";
 import { track } from "../../analytics";
 import "./Mystery.scss";
 
@@ -252,6 +253,9 @@ export function mysteryStep() {
   recordSpin(step);
   apparitionsStep(step);
   scheduleIdle();
+
+  // the devil's game: rare, only deep in the session
+  if (step >= 10 && chance(0.05)) setTimeout(devilOffer, rnd(600, 2000));
 
   // the golden face is its own roll, so it keeps turning up
   if (step >= 3 && chance(0.09)) goldenFace();

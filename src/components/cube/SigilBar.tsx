@@ -6,17 +6,24 @@ import "./Rewards.scss";
 export default function SigilBar() {
   const [s, setS] = useState(snapshot);
   const [fresh, setFresh] = useState<string | null>(null);
-  const prev = useRef(s.found.length);
+  const [burnt, setBurnt] = useState<string | null>(null);
+  const prev = useRef(s.found);
 
   useEffect(
     () =>
       subscribe(() => {
         const next = snapshot();
-        if (next.found.length > prev.current) {
-          setFresh(next.found[next.found.length - 1]);
+        const gained = next.found.find((g) => !prev.current.includes(g));
+        const lost = prev.current.find((g) => !next.found.includes(g));
+        if (gained) {
+          setFresh(gained);
           setTimeout(() => setFresh(null), 2200);
         }
-        prev.current = next.found.length;
+        if (lost) {
+          setBurnt(lost);
+          setTimeout(() => setBurnt(null), 2400);
+        }
+        prev.current = next.found;
         setS(next);
       }),
     []
@@ -28,7 +35,7 @@ export default function SigilBar() {
         {SIGILS.map((g) => (
           <span
             key={g}
-            className={"sigil" + (s.found.includes(g) ? " found" : "") + (fresh === g ? " fresh" : "")}
+            className={"sigil" + (s.found.includes(g) ? " found" : "") + (fresh === g ? " fresh" : "") + (burnt === g ? " burnt" : "")}
           >
             {g}
           </span>

@@ -37,6 +37,10 @@
     animation: sigil-fresh 2.2s ease-out;
   }
 
+  &.burnt {
+    animation: sigil-burn 2.4s ease-out;
+  }
+
   .complete & {
     color: #fff3c4;
     border-color: #ffe27a;
@@ -143,4 +147,10 @@
 @media (max-width: 480px) {
   .sigils { gap: 4px; }
   .sigil { width: 19px; height: 19px; font-size: 13px; }
+}
+
+@keyframes sigil-burn {
+  0% { color: #fff; background: #ff2a00; box-shadow: 0 0 22px 6px #ff3c00; transform: scale(1.6); }
+  40% { color: #ff6a00; background: #3a0700; box-shadow: 0 0 12px 2px #ff3c00; transform: scale(1.1) rotate(8deg); }
+  100% { box-shadow: none; transform: none; }
 }
