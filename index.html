@@ -3,18 +3,84 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+
+    <!-- Search -->
+    <title>seeface1 — a mystery project</title>
+    <meta name="description" content="seeface1 (see/face) is a mystery project. A black cube waits at seeface1.world. Spin it. Every face hides a number. Nobody says what opens when you find the right one." />
+    <meta name="keywords" content="seeface1, seeface, see/face, see face 1, seeface1 world, mystery project, mystery cube, puzzle cube" />
+    <meta name="author" content="seeface1" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://seeface1.world/" />
+
+    <!-- Link previews: Instagram, WhatsApp, Facebook, iMessage, Telegram -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="seeface1" />
+    <meta property="og:title" content="seeface1 — a mystery project" />
+    <meta property="og:description" content="A black cube waits. Spin it. Nobody says what opens." />
+    <meta property="og:url" content="https://seeface1.world/" />
+    <meta property="og:image" content="https://seeface1.world/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="the see/face logo glowing in the dark" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="seeface1 — a mystery project" />
+    <meta name="twitter:description" content="A black cube waits. Spin it. Nobody says what opens." />
+    <meta name="twitter:image" content="https://seeface1.world/og-image.jpg" />
+
+    <!-- Tells Google what seeface1 is -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://seeface1.world/#website",
+            "name": "seeface1",
+            "alternateName": ["see/face", "seeface", "see face 1", "seeface1.world"],
+            "url": "https://seeface1.world/",
+            "description": "seeface1 is a mystery project: a black cube that has to be spun to be understood.",
+            "publisher": { "@id": "https://seeface1.world/#project" },
+            "inLanguage": "en"
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://seeface1.world/#project",
+            "name": "seeface1",
+            "alternateName": ["see/face", "seeface"],
+            "url": "https://seeface1.world/",
+            "logo": "https://seeface1.world/icon-512.png",
+            "image": "https://seeface1.world/og-image.jpg",
+            "description": "seeface1 (see/face) is a mystery project."
+          }
+        ]
+      }
+    </script>
+
+    <!-- App -->
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="seeface1" />
-    <link rel="icon" href="/imgs/seeface-logo.png" />
-    <link rel="apple-touch-icon" href="/imgs/seeface-logo.png" />
-    <title>seeface1</title>
+    <link rel="icon" type="image/png" href="/imgs/seeface-logo.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <script data-goatcounter="https://seeface1.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+    <style>
+      /* for search engines and screen readers only: visitors never see text */
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+    </style>
   </head>
   <body>
+    <header class="sr-only">
+      <h1>seeface1</h1>
+      <p>seeface1 (see/face) is a mystery project. A black cube waits here. Spin it: every face hides a number, and the room changes the deeper you go.</p>
+    </header>
     <div id="root"></div>
+    <noscript>
+      <h1>seeface1</h1>
+      <p>seeface1 is a mystery project. The cube needs JavaScript to wake up.</p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

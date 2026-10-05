@@ -1,0 +1,10 @@
+{
+  "name": "seeface1",
+  "short_name": "seeface1",
+  "description": "seeface1 — a mystery project",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [{ "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }]
+}

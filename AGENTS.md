@@ -154,3 +154,4 @@ Removed on request (they're in git history if ever wanted back; ask the owner fi
 - **Never change the background music**: no volume, speed or effect modulation. Only on/off and pause-when-hidden.
 - **No ghosts. No red room / Twin Peaks room visuals.**
 - No real-money gambling, purchases or deceptive odds, ever.
+- **SEO:** `index.html` has the title/description ("seeface1 — a mystery project"), canonical, Open Graph/Twitter cards (`public/og-image.jpg`, 1200×630), and JSON-LD (WebSite + Organization "seeface1", alternate names see/face / seeface). A visually hidden `<header class="sr-only">` holds the h1 for search engines and screen readers (the no-text-on-screen rule still holds). `public/robots.txt`, `public/sitemap.xml` (update `lastmod` on big changes), `public/site.webmanifest`. When the Instagram handle is known, add it to `sameAs` in the JSON-LD.
