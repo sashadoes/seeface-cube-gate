@@ -142,6 +142,16 @@ function floatingLogo() {
   setTimeout(() => l.remove(), 16000);
 }
 
+/** Everything at once: used when full trance is held (an eruption). */
+export function surge() {
+  ensureLayer();
+  addMotes(3);
+  eyes();
+  setTimeout(eyes, 500);
+  setTimeout(figure, 1200);
+  setTimeout(floatingLogo, 1800);
+}
+
 // ---------------------------------------------------------------- progression
 
 /** Call once per spin with the current depth. */

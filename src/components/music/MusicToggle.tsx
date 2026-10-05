@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Howl } from "howler";
-import { getMood } from "../cube/alive";
 import "./MusicToggle.scss";
 
-// Background music: the owner's own track, looping forever.
+// Background music: the owner's own track, looping forever, played exactly as
+// it is (owner rule: never change its volume, speed or sound). Only paused
+// while the page isn't open on screen.
 // Played with Howler (HTML5 audio, streamed), so it also works on iPhone/iPad
 // once the visitor touches the page.
 const TRACK = "/music/girl_on_the_line_v1.mp3";
@@ -88,27 +89,6 @@ export default function MusicToggle() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onHide);
     };
-  }, []);
-
-  // The music follows the cube: it swells when people spin hard, slows and
-  // fades when the cube is ignored.
-  useEffect(() => {
-    let vol = VOLUME;
-    let rate = 1;
-    const timer = setInterval(() => {
-      const m = musicRef.current;
-      if (!m || !m.playing()) return;
-      const { energy, idle } = getMood();
-      const targetVol = idle > 0.5 ? 0.25 : Math.min(VOLUME + energy * 0.35, 1);
-      vol += (targetVol - vol) * 0.15; // fade gently
-      m.volume(vol);
-      const targetRate = idle > 0.6 ? 0.9 : energy > 0.7 ? 1.06 : 1;
-      if (targetRate !== rate) {
-        rate = targetRate;
-        m.rate(rate);
-      }
-    }, 250);
-    return () => clearInterval(timer);
   }, []);
 
   const set = (next: boolean) => {

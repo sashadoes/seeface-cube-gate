@@ -4,6 +4,7 @@ import Cube from "./components/cube/Cube";
 import MusicToggle from "./components/music/MusicToggle";
 import SigilBar from "./components/cube/SigilBar";
 import Seal from "./components/seal/Seal";
+import TranceMeter from "./components/cube/TranceMeter";
 // AskCube (components/oracle) is parked: answers were on-screen text.
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
       <MusicToggle />
       <SigilBar />
       <Seal />
+      <TranceMeter />
     </>
   );
 }

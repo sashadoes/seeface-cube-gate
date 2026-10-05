@@ -22,16 +22,17 @@ type State = {
   streak: number;
   lastDay: string;
   complete: boolean;
+  rank: number; // rebirths: every full set of 7 → rank + 1, sigils reset
 };
 
 function load(): State {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { found: [], crackedDay: "", streak: 0, lastDay: "", complete: false, ...JSON.parse(raw) };
+    if (raw) return { found: [], crackedDay: "", streak: 0, lastDay: "", complete: false, rank: 0, ...JSON.parse(raw) };
   } catch {
     // storage blocked: progress lasts this visit only
   }
-  return { found: [], crackedDay: "", streak: 0, lastDay: "", complete: false };
+  return { found: [], crackedDay: "", streak: 0, lastDay: "", complete: false, rank: 0 };
 }
 
 const state = load();
@@ -66,9 +67,16 @@ export function subscribe(fn: () => void) {
   };
 }
 export function snapshot() {
-  return { found: [...state.found], streak: state.streak, complete: state.complete, crackedToday: state.crackedDay === today() };
+  return {
+    found: [...state.found],
+    streak: state.streak,
+    complete: state.complete,
+    crackedToday: state.crackedDay === today(),
+    rank: state.rank,
+  };
 }
 export const isComplete = () => state.complete;
+export const getRank = () => state.rank;
 
 // ------------------------------------------------------------ reveal
 
@@ -107,6 +115,9 @@ export function collect(symbol: string): boolean {
     state.complete = true;
     track("collection-complete");
     setTimeout(() => reveal(true), 600);
+    // Rebirth: after the grand reveal the sigils return to the dark and the
+    // player rises one rank (new cube colour, one more mark on the seal).
+    setTimeout(rebirth, 9000);
   }
   save();
   return true;
@@ -119,6 +130,14 @@ export function checkDailyCode(code: string, dailyPass: string) {
   track("daily-code-cracked");
   save();
   reveal(false);
+}
+
+function rebirth() {
+  state.found = [];
+  state.complete = false;
+  state.rank += 1;
+  track(`rank-${Math.min(state.rank, 50)}`);
+  save();
 }
 
 // ------------------------------------------------------------ devil's game

@@ -222,3 +222,18 @@
   text-shadow: 0 0 18px #ff2000, 0 0 40px #b00000;
   animation: seal-turn 3s linear infinite;
 }
+
+// one glowing mark per rank (rebirth), around the outside of the seal
+.seal-ranks {
+  position: absolute;
+  inset: -6px;
+  width: calc(100% + 12px);
+  height: calc(100% + 12px);
+  overflow: visible;
+  pointer-events: none;
+
+  circle {
+    fill: #ffd84a;
+    filter: drop-shadow(0 0 3px #ffb300);
+  }
+}

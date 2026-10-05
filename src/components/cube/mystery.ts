@@ -8,7 +8,8 @@ import { randomIntFromInterval as rnd } from "../helper.js";
 import { nudgeWalls, newRoomSkin } from "./alive";
 import { previous, recordSpin } from "./memory";
 import { RARE_SIGIL, SIGILS, snapshot } from "./rewards";
-import { apparitionsStep } from "./apparitions";
+import { apparitionsStep, surge } from "./apparitions";
+import { getTrance, tranceSpin } from "./trance";
 import { devilOffer } from "./devil";
 import { track } from "../../analytics";
 import "./Mystery.scss";
@@ -21,6 +22,7 @@ const SYMBOLS = ["♠", "∑", "♖", "♘", "♕", "▲", "☽", "☾", "◐", 
 
 let viewport: Viewport | null = null;
 let step = 0;
+let spinsSinceGolden = 0; // luck guarantee: a golden face is never too far away
 let idleTimer: ReturnType<typeof setTimeout> | undefined;
 let layer: HTMLDivElement;
 let black: HTMLDivElement;
@@ -252,13 +254,26 @@ export function mysteryStep() {
   step += 1;
   recordSpin(step);
   apparitionsStep(step);
+  const erupt = tranceSpin();
+  const trance = getTrance();
+  if (erupt) {
+    // full trance held: the room erupts
+    bigDigit();
+    shake();
+    newSkin();
+    surge();
+  }
   scheduleIdle();
 
   // the devil's game: rare, only deep in the session
-  if (step >= 10 && chance(0.05)) setTimeout(devilOffer, rnd(600, 2000));
+  if (step >= 10 && chance(0.05 + trance * 0.012)) setTimeout(devilOffer, rnd(600, 2000));
 
   // the golden face is its own roll, so it keeps turning up
-  if (step >= 3 && chance(0.09)) goldenFace();
+  spinsSinceGolden += 1;
+  if (step >= 3 && (chance(0.09 + trance * 0.03) || spinsSinceGolden >= 22)) {
+    spinsSinceGolden = 0;
+    goldenFace();
+  }
 
 
   // Odds grow with depth; occasionally nothing happens at all, which is creepier.

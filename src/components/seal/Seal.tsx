@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getRank, subscribe } from "../cube/rewards";
 import { SITE_URL, WEB3FORMS_ACCESS_KEY } from "../../config/form";
 import { track } from "../../analytics";
 import "./Seal.scss";
@@ -31,6 +32,8 @@ export default function Seal() {
   const [words, setWords] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const canSpeak = WEB3FORMS_ACCESS_KEY.length > 0;
+  const [rank, setRank] = useState(getRank);
+  useEffect(() => subscribe(() => setRank(getRank())), []);
 
   const summon = async () => {
     track("share-opened");
@@ -140,6 +143,14 @@ export default function Seal() {
             <textPath href="#seal-circle">{RING + RING}</textPath>
           </text>
         </svg>
+        {rank > 0 && (
+          <svg className="seal-ranks" viewBox="0 0 100 100" aria-hidden="true">
+            {Array.from({ length: Math.min(rank, 12) }, (_, i) => {
+              const a = (i / Math.min(rank, 12)) * Math.PI * 2 - Math.PI / 2;
+              return <circle key={i} cx={50 + Math.cos(a) * 52} cy={50 + Math.sin(a) * 52} r="3" />;
+            })}
+          </svg>
+        )}
         <span className="seal-eye">
           <span className="seal-pupil" />
         </span>
