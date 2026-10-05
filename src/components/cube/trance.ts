@@ -26,6 +26,13 @@ export function subscribeTrance(fn: () => void) {
 
 export const getTrance = () => level;
 
+/** Wheel prize: jump straight to full trance. */
+export function maxTrance() {
+  level = MAX_TRANCE;
+  lastSpin = performance.now();
+  emit();
+}
+
 /** Call on every spin. Returns true when full trance has been held long enough to erupt. */
 export function tranceSpin(): boolean {
   const now = performance.now();

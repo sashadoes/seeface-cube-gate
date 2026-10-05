@@ -7,7 +7,7 @@ import { Howl } from "howler";
 import { randomIntFromInterval as rnd } from "../helper.js";
 import { nudgeWalls, newRoomSkin } from "./alive";
 import { previous, recordSpin } from "./memory";
-import { RARE_SIGIL, SIGILS, snapshot } from "./rewards";
+import { RARE_SIGIL, SIGILS, addCoins, snapshot } from "./rewards";
 import { apparitionsStep, surge } from "./apparitions";
 import { getTrance, tranceSpin } from "./trance";
 import { devilOffer } from "./devil";
@@ -262,6 +262,7 @@ export function mysteryStep() {
     shake();
     newSkin();
     surge();
+    addCoins(1);
   }
   scheduleIdle();
 

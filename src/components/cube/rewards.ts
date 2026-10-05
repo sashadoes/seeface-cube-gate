@@ -23,16 +23,18 @@ type State = {
   lastDay: string;
   complete: boolean;
   rank: number; // rebirths: every full set of 7 → rank + 1, sigils reset
+  coins: number; // devil's wheel spins
+  coinDay: string; // last day the free daily coin was given
 };
 
 function load(): State {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { found: [], crackedDay: "", streak: 0, lastDay: "", complete: false, rank: 0, ...JSON.parse(raw) };
+    if (raw) return { found: [], crackedDay: "", streak: 0, lastDay: "", complete: false, rank: 0, coins: 0, coinDay: "", ...JSON.parse(raw) };
   } catch {
     // storage blocked: progress lasts this visit only
   }
-  return { found: [], crackedDay: "", streak: 0, lastDay: "", complete: false, rank: 0 };
+  return { found: [], crackedDay: "", streak: 0, lastDay: "", complete: false, rank: 0, coins: 0, coinDay: "" };
 }
 
 const state = load();
@@ -73,6 +75,7 @@ export function snapshot() {
     complete: state.complete,
     crackedToday: state.crackedDay === today(),
     rank: state.rank,
+    coins: state.coins,
   };
 }
 export const isComplete = () => state.complete;
@@ -87,7 +90,7 @@ const sfx = {
 };
 
 /** The seeface1 logo rises out of the dark. `grand` = the full-set version. */
-function reveal(grand: boolean) {
+export function reveal(grand: boolean) {
   const el = document.createElement("div");
   el.className = "reward-reveal" + (grand ? " grand" : "");
   el.innerHTML = '<img src="/imgs/seeface-logo-transparent.png" alt="" />';
@@ -127,6 +130,7 @@ export function collect(symbol: string): boolean {
 export function checkDailyCode(code: string, dailyPass: string) {
   if (!dailyPass || state.crackedDay === today() || !code.includes(dailyPass)) return;
   state.crackedDay = today();
+  state.coins += 1;
   track("daily-code-cracked");
   save();
   reveal(false);
@@ -136,6 +140,7 @@ function rebirth() {
   state.found = [];
   state.complete = false;
   state.rank += 1;
+  state.coins += 3;
   track(`rank-${Math.min(state.rank, 50)}`);
   save();
 }
@@ -158,4 +163,28 @@ export function grantMissing(): string | null {
   const g = missing[Math.floor(Math.random() * missing.length)];
   collect(g);
   return g;
+}
+
+// ------------------------------------------------------------ coins (devil's wheel)
+
+// one free coin per day: a reason to come back
+(() => {
+  const t = today();
+  if (state.coinDay === t) return;
+  state.coinDay = t;
+  state.coins += 1;
+  save();
+})();
+
+export function addCoins(n: number) {
+  state.coins += n;
+  save();
+}
+
+/** Spend one coin. Returns false if there is none. */
+export function spendCoin(): boolean {
+  if (state.coins < 1) return false;
+  state.coins -= 1;
+  save();
+  return true;
 }
