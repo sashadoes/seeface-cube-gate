@@ -22,7 +22,6 @@ import Fire from "./backgrounds/Pixi.js";
 import Stars from "./backgrounds/Stars.js";
 import Space from "./backgrounds/Space.js";
 
-console.log(dailyPasses[getYearsDay()]);
 
 let CubeBehave = {
   // code: 0,
