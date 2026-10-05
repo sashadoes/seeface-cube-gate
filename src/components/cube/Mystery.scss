@@ -111,28 +111,3 @@ body.mystery-glitch #wrapper {
 }
 
 
-// Oracle answer: rises out of the fog in the middle of the room.
-.mystery-oracle {
-  position: absolute;
-  left: 50%;
-  top: 30%;
-  width: min(86vw, 640px);
-  transform: translateX(-50%);
-  text-align: center;
-  font-family: "Times New Roman", Times, serif;
-  font-style: italic;
-  font-size: clamp(22px, 4.6vw, 44px);
-  line-height: 1.25;
-  letter-spacing: 2px;
-  text-transform: lowercase;
-  color: #fff;
-  text-shadow: 0 0 18px rgba(255, 255, 255, 0.9), 0 0 3px #000, 0 0 30px rgba(0, 255, 166, 0.5);
-  animation: mystery-oracle 6.5s ease-in-out forwards;
-}
-
-@keyframes mystery-oracle {
-  0% { opacity: 0; filter: blur(14px); letter-spacing: 14px; }
-  18% { opacity: 1; filter: blur(0); letter-spacing: 2px; }
-  80% { opacity: 1; }
-  100% { opacity: 0; filter: blur(6px); }
-}

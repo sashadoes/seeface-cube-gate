@@ -1,6 +1,6 @@
-// Trance: a rhythm combo. Spin again within ~2.2 s and trance rises (max 5);
-// hesitate and it drains. Higher trance = a more intense room and better odds
-// (golden face, devil's seal). Holding full trance for a while makes the room erupt.
+// Trance: a hidden rhythm combo (no meter). Spin again within ~2.2 s and trance
+// rises (max 5); hesitate and it drains. Higher trance keeps the room charged,
+// and holding full trance for a while makes the room erupt.
 import { track } from "../../analytics";
 
 export const MAX_TRANCE = 5;
@@ -25,13 +25,6 @@ export function subscribeTrance(fn: () => void) {
 }
 
 export const getTrance = () => level;
-
-/** Wheel prize: jump straight to full trance. */
-export function maxTrance() {
-  level = MAX_TRANCE;
-  lastSpin = performance.now();
-  emit();
-}
 
 /** Call on every spin. Returns true when full trance has been held long enough to erupt. */
 export function tranceSpin(): boolean {

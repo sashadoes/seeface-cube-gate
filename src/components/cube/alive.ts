@@ -11,18 +11,8 @@
 // How input maps onto the room is randomised per visit, so it never feels the same twice.
 import { randomIntFromInterval as rnd } from "../helper.js";
 import { memory } from "./memory";
-import { getRank, isComplete } from "./rewards";
 import { getTrance, MAX_TRANCE } from "./trance";
 
-// Cube colour per rank (rebirths): cyan → gold → blood → violet → white → venom, then cycles.
-const RANK_COLORS: [number, number, number][] = [
-  [140, 220, 255],
-  [255, 214, 90],
-  [255, 40, 40],
-  [180, 90, 255],
-  [255, 255, 255],
-  [0, 255, 170],
-];
 
 type Viewport = {
   torqueX: number;
@@ -136,12 +126,9 @@ function frame(now: number) {
     const beatT = ((now / 60000) * bpm) % 1;
     const thump = Math.exp(-((beatT - 0.05) ** 2) / 0.002) + 0.6 * Math.exp(-((beatT - 0.22) ** 2) / 0.002);
     const glow = 6 + thump * (10 + energy * 22);
-    // the full sigil set turns the cube's glow gold-white for good
-    const done = isComplete();
-    const [br, bg, bb] = RANK_COLORS[getRank() % RANK_COLORS.length];
-    const r = done ? 255 : Math.round(lerp(br, 255, energy));
-    const g = done ? 236 : Math.round(lerp(bg, 40, energy));
-    const b = done ? 170 : Math.round(lerp(bb, 60, energy));
+    const r = Math.round(lerp(140, 255, energy));
+    const g = Math.round(lerp(220, 40, energy));
+    const b = Math.round(lerp(255, 60, energy));
     const a = (0.25 + thump * 0.45) * (1 - idle * 0.7);
     cube.style.filter = `drop-shadow(0 0 ${glow.toFixed(1)}px rgba(${r},${g},${b},${a.toFixed(2)}))`;
 

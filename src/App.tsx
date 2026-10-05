@@ -1,22 +1,13 @@
-// The cube is the first and only thing a visitor faces. The old riddle screen
-// (components/welcomeForm) is kept in the repo but no longer part of the flow.
+// Simple and mysterious: the cube is the only thing a visitor faces, plus the
+// music switch. No counters, buttons or messages.
 import Cube from "./components/cube/Cube";
 import MusicToggle from "./components/music/MusicToggle";
-import SigilBar from "./components/cube/SigilBar";
-import Seal from "./components/seal/Seal";
-import TranceMeter from "./components/cube/TranceMeter";
-import DevilWheel from "./components/wheel/DevilWheel";
-// AskCube (components/oracle) is parked: answers were on-screen text.
 
 export default function App() {
   return (
     <>
       <Cube />
       <MusicToggle />
-      <SigilBar />
-      <Seal />
-      <TranceMeter />
-      <DevilWheel />
     </>
   );
 }

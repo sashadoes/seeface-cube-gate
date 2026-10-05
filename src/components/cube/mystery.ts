@@ -7,22 +7,18 @@ import { Howl } from "howler";
 import { randomIntFromInterval as rnd } from "../helper.js";
 import { nudgeWalls, newRoomSkin } from "./alive";
 import { previous, recordSpin } from "./memory";
-import { RARE_SIGIL, SIGILS, addCoins, snapshot } from "./rewards";
 import { apparitionsStep, surge } from "./apparitions";
 import { getTrance, tranceSpin } from "./trance";
-import { devilOffer } from "./devil";
 import { track } from "../../analytics";
 import "./Mystery.scss";
 
 type Viewport = { torqueX: number; torqueY: number };
 
 const NUMBERS = ["1", "2", "3", "4", "5", "6"];
-// ♔ is deliberately missing: it only appears on the rare golden face
 const SYMBOLS = ["♠", "∑", "♖", "♘", "♕", "▲", "☽", "☾", "◐", "✶", "⌘", "?", "1"];
 
 let viewport: Viewport | null = null;
 let step = 0;
-let spinsSinceGolden = 0; // luck guarantee: a golden face is never too far away
 let idleTimer: ReturnType<typeof setTimeout> | undefined;
 let layer: HTMLDivElement;
 let black: HTMLDivElement;
@@ -178,42 +174,6 @@ export function buzz(pattern: number | number[]) {
   }
 }
 
-/** The cube answers a question: it spins by itself, the faces scramble, then the answer surfaces. */
-export function oracleReveal(text: string) {
-  possessed();
-  shuffleFaces();
-  buzz([20, 60, 20]);
-  setTimeout(() => {
-    const el = document.createElement("div");
-    el.className = "mystery-oracle";
-    el.textContent = text;
-    layer.appendChild(el);
-    sfx.bell.play();
-    setTimeout(() => el.remove(), 6500);
-  }, 1500);
-}
-
-/** Golden face: a missing sigil glows on one face for a few seconds. Lock it in time to collect it. */
-function goldenFace() {
-  const missing = SIGILS.filter((g) => !snapshot().found.includes(g));
-  if (!missing.length) return;
-  const glyph = missing.includes(RARE_SIGIL) && chance(0.5) ? RARE_SIGIL : pick(missing);
-  const list = faces().filter((f) => !f.classList.contains("golden"));
-  const face = pick(list);
-  if (!face) return;
-  const before = face.innerHTML;
-  face.innerHTML = glyph;
-  face.classList.add("golden");
-  syncActiveDigit();
-  sfx.bell.play();
-  buzz([15, 40, 15]);
-  setTimeout(() => {
-    face.classList.remove("golden");
-    if (face.innerHTML === glyph) face.innerHTML = before;
-    syncActiveDigit();
-  }, rnd(2600, 4200));
-}
-
 // Pools unlock as the player goes deeper.
 const EARLY = [bigDigit, shake, wallsSpeed, fogSurge];
 const MIDDLE = [shuffleFaces, ghost, scrambleCode, invertWalls, possessed, newSkin];
@@ -262,19 +222,9 @@ export function mysteryStep() {
     shake();
     newSkin();
     surge();
-    addCoins(1);
   }
   scheduleIdle();
 
-  // the devil's game: rare, only deep in the session
-  if (step >= 10 && chance(0.05 + trance * 0.012)) setTimeout(devilOffer, rnd(600, 2000));
-
-  // the golden face is its own roll, so it keeps turning up
-  spinsSinceGolden += 1;
-  if (step >= 3 && (chance(0.09 + trance * 0.03) || spinsSinceGolden >= 22)) {
-    spinsSinceGolden = 0;
-    goldenFace();
-  }
 
 
   // Odds grow with depth; occasionally nothing happens at all, which is creepier.
