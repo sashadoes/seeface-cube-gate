@@ -2,14 +2,16 @@ import { useEffect, useState } from "react";
 import { getRank, subscribe } from "../cube/rewards";
 import { SITE_URL, WEB3FORMS_ACCESS_KEY } from "../../config/form";
 import { track } from "../../analytics";
+import CircleChat, { chatEnabled } from "../chat/CircleChat";
 import "./Seal.scss";
 
 // A living seal in the corner: a slowly turning ring of glyphs around a
 // breathing eye. Tapping it opens a small altar:
 //   summon a friend → native share sheet (or copy the link)
+//   the circle      → live chat between visitors (hidden until Firebase is configured)
 //   speak           → contact form, emailed via Web3Forms (hidden until a key is set)
 
-type View = "closed" | "altar" | "speak" | "sent";
+type View = "closed" | "altar" | "circle" | "speak" | "sent";
 type Status = "idle" | "sending" | "error";
 
 const RING = "☽ ✶ ◐ ♖ ▲ ☾ ⛧ ✶ ◐ ☽ ♔ ▲ ";
@@ -23,6 +25,8 @@ const guards = {
   onPointerUp: swallow,
   onTouchStart: swallow,
   onTouchEnd: swallow,
+  // the cube cancels page dragging; let the chat list scroll instead
+  onTouchMove: swallow,
 };
 
 export default function Seal() {
@@ -89,7 +93,7 @@ export default function Seal() {
   return (
     <div className={"seal-root view-" + view} {...guards} onClick={swallow}>
       {view !== "closed" && (
-        <div className="altar">
+        <div className={"altar" + (view === "circle" ? " wide" : "")}>
           <button className="altar-close" onClick={() => setView("closed")} aria-label="close">
             ×
           </button>
@@ -97,6 +101,7 @@ export default function Seal() {
           {view === "altar" && (
             <div className="altar-choices">
               <button onClick={summon}>{copied ? "the link is yours" : "summon a friend"}</button>
+              {chatEnabled && <button onClick={() => setView("circle")}>the circle</button>}
               {canSpeak && <button onClick={() => setView("speak")}>speak</button>}
             </div>
           )}
@@ -123,6 +128,8 @@ export default function Seal() {
               {status === "error" && <span className="altar-error">✕</span>}
             </form>
           )}
+
+          {view === "circle" && <CircleChat />}
 
           {view === "sent" && <div className="altar-sent">⛧</div>}
         </div>

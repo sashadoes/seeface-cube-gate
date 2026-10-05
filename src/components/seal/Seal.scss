@@ -237,3 +237,7 @@
     filter: drop-shadow(0 0 3px #ffb300);
   }
 }
+
+.altar.wide {
+  width: min(340px, calc(100vw - 28px));
+}
