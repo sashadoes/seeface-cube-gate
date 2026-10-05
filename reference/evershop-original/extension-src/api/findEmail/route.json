@@ -1,0 +1,7 @@
+{
+  "methods": [
+    "POST"
+  ],
+  "path": "/check/email",
+  "access": "public"
+}

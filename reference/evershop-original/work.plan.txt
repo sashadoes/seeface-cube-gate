@@ -1,0 +1,45 @@
+!. CONTRQAFACE.COM.CONTRAFACE:
+
+
+0. Learn pages . write what to remove as a tikets
+1. Remove everything what is not needed and learn the code. (CHECKOUNT)
+2. Add logic (next day passcode )
+3. Change desiugn 
+4. Add front cube
+5. Payment - legal
+6. Test
+7. Deploy
+8. Code activation 
+9. Email (Andriii)
+
+
+
+notes :
+
+black cube - лифт фон —(пергамент - просто ) opens - js -on 
+
+after which main shop goes straingt away.
+
+redirect can use - server
+
+
+
+
+logic:
+after payment send -emain (find hook logic)
+and add to the order database sthe unique ???
+
+
+business logic:
+bottles after opening turnin img into nft . 
+
+
+
+
+front - neyroworks - cubes
+
+
+
+INSIGHT : NOT FOUND IS AN ACTIVATION PAGE !
+CHECK HOWN TO EXECURTE MUCH JS CODE ()// EVERY PAGE COMPONENT 
+CLOUD DB TO KEEP TRACK

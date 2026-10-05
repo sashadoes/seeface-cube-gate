@@ -1,0 +1,26 @@
+{
+  "name": "sample-evershop-extension",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "tsc": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@pixi/sound": "^6.0.1",
+    "audio-loader": "^1.0.3",
+    "audio-play": "^2.3.1",
+    "howler": "^2.2.4",
+    "p5": "^2.1.2",
+    "pixi.js": "^8.14.3",
+    "react-fade-in": "^2.0.1",
+    "three": "^0.182.0",
+    "three-js": "^79.0.0",
+    "unmute-ios-audio": "^3.3.0"
+  }
+}
