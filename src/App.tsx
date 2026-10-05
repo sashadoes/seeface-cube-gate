@@ -9,6 +9,7 @@ import magicPasses from "./config/magicPass.json";
 
 import WelcomeForm from "./components/welcomeForm/WelcomeForm";
 import Cube from "./components/cube/Cube";
+import { track } from "./analytics";
 
 const ACCESS_KEY = "access-code-contraface";
 const enteryCode = dailyPasses[getYearsDay()];
@@ -33,7 +34,12 @@ export default function App() {
   }
 
   if (screen === "form") {
-    return <WelcomeForm openCube={() => setScreen("cube")} />;
+    return <WelcomeForm
+        openCube={() => {
+          track("cube-opened");
+          setScreen("cube");
+        }}
+      />;
   }
 
   return <Cube />;

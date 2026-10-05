@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { validateEmail } from "../helper.js";
+import { track } from "../../analytics";
 import "./WelcomeForm.scss";
 
 function EmailForm() {
@@ -138,6 +139,7 @@ function WelcomeMesasage(props) {
 
   const handleCLickEmail = (e) => {
     e.preventDefault();
+    track("magic-link-clicked");
     actionCB("email");
   };
 

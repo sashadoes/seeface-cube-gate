@@ -11,6 +11,7 @@ import {
 import dailyPasses from "../../config/dailyPass.json";
 
 import "./ScriptLoader.js";
+import { track } from "../../analytics";
 
 import "./CubeStyle.scss";
 
@@ -695,7 +696,12 @@ export default function Cube() {
 
     setFade("in", "cubeWrapper");
 
+    var firstSpin = true;
     var myFunction = function (e) {
+      if (firstSpin) {
+        firstSpin = false;
+        track("cube-first-spin");
+      }
       var activeNumber = document.getElementsByClassName("active")[0].innerHTML;
       var codeInput = window.document.getElementById("cube-code");
 
@@ -721,6 +727,7 @@ export default function Cube() {
 
           CubeBehave.records[CubeBehave.round].push(codeInput);
           CubeBehave.round += 1;
+          track("cube-round-" + CubeBehave.round);
           CubeBehave.records[CubeBehave.round] = [];
 
 
