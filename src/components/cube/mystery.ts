@@ -174,22 +174,6 @@ export function buzz(pattern: number | number[]) {
   }
 }
 
-/** Very rare: the room turns into a red-curtained room for a few seconds. */
-let redRoomSeen = false;
-function redRoom() {
-  if (redRoomSeen) return;
-  redRoomSeen = true;
-  track("red-room");
-  const room = document.createElement("div");
-  room.className = "mystery-redroom";
-  room.innerHTML = '<div class="curtains"></div><div class="chevron"></div>';
-  document.body.appendChild(room);
-  sfx.bell.play();
-  buzz([60, 80, 60, 80, 200]);
-  setTimeout(() => room.classList.add("leaving"), 5200);
-  setTimeout(() => room.remove(), 6400);
-}
-
 /** The cube answers a question: it spins by itself, the faces scramble, then the answer surfaces. */
 export function oracleReveal(text: string) {
   possessed();
@@ -269,11 +253,6 @@ export function mysteryStep() {
   // the golden face is its own roll, so it keeps turning up
   if (step >= 3 && chance(0.09)) goldenFace();
 
-  // ~1 in 40 spins once deep enough, at most once per visit
-  if (step >= 6 && chance(1 / 40)) {
-    redRoom();
-    return;
-  }
 
   // Odds grow with depth; occasionally nothing happens at all, which is creepier.
   const odds = Math.min(0.3 + step * 0.06, 0.92);
