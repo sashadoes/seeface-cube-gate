@@ -13,6 +13,7 @@ import dailyPasses from "../../config/dailyPass.json";
 import "./ScriptLoader.js";
 import { track } from "../../analytics";
 import { initMystery, mysteryStep } from "./mystery";
+import { initAlive } from "./alive";
 
 import "./CubeStyle.scss";
 
@@ -696,6 +697,7 @@ export default function Cube() {
     });
 
     initMystery({ viewport });
+    initAlive({ viewport });
 
     setFade("in", "cubeWrapper");
 

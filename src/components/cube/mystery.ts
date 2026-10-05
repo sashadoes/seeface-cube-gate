@@ -5,6 +5,7 @@
 // Events manipulate the existing cube DOM directly, in the same style as Cube.tsx.
 import { Howl } from "howler";
 import { randomIntFromInterval as rnd } from "../helper.js";
+import { nudgeWalls, newRoomSkin } from "./alive";
 import "./Mystery.scss";
 
 type Viewport = { torqueX: number; torqueY: number };
@@ -156,9 +157,13 @@ function scrambleCode() {
 
 /** The tunnel changes speed, sometimes runs backwards. */
 function wallsSpeed() {
-  const root = document.documentElement;
-  root.style.setProperty("--pan-speed", pick(["1.2s", "2s", "4s", "8s", "14s", "24s"]));
-  $("wallpaper")?.classList.toggle("mystery-reverse", chance(0.4));
+  nudgeWalls({ speed: pick([0.15, 0.4, 1, 2.5, 5]), reverse: chance(0.4) });
+}
+
+/** The room changes its skin: a newly generated image behind the logos. */
+function newSkin() {
+  newRoomSkin();
+  sfx.switch2.play();
 }
 
 /** Black squares become white and white become black. */
@@ -196,7 +201,7 @@ function fogSurge() {
 
 // Pools unlock as the player goes deeper.
 const EARLY = [whisper, bigDigit, shake, wallsSpeed, fogSurge];
-const MIDDLE = [shuffleFaces, ghost, scrambleCode, invertWalls, possessed];
+const MIDDLE = [shuffleFaces, ghost, scrambleCode, invertWalls, possessed, newSkin];
 const DEEP = [blackout, glitch, shuffleFaces, possessed];
 
 function poolForStep() {
