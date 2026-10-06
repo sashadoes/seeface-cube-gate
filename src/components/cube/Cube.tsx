@@ -14,6 +14,7 @@ import "./ScriptLoader.js";
 import { track } from "../../analytics";
 import { initMystery, mysteryStep, buzz } from "./mystery";
 import { initAlive } from "./alive";
+import { checkGate } from "./gate";
 
 import "./CubeStyle.scss";
 
@@ -721,6 +722,8 @@ export default function Cube() {
 
       if (codeInput) {
         var totalCode = codeInput.innerHTML + activeNumber;
+        // the hack: enough spins + today's code → the gate to the labyrinth opens
+        checkGate(totalCode, CubeBehave.dailyPass);
 
         if (totalCode.length < CubeBehave.maxSteps) {
           new Howl({
