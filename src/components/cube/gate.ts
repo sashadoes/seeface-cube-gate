@@ -1,10 +1,9 @@
 // The gate: the cube page is the way into the 3D labyrinth.
 // Two ways in (never explained on screen):
-//   · spin in the code 1 9 9 4 (the cube's faces are 1 2 3 4 5 9). Digits count
-//     across the 4-digit line resets and symbol faces are skipped, so "1 9" at
-//     the end of one line + "9 4" at the start of the next works. On a computer
-//     you can also just type 1994.
-//   · or simply keep going: the 9th spin always opens the gate.
+//   · play: every spin, tap, touch or key press counts, and after a random
+//     10–20 of them (new number every visit, ~15 on average) the gate opens.
+//   · or the code 1 9 9 4 opens it at once: spun in (digits count across the
+//     4-digit line resets, symbol faces are skipped) or typed on a keyboard.
 // The room glitches, the cube rushes at you, a light tears open with the logo
 // burning through, and you fall into /labyrinth.
 import { Howl } from "howler";
@@ -12,21 +11,26 @@ import { track } from "../../analytics";
 import "./Gate.scss";
 
 const GATE_CODE = "1994";
-const SPINS_TO_ENTER = 9;
+const ACTIONS_TO_ENTER = 10 + Math.floor(Math.random() * 11); // 10–20
 let opening = false;
 let digits = "";
 let typed = "";
-let spins = 0;
+let actions = 0;
 
-window.addEventListener("cube-spin", () => {
-  spins += 1;
-  if (opening || spins < SPINS_TO_ENTER) return;
-  track("gate-9-spins");
-  setTimeout(openGate, 700); // let the spin land first
-});
+function act() {
+  if (opening || location.pathname !== "/") return;
+  actions += 1;
+  if (actions >= ACTIONS_TO_ENTER) {
+    track("gate-actions");
+    setTimeout(openGate, 700); // let the last spin land first
+  }
+}
+// a spin is a touch too: count touches/clicks and key presses, not spins twice
+window.addEventListener("pointerdown", act, { capture: true, passive: true });
 
-// typing the code on a keyboard works too
 window.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  act();
   if (opening || !/^\d$/.test(e.key) || location.pathname !== "/") return;
   typed = (typed + e.key).slice(-4);
   if (typed === GATE_CODE) {
