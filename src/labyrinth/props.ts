@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { CELL, WALL_H, roomOf, rnd, wallEast, wallSouth } from "./maze";
 
 const RADIUS = 6; // cells around the player that get props
-export type Pickup = { key: string; kind: "money" | "knife"; x: number; z: number; obj: THREE.Object3D };
+export type Pickup = { key: string; kind: "money" | "knife" | "relic"; x: number; z: number; obj: THREE.Object3D; colour?: number; shape?: number };
 
 // ------------------------------------------------------------------ shared materials / textures
 
@@ -274,6 +274,23 @@ function knife() {
   return g;
 }
 
+/** Relic: a small glowing object you can pick up and carry. shape 0..3 */
+export function relicMesh(colour: number, shape: number) {
+  const geos = [
+    () => new THREE.IcosahedronGeometry(0.13, 0),
+    () => new THREE.TorusGeometry(0.11, 0.035, 10, 32),
+    () => new THREE.OctahedronGeometry(0.14, 0),
+    () => new THREE.BoxGeometry(0.17, 0.17, 0.17),
+  ];
+  const m = new THREE.Mesh(geos[shape % 4](), new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.9, roughness: 0.2, metalness: 0.3 }));
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glint, color: colour, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.scale.setScalar(0.7);
+  const g = new THREE.Group();
+  g.add(m, glow);
+  g.userData.spinner = m;
+  return g;
+}
+
 // ------------------------------------------------------------------ the layer
 
 export type Props = {
@@ -281,6 +298,7 @@ export type Props = {
   update: (px: number, pz: number, t: number) => void;
   pickupsNear: (x: number, z: number, r: number) => Pickup[];
   take: (p: Pickup) => void;
+  spawnMoney: (x: number, z: number) => void;
 };
 
 export function createProps(): Props {
@@ -333,7 +351,17 @@ export function createProps(): Props {
         g.add(k);
         pickups.push({ key, kind: "knife", x: k.position.x, z: k.position.z, obj: k });
       }
-    } else if (deep && r < 0.1985 && wall[0]) {
+    } else if (r < 0.235) {
+      const key = `r:${h}:${i}:${j}`;
+      if (!taken.has(key)) {
+        const colour = new THREE.Color().setHSL(rnd(i, j, salt + 15), 0.9, 0.55).getHex();
+        const shape = Math.floor(rnd(i, j, salt + 16) * 4);
+        const rel = relicMesh(colour, shape);
+        rel.position.set(cx + (rnd(i, j, salt + 17) - 0.5) * 1.6, 0.9, cz + (rnd(i, j, salt + 18) - 0.5) * 1.6);
+        g.add(rel);
+        pickups.push({ key, kind: "relic", x: rel.position.x, z: rel.position.z, obj: rel, colour, shape });
+      }
+    } else if (deep && r < 0.2375 && wall[0]) {
       (rnd(i, j, salt + 11) < 0.5 ? cokeTable : cocaShrub)(g);
       g.position.set(wall[1], 0, wall[2]);
       g.rotation.y = wall[3];
@@ -383,6 +411,11 @@ export function createProps(): Props {
     }
     for (const p of cells.values())
       for (const pk of p.pickups) {
+        const sp = pk.obj.userData.spinner as THREE.Object3D | undefined;
+        if (sp) {
+          sp.rotation.set(t * 0.8, t * 1.3, 0);
+          pk.obj.position.y = 0.9 + Math.sin(t * 2 + pk.x) * 0.1;
+        }
         const s = pk.obj.userData.sparkle as THREE.Sprite | undefined;
         if (s) (s.material as THREE.SpriteMaterial).opacity = 0.4 + 0.6 * Math.abs(Math.sin(t * 3 + pk.x));
       }
@@ -400,7 +433,19 @@ export function createProps(): Props {
     for (const p of cells.values()) p.pickups = p.pickups.filter((x) => x !== pk);
   }
 
-  return { group, update, pickupsNear, take };
+  /** gold hour: money appears around the player */
+  let goldN = 0;
+  function spawnMoney(x: number, z: number) {
+    const pile = moneyPile();
+    pile.position.set(x, 0, z);
+    const holder = new THREE.Group();
+    holder.add(pile);
+    group.add(holder);
+    const key = `gold:${goldN++}`;
+    cells.set(key, { obj: holder, pickups: [{ key, kind: "money", x, z, obj: pile }] });
+  }
+
+  return { group, update, pickupsNear, take, spawnMoney };
 }
 
 export { WALL_H };

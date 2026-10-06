@@ -12,11 +12,21 @@ import { createOthers } from "./others";
 import { createArt } from "./art";
 import { createWishes, readBlood, addBlood, WISH_COST, WISH_KINDS, type WishKind } from "./wishes";
 import { cleanNick, savedNick, saveNick } from "./nick";
+import { registerPlayer } from "../api";
 import LabMap from "./LabMap";
 import { onOnline } from "../online";
 import { createProps } from "./props";
 import { createRifts } from "./rifts";
 import { LEVELS, levelAtX } from "./zones";
+import { createSound } from "./sound";
+import { currentEvent, EVENTS, type EventKind } from "./events";
+import { makeSnapshot, shareSnapshot } from "./snapshot";
+import { relicMesh } from "./props";
+
+const PLACE_NAMES: Record<string, string> = {
+  monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
+  photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep",
+};
 import { free, spawn, roomOf, CELL } from "./maze";
 import { loadWeather } from "../marks/weather";
 import { track } from "../analytics";
@@ -28,8 +38,8 @@ import "./Labyrinth.scss";
 //   the Hollow hunts you when your light is low · the radio crackles when it's near
 
 const EYE = 1.62;
-const WALK = 2.6;
-const RUN = 5.0;
+const WALK = 5.2; // owner: twice as fast as before
+const RUN = 9.0;
 const SHARDS_PER_DEPTH = 6;
 const GRACE = 15; // seconds before the Hollow starts moving
 const BEST_KEY = "seeface-lab-best";
@@ -39,7 +49,7 @@ const isPhone = matchMedia("(pointer: coarse)").matches;
 const PROTECTED = 120; // seconds a newcomer can't be knifed
 const FOV = 72;
 
-type Hud = { level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null };
+type Hud = { event: EventKind | null; holding: boolean; level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null };
 
 function readBest() {
   try {
@@ -61,6 +71,15 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
   // default for newcomers: face_ + 4 random digits (e.g. face_2492)
   const [v, setV] = useState(() => savedNick() ?? `face_${Math.floor(1000 + Math.random() * 9000)}`);
   const [bad, setBad] = useState(false);
+  const [email, setEmail] = useState(() => {
+    try {
+      return localStorage.getItem("seeface-lab-email") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [consent, setConsent] = useState(false);
+  const emailOk = email.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
   const enter = (e: React.FormEvent) => {
     e.preventDefault();
     const n = cleanNick(v);
@@ -69,8 +88,22 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
       setTimeout(() => setBad(false), 500);
       return;
     }
+    if (!emailOk) {
+      setBad(true);
+      setTimeout(() => setBad(false), 500);
+      return;
+    }
     const changed = n !== savedNick();
     saveNick(n);
+    const mail = email.trim();
+    try {
+      if (mail) localStorage.setItem("seeface-lab-email", mail);
+    } catch {
+      // ignore
+    }
+    // stored on our server (MongoDB); fire-and-forget, never blocks entry
+    void registerPlayer({ nick: n, email: mail || undefined, consent: Boolean(mail) && consent, ref: new URLSearchParams(location.search).get("with") });
+    track(mail ? (consent ? "email-given-consent" : "email-given") : "email-skipped");
     track(changed ? "nick-chosen" : "nick-confirmed");
     onDone(n);
   };
@@ -93,7 +126,25 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           ➝
         </button>
       </form>
-      <p>2–16 letters or numbers. not your real name.</p>
+      <div className={"lab-gate-email" + (emailOk ? "" : " bad")}>
+        <input
+          type="email"
+          inputMode="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="email (optional) · keep your ◈ and name"
+          autoComplete="email"
+          maxLength={120}
+        />
+        {email.trim() && (
+          <label>
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> send me news from seeface1
+          </label>
+        )}
+      </div>
+      <p>
+        2–16 letters or numbers. not your real name. · <a href="/privacy">privacy</a>
+      </p>
     </div>
   );
 }
@@ -110,7 +161,10 @@ function Game({ nick }: { nick: string }) {
   const signalRef = useRef<() => void>(() => {});
   const [invited, setInvited] = useState(false);
   const [stick, setStick] = useState({ active: false, ox: 0, oy: 0, x: 0, y: 0 });
-  const [hud, setHud] = useState<Hud>({ level: 0, light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
+  const snapRef = useRef<() => void>(() => {});
+  const dropRef = useRef<() => void>(() => {});
+  const [snapState, setSnapState] = useState<"" | "busy" | "done">("");
+  const [hud, setHud] = useState<Hud>({ event: null, holding: false, level: 0, light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
   const strikeRef = useRef<() => void>(() => {});
   const [shareState, setShareState] = useState<"" | "busy" | "done">("");
 
@@ -142,6 +196,7 @@ function Game({ nick }: { nick: string }) {
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
+    const sound = createSound();
 
     // the lantern you carry
     const lantern = new THREE.SpotLight(0xffe9c4, 6, 14, 0.62, 0.55, 1.2);
@@ -153,7 +208,6 @@ function Game({ nick }: { nick: string }) {
     const shardSfx = new Howl({ src: ["/sounds/MagicClick1.mp3"], volume: 0.6, preload: true });
     const shiftSfx = new Howl({ src: ["/sounds/BellClick1.mp3"], volume: 0.7, preload: true });
     const caughtSfx = new Howl({ src: ["/sounds/CubeErrorCode.mp3"], volume: 0.8, preload: true });
-    const stepSfx = new Howl({ src: ["/sounds/SwitchCube1.mp3"], volume: 0.07, preload: true });
 
     const signalSfx = new Howl({ src: ["/sounds/BellClick1.mp3"], volume: 0.35, preload: true });
     const meetSfx = new Howl({ src: ["/sounds/MagicClick2.mp3"], volume: 0.5, preload: true });
@@ -162,10 +216,13 @@ function Game({ nick }: { nick: string }) {
     // Android: go fullscreen on the first touch (iOS: use "Add to Home Screen")
     const onKey = (e: KeyboardEvent) => {
       if (e.code === "KeyF") strikeRef.current();
+      if (e.code === "KeyG") dropRef.current();
+      if (e.code === "KeyP") snapRef.current();
     };
     window.addEventListener("keydown", onKey);
     const wake = () => {
       radio.resume();
+      sound.resume();
       if (isPhone && !document.fullscreenElement && document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
       }
@@ -173,8 +230,11 @@ function Game({ nick }: { nick: string }) {
     window.addEventListener("pointerdown", wake);
     window.addEventListener("keydown", wake);
 
+    let thunderTimer: ReturnType<typeof setInterval> | undefined;
     loadWeather().then((w) => {
       world.setWeather(w);
+      sound.setWeather(w.kind, w.intensity, w.wind);
+      if (w.kind === "storm") thunderTimer = setInterval(() => !document.hidden && sound.thunder(), 6000 + Math.random() * 8000);
       track(`weather-${w.kind}`);
     });
 
@@ -297,6 +357,71 @@ function Game({ nick }: { nick: string }) {
       const result: RunResult = { metres, shards, depth, seconds: runTime, best };
       const by = killedBy;
       setTimeout(() => setHud((h) => ({ ...h, dead: result, danger: 0, killedBy: by })), 900);
+    }
+
+    // ---------------------------------------------------------------- relics in your hand
+    let held: { colour: number; shape: number } | null = null;
+    let heldObj: THREE.Object3D | null = null;
+    const dropped = new THREE.Group();
+    world.scene.add(dropped);
+    function hold(colour: number, shape: number) {
+      held = { colour, shape };
+      heldObj = relicMesh(colour, shape);
+      heldObj.position.set(0.32, -0.28, -0.65);
+      heldObj.scale.setScalar(0.8);
+      camera.add(heldObj);
+    }
+    dropRef.current = () => {
+      if (!held || !heldObj) return;
+      camera.remove(heldObj);
+      const fx = -Math.sin(input.yaw), fz = -Math.cos(input.yaw);
+      const o = relicMesh(held.colour, held.shape);
+      o.position.set(pos.x + fx * 1.1, 0.25, pos.z + fz * 1.1);
+      dropped.add(o);
+      held = null;
+      heldObj = null;
+      track("relic-dropped");
+    };
+
+    // ---------------------------------------------------------------- snapshot
+    let snapRequested = false;
+    snapRef.current = () => {
+      snapRequested = true;
+    };
+
+    // ---------------------------------------------------------------- world events (same for everyone)
+    let eventKind: EventKind | null = null;
+    let eventTimer = 0;
+    let goldTimer = 0;
+    const rainGroup = new THREE.Group();
+    world.scene.add(rainGroup);
+    const rainCards: THREE.Sprite[] = [];
+    const eventOverlay = document.createElement("div");
+    eventOverlay.className = "lab-event-fx";
+    el.appendChild(eventOverlay);
+    function startEvent(k: EventKind) {
+      track(`event-${k}`);
+      sound.chime();
+      eventOverlay.dataset.kind = k;
+      if (k === "choir") sound.choir(true);
+      if (k === "photo-rain") {
+        const loader = new THREE.TextureLoader();
+        for (let n = 0; n < 36; n++) {
+          const tex = loader.load(`https://picsum.photos/seed/seeface1-rain-${n % 12}/256?grayscale`);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.9 }));
+          sp.scale.set(0.5, 0.5, 1);
+          sp.position.set(pos.x + (Math.random() - 0.5) * 16, Math.random() * 3.4, pos.z + (Math.random() - 0.5) * 16);
+          sp.userData.v = 0.4 + Math.random() * 0.8;
+          rainGroup.add(sp);
+          rainCards.push(sp);
+        }
+      }
+    }
+    function endEvent(k: EventKind) {
+      delete eventOverlay.dataset.kind;
+      if (k === "choir") sound.choir(false);
+      rainCards.splice(0).forEach((c) => rainGroup.remove(c));
     }
 
     strikeRef.current = () => {
@@ -425,26 +550,31 @@ function Game({ nick }: { nick: string }) {
 
         // jump
         if (input.consumeJump() && jumpY <= 0.001) {
-          vy = 4.2;
+          vy = eventKind === "inversion" ? 7.5 : 4.2;
           track("jump");
         }
         if (jumpY > 0 || vy > 0) {
-          vy -= 13 * dt;
+          vy -= (eventKind === "inversion" ? 6 : 13) * dt;
           jumpY = Math.max(0, jumpY + vy * dt);
           if (jumpY === 0) {
             if (vy < -3) {
               landDip = 0.12;
-              stepSfx.play();
+              sound.step(world.zone().kind, running);
             }
             vy = 0;
           }
         }
         landDip = Math.max(0, landDip - dt * 0.6);
 
-        // pickups: money (◈) and knives
+        // pickups: money (◈), knives, relics (carry one at a time)
         for (const pk of props.pickupsNear(pos.x, pos.z, 1.0)) {
+          if (pk.kind === "relic" && held) continue;
           props.take(pk);
-          if (pk.kind === "money") {
+          if (pk.kind === "relic") {
+            hold(pk.colour!, pk.shape!);
+            sound.chime();
+            track("relic-picked");
+          } else if (pk.kind === "money") {
             earn(1, "money");
             spinSfx.play();
           } else if (!hasKnife) {
@@ -464,11 +594,11 @@ function Game({ nick }: { nick: string }) {
             nextBloodAt += 100;
             earn(1, "walk");
           }
-          bob += moved * (running ? 2.6 : 3.2);
+          bob += moved * (running ? 1.5 : 1.8);
           walkedSfx += moved;
           if (walkedSfx > nextStep) {
-            stepSfx.play();
-            nextStep = walkedSfx + (running ? 1.1 : 0.8);
+            sound.step(world.zone().kind, running);
+            nextStep = walkedSfx + (running ? 2.0 : 1.5);
           }
         }
 
@@ -544,7 +674,7 @@ function Game({ nick }: { nick: string }) {
       renderer.toneMappingExposure += (world.zone().exposure - renderer.toneMappingExposure) * Math.min(1, dt * 1.5);
 
       // other wanderers
-      presence.send({ x: pos.x, z: pos.z, yaw: input.yaw, light, nick });
+      presence.send({ x: pos.x, z: pos.z, yaw: input.yaw, light, nick, held: held ? held.colour : 0 });
       wishes.update(pos.x, pos.z, dt);
       const meet = others.update(dt, t, pos.x, pos.z);
       if (meet.nearest < 4 && !metSomeone) {
@@ -600,11 +730,65 @@ function Game({ nick }: { nick: string }) {
         setHud((prev) =>
           prev.dead
             ? { ...prev, online: presence.online() }
-            : { level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null }
+            : { event: eventKind, holding: !!held, level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null }
         );
       }
 
+      // world events: checked twice a second, same moment for everyone
+      eventTimer -= dt;
+      if (eventTimer <= 0) {
+        eventTimer = 0.5;
+        const ev = currentEvent();
+        const k = ev?.kind ?? null;
+        if (k !== eventKind) {
+          if (eventKind) endEvent(eventKind);
+          eventKind = k;
+          if (k) startEvent(k);
+        }
+      }
+      if (eventKind === "photo-rain")
+        for (const c of rainCards) {
+          c.position.y -= c.userData.v * dt;
+          c.material.rotation += dt * 0.5;
+          if (c.position.y < 0) {
+            c.position.set(pos.x + (Math.random() - 0.5) * 16, 3.4, pos.z + (Math.random() - 0.5) * 16);
+          }
+        }
+      if (eventKind === "gold-hour" && alive) {
+        goldTimer -= dt;
+        if (goldTimer <= 0) {
+          goldTimer = 1.2;
+          const a = Math.random() * Math.PI * 2, r = 1.5 + Math.random() * 3;
+          const gx = pos.x + Math.cos(a) * r, gz = pos.z + Math.sin(a) * r;
+          if (free(gx, gz)) props.spawnMoney(gx, gz);
+        }
+      }
+      if (eventKind === "eclipse") renderer.toneMappingExposure *= 0.97;
+      if (heldObj) heldObj.rotation.y += dt * 1.5;
+
       renderer.render(world.scene, camera);
+
+      // snapshot: grab the frame right after it's drawn
+      if (snapRequested) {
+        snapRequested = false;
+        const lvl = levelAtX(pos.x);
+        const place = lvl > 0 ? LEVELS[lvl].name : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
+        const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}`;
+        setSnapState("busy");
+        makeSnapshot(renderer.domElement, { nick, place, event: eventKind ? EVENTS[eventKind].name : null, inviteUrl })
+          .then((b) => {
+            if (import.meta.env.DEV) (window as unknown as { __lastSnap: Blob }).__lastSnap = b; // for testing
+            return shareSnapshot(b, inviteUrl);
+          })
+          .then((how) => {
+            track(`snapshot-${how}${eventKind ? "-event" : ""}`);
+            setSnapState("done");
+            setTimeout(() => setSnapState(""), 2500);
+          });
+        el.classList.remove("flash");
+        void el.offsetWidth;
+        el.classList.add("flash");
+      }
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -616,6 +800,7 @@ function Game({ nick }: { nick: string }) {
       window.removeEventListener("keydown", wake);
       window.removeEventListener("keydown", onKey);
       presence.close();
+      clearInterval(thunderTimer);
       stopOnline();
       renderer.dispose();
       el.innerHTML = "";
@@ -695,6 +880,12 @@ function Game({ nick }: { nick: string }) {
         </div>
       </div>
 
+      {hud.event && (
+        <div className="lab-event">
+          <span className="g">{EVENTS[hud.event].glyph}</span> {EVENTS[hud.event].name}
+        </div>
+      )}
+
       {/* souls inside right now (you + everyone else) */}
       <div className={"lab-online" + (hud.met ? " met" : "")}>
         <span className="dot" />
@@ -721,6 +912,19 @@ function Game({ nick }: { nick: string }) {
             aria-label="jump"
           >
             ⤒
+          </button>
+        )}
+        <button
+          className={"lab-btn snap" + (hud.event ? " event" : "")}
+          onClick={() => snapRef.current()}
+          aria-label="snapshot"
+          disabled={snapState === "busy"}
+        >
+          {snapState === "done" ? "✓" : "⊡"}
+        </button>
+        {hud.holding && (
+          <button className="lab-btn drop" onClick={() => dropRef.current()} aria-label="drop the relic">
+            ⤓
           </button>
         )}
         <button className="lab-btn map" onClick={() => setMapOpen(true)} aria-label="map">

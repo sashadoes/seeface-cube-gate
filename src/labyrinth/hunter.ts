@@ -146,7 +146,8 @@ export function createHunter(): Hunter {
 
     // darker you = faster it; deeper levels = faster it
     const base = hunting ? 1.5 + (1 - light / 100) * 2.4 : 0.8;
-    const speed = base * (1 + depth * 0.12);
+    // players move twice as fast now, so the Hollow does too
+    const speed = base * 1.9 * (1 + depth * 0.12);
     const dx = target.x - hx, dz = target.z - hz;
     const d = Math.hypot(dx, dz);
     if (d > 0.05) {

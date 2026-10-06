@@ -18,6 +18,8 @@ export type Peer = {
   yaw: number;
   light: number;
   nick: string;
+  /** colour of the relic they're carrying (0 = none) */
+  held: number;
   last: number;
   signal: number; // timestamp of their last light signal
 };
@@ -25,7 +27,7 @@ export type Peer = {
 export type Presence = {
   me: string;
   peers: Map<string, Peer>;
-  send: (s: { x: number; z: number; yaw: number; light: number; nick: string }) => void;
+  send: (s: { x: number; z: number; yaw: number; light: number; nick: string; held?: number }) => void;
   signal: () => void;
   onSignal: (fn: (p: Peer) => void) => void;
   online: () => number;
@@ -53,7 +55,7 @@ export function createPresence(myId?: string): Presence {
   let client: MqttClient | null = null;
   let relay = 0;
   let lastSend = 0;
-  let pending: { x: number; z: number; yaw: number; light: number; nick: string } | null = null;
+  let pending: { x: number; z: number; yaw: number; light: number; nick: string; held?: number } | null = null;
 
   function connect() {
     client = mqtt.connect(RELAYS[relay], {
@@ -114,9 +116,10 @@ export function createPresence(myId?: string): Presence {
       if (kind === "pos" && finite(m.x) && finite(m.z) && finite(m.y, 100) && finite(m.l, 101)) {
         // names are checked again here: never trust what another client sends
         const nick = cleanNick(m.n) ?? "wanderer";
+        const held = finite(m.h, 0x1000000) ? Math.max(0, Math.round(m.h as number)) : 0;
         const p = peers.get(id);
-        if (p) Object.assign(p, { x: m.x, z: m.z, yaw: m.y, light: m.l, nick, last: Date.now() });
-        else peers.set(id, { id, x: m.x as number, z: m.z as number, yaw: m.y as number, light: m.l as number, nick, last: Date.now(), signal: 0 });
+        if (p) Object.assign(p, { x: m.x, z: m.z, yaw: m.y, light: m.l, nick, held, last: Date.now() });
+        else peers.set(id, { id, x: m.x as number, z: m.z as number, yaw: m.y as number, light: m.l as number, nick, held, last: Date.now(), signal: 0 });
       }
       if (kind === "sig") {
         const p = peers.get(id);
@@ -137,8 +140,8 @@ export function createPresence(myId?: string): Presence {
 
   function flush() {
     if (!pending || !client?.connected) return;
-    const { x, z, yaw, light, nick } = pending;
-    client.publish(`${ROOT}/pos/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick }));
+    const { x, z, yaw, light, nick, held } = pending;
+    client.publish(`${ROOT}/pos/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0 }));
     pending = null;
   }
 

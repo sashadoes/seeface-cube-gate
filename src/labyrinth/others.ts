@@ -45,7 +45,7 @@ function glowTexture() {
   return t;
 }
 
-type View = { group: THREE.Group; body: THREE.Sprite; glow: THREE.Sprite; label: THREE.Sprite; nick: string; x: number; z: number; flare: number; lantern: number };
+type View = { group: THREE.Group; body: THREE.Sprite; glow: THREE.Sprite; label: THREE.Sprite; nick: string; held: THREE.Mesh; x: number; z: number; flare: number; lantern: number };
 
 /** Nickname floating above a wanderer (canvas text sprite). */
 function nameSprite(nick: string) {
@@ -90,9 +90,13 @@ export function createOthers(presence: Presence): Others {
     glow.position.set(0.25, 1.25, 0);
     glow.scale.set(0.9, 0.9, 1);
     const label = nameSprite(p.nick);
-    g.add(body, glow, label);
+    // the relic they carry, glowing in their hand
+    const held = new THREE.Mesh(new THREE.IcosahedronGeometry(0.12, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    held.position.set(-0.3, 1.15, 0.15);
+    held.visible = false;
+    g.add(body, glow, label, held);
     group.add(g);
-    v = { group: g, body, glow, label, nick: p.nick, x: p.x, z: p.z, flare: 0, lantern: 1 };
+    v = { group: g, body, glow, label, nick: p.nick, held, x: p.x, z: p.z, flare: 0, lantern: 1 };
     views.set(p.id, v);
     return v;
   }
@@ -126,6 +130,11 @@ export function createOthers(presence: Presence): Others {
       v.group.position.set(v.x, Math.sin(t * 2 + v.x) * 0.03, v.z);
       v.flare = Math.max(0, v.flare - dt * 0.8);
       v.lantern = 0.35 + (p.light / 100) * 0.65;
+      v.held.visible = p.held > 0;
+      if (p.held > 0) {
+        (v.held.material as THREE.MeshBasicMaterial).color.setHex(p.held);
+        v.held.rotation.set(t * 1.2, t * 1.7, 0);
+      }
       if (p.nick !== v.nick) {
         v.group.remove(v.label);
         v.label = nameSprite(p.nick);
