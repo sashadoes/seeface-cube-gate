@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { CELL, WALL_H, hasPanel, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
 import type { Weather } from "../marks/weather";
-import { zoneAt, zoneMaterials, zoneOfCell, type ZoneDef, type ZoneKind } from "./zones";
+import { WALL_VARIANTS, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, type ZoneDef } from "./zones";
 
 const VIEW = 7; // cells around the visitor that exist
 const MAX_WALLS = (VIEW * 2 + 2) ** 2 * 2;
@@ -24,92 +24,6 @@ export type World = {
   nearestCube: (px: number, pz: number) => { mesh: THREE.Object3D; dist: number } | null;
   spinCube: (cube: THREE.Object3D) => void;
 };
-
-/** Liminal monogram wallpaper: a pale/grey chess of see/face logos, like printed wallpaper. */
-function monogramTexture(light: string, dark: string, logoAlpha: number) {
-  const size = 512;
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  const g = c.getContext("2d")!;
-  const half = size / 2;
-  const cells: [number, number, string, boolean][] = [
-    [0, 0, light, true],
-    [half, 0, dark, false],
-    [0, half, dark, false],
-    [half, half, light, true],
-  ];
-  for (const [x, y, col] of cells) {
-    g.fillStyle = col;
-    g.fillRect(x, y, half, half);
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  const img = new Image();
-  img.onload = () => {
-    for (const [x, y, , onLight] of cells) {
-      g.globalAlpha = logoAlpha;
-      // dark logo on the light squares, light logo on the dark ones
-      g.filter = onLight ? "invert(1)" : "none";
-      g.drawImage(img, x + half * 0.1, y + half * 0.1, half * 0.8, half * 0.8);
-    }
-    g.globalAlpha = 1;
-    g.filter = "none";
-    // a little grime so it doesn't look printed yesterday
-    for (let k = 0; k < 1400; k++) {
-      g.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`;
-      g.fillRect(Math.random() * size, Math.random() * size, 2 + Math.random() * 6, 2 + Math.random() * 6);
-    }
-    t.needsUpdate = true;
-  };
-  img.src = "/imgs/seeface-logo.png";
-  return t;
-}
-
-/** Mixed wall: random generated photos in a chess with dark monogram squares, logo watermark on top. */
-function mixedTexture(seed: string) {
-  const size = 512, half = 256;
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  const g = c.getContext("2d")!;
-  g.fillStyle = "#2a2927";
-  g.fillRect(0, 0, size, size);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  const logo = new Image();
-  const photo = new Image();
-  photo.crossOrigin = "anonymous";
-  let loaded = 0;
-  const draw = () => {
-    if (++loaded < 2) return;
-    const cells: [number, number, boolean][] = [[0, 0, true], [half, 0, false], [0, half, false], [half, half, true]];
-    for (const [x, y, isPhoto] of cells) {
-      if (isPhoto) {
-        g.filter = "grayscale(0.55) contrast(1.1) brightness(0.8)";
-        g.drawImage(photo, x, y, half, half);
-        g.filter = "none";
-        g.globalAlpha = 0.38;
-        g.drawImage(logo, x + half * 0.1, y + half * 0.1, half * 0.8, half * 0.8);
-      } else {
-        g.fillStyle = "#1c1b1a";
-        g.fillRect(x, y, half, half);
-        g.globalAlpha = 0.28;
-        g.drawImage(logo, x + half * 0.1, y + half * 0.1, half * 0.8, half * 0.8);
-      }
-      g.globalAlpha = 1;
-    }
-    t.needsUpdate = true;
-  };
-  logo.onload = draw;
-  photo.onload = draw;
-  photo.onerror = () => draw(); // offline: monogram only
-  logo.src = "/imgs/seeface-logo.png";
-  photo.src = `https://picsum.photos/seed/seeface1-${seed}/512`;
-  return t;
-}
 
 function digitTexture(d: string) {
   const c = document.createElement("canvas");
@@ -138,13 +52,6 @@ export function createWorld(): World {
   scene.fog = new THREE.FogExp2(0x0c0c0b, 0.06);
 
   // ---------------------------------------------------------------- materials
-  const wallMat = new THREE.MeshStandardMaterial({
-    map: monogramTexture("#cfccc4", "#9d9a93", 0.32),
-    roughness: 0.86,
-    metalness: 0.02,
-  });
-  const floorTex = monogramTexture("#3b3a38", "#2b2a29", 0.18);
-  const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.32, metalness: 0.25 });
   const ceilMat = new THREE.MeshStandardMaterial({ color: 0x8c8a85, roughness: 0.95 });
   const panelMat = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xf2f5ff, emissiveIntensity: 1.2 });
 
@@ -153,46 +60,24 @@ export function createWorld(): World {
   // map the texture so each wall shows one 2×2 chess tile
   const uv = wallGeo.getAttribute("uv") as THREE.BufferAttribute;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * 1, uv.getY(k) * 0.85);
-  const walls = new THREE.InstancedMesh(wallGeo, wallMat, MAX_WALLS);
-  walls.frustumCulled = false;
-  scene.add(walls);
-  // about a third of the walls carry random generated images mixed with the logo
-  const mixedWalls = ["a", "b", "c"].map((seed) => {
-    const m = new THREE.InstancedMesh(
-      wallGeo,
-      new THREE.MeshStandardMaterial({ map: mixedTexture(seed), roughness: 0.7, metalness: 0.05 }),
-      MAX_WALLS
-    );
-    m.frustumCulled = false;
-    scene.add(m);
+  // walls: one instanced mesh per (location, image variant), created on first use
+  const wallMeshes = new Map<string, THREE.InstancedMesh>();
+  function wallMesh(zone: ZoneDef, variant: number) {
+    const key = `${zone.kind}:${variant}`;
+    let m = wallMeshes.get(key);
+    if (!m) {
+      m = new THREE.InstancedMesh(wallGeo, zoneWallMaterial(zone, variant), MAX_WALLS);
+      m.frustumCulled = false;
+      m.count = 0;
+      scene.add(m);
+      wallMeshes.set(key, m);
+    }
     return m;
-  });
-
-  // every other location has its own walls and floor
-  const zm = zoneMaterials();
-  const zoneWalls: Partial<Record<ZoneKind, THREE.InstancedMesh>> = {};
-  for (const k of ["pools", "red", "neon", "white"] as const) {
-    const m = new THREE.InstancedMesh(wallGeo, zm[k].wall, MAX_WALLS);
-    m.frustumCulled = false;
-    scene.add(m);
-    zoneWalls[k] = m;
   }
-  const floorFor: Record<ZoneKind, THREE.MeshStandardMaterial> = {
-    monogram: null as unknown as THREE.MeshStandardMaterial, // set below
-    pools: zm.pools.floor,
-    red: zm.red.floor,
-    neon: zm.neon.floor,
-    photo: zm.photo.floor,
-    white: zm.white.floor,
-  };
-  for (const m of Object.values(floorFor)) if (m?.map) m.map.repeat.set(40, 40);
 
   // floor + ceiling follow the visitor; textures scroll with world position
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 40, CELL * 40), floorMat);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 40, CELL * 40), zoneFloorMaterial(zoneAt(0, 0)));
   floor.rotation.x = -Math.PI / 2;
-  floorTex.repeat.set(40, 40);
-  floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-  floorFor.monogram = floorMat;
   scene.add(floor);
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 40, CELL * 40), ceilMat);
   ceil.rotation.x = Math.PI / 2;
@@ -290,22 +175,14 @@ export function createWorld(): World {
   let panelSpots: { x: number; z: number; seed: number }[] = [];
 
   function rebuild(ci: number, cj: number) {
-    let n = 0;
-    const mixedCount = [0, 0, 0];
-    const zoneCount: Partial<Record<ZoneKind, number>> = { pools: 0, red: 0, neon: 0, white: 0 };
+    const counts = new Map<THREE.InstancedMesh, number>();
     const putWall = (i: number, j: number, side: number, mat: THREE.Matrix4) => {
-      const zone = zoneOfCell(i, j).kind;
-      const h = rnd(i, j, 20 + side);
-      const zw = zoneWalls[zone];
-      if (zw) {
-        zw.setMatrixAt(zoneCount[zone]!++, mat);
-      } else if (zone === "photo" || h < 0.33) {
-        // photo garden: every wall is images; monogram halls: a third are
-        const k = Math.floor(h * 9) % 3;
-        mixedWalls[k].setMatrixAt(mixedCount[k]++, mat);
-      } else {
-        walls.setMatrixAt(n++, mat);
-      }
+      const zone = zoneOfCell(i, j);
+      const variant = Math.floor(rnd(i, j, 20 + side) * WALL_VARIANTS);
+      const m = wallMesh(zone, variant);
+      const n = counts.get(m) ?? 0;
+      m.setMatrixAt(n, mat);
+      counts.set(m, n + 1);
     };
     let np = 0;
     panelSpots = [];
@@ -327,15 +204,9 @@ export function createWorld(): World {
         }
       }
     }
-    walls.count = n;
-    walls.instanceMatrix.needsUpdate = true;
-    mixedWalls.forEach((m, k) => {
-      m.count = mixedCount[k];
+    for (const m of wallMeshes.values()) {
+      m.count = counts.get(m) ?? 0;
       m.instanceMatrix.needsUpdate = true;
-    });
-    for (const [k, m] of Object.entries(zoneWalls)) {
-      m!.count = zoneCount[k as ZoneKind] ?? 0;
-      m!.instanceMatrix.needsUpdate = true;
     }
     panels.count = np;
     panels.instanceMatrix.needsUpdate = true;
@@ -378,7 +249,7 @@ export function createWorld(): World {
     ceil.position.set(px, WALL_H, pz);
     const zone = zoneAt(px, pz);
     currentZone = zone;
-    const fm = floorFor[zone.kind];
+    const fm = zoneFloorMaterial(zone);
     if (floor.material !== fm) floor.material = fm;
     fm.map?.offset.set(px / CELL, -pz / CELL);
 

@@ -1,6 +1,7 @@
 // Liminal art: every room is an installation built from its own random image
-// (picsum, seeded by the room, so everyone sees the same art in the same room).
-// The image's average colour tints the room's light. Corridors get the odd
+// (picsum, seeded by the room, so everyone sees the same art in the same room),
+// in monochrome like the walls. Each room gets its own vivid light colour, so
+// the black-and-white art glows differently from room to room. Corridors get the odd
 // glowing photo poster. All emissive: only a fixed pool of 4 real lights.
 import * as THREE from "three";
 import { CELL, WALL_H, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
@@ -21,26 +22,13 @@ function art(seed: string): Art {
   img.onload = () => {
     tex.image = img;
     tex.needsUpdate = true;
-    try {
-      const c = document.createElement("canvas");
-      c.width = c.height = 8;
-      const g = c.getContext("2d")!;
-      g.drawImage(img, 0, 0, 8, 8);
-      const d = g.getImageData(0, 0, 8, 8).data;
-      let r = 0, gr = 0, b = 0;
-      for (let i = 0; i < d.length; i += 4) (r += d[i]), (gr += d[i + 1]), (b += d[i + 2]);
-      const n = d.length / 4;
-      // push the colour a little more saturated and bright, so rooms differ
-      const col = new THREE.Color(r / n / 255, gr / n / 255, b / n / 255);
-      const hsl = { h: 0, s: 0, l: 0 };
-      col.getHSL(hsl);
-      a!.color.setHSL(hsl.h, Math.min(1, hsl.s * 1.6 + 0.15), 0.62);
-    } catch {
-      // keep the warm default
-    }
+    // a vivid light per image (the image itself is black and white)
+    let h = 0;
+    for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    a!.color.setHSL((h % 360) / 360, 0.75, 0.62);
     a!.ready = true;
   };
-  img.src = `https://picsum.photos/seed/${encodeURIComponent(seed)}/512`;
+  img.src = `https://picsum.photos/seed/${encodeURIComponent(seed)}/512?grayscale`;
   return a;
 }
 
