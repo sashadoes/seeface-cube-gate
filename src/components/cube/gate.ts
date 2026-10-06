@@ -1,6 +1,10 @@
 // The gate: the cube page is the way into the 3D labyrinth.
-// Hidden rule (never shown on screen): spin in the code 1 9 9 4 (the owner's
-// code; the cube's faces are 1 2 3 4 5 9). That's the hack. Or get lucky.
+// Two ways in (never explained on screen):
+//   · spin in the code 1 9 9 4 (the cube's faces are 1 2 3 4 5 9). Digits count
+//     across the 4-digit line resets and symbol faces are skipped, so "1 9" at
+//     the end of one line + "9 4" at the start of the next works. On a computer
+//     you can also just type 1994.
+//   · or simply keep going: the 9th spin always opens the gate.
 // The room glitches, the cube rushes at you, a light tears open with the logo
 // burning through, and you fall into /labyrinth.
 import { Howl } from "howler";
@@ -8,25 +12,37 @@ import { track } from "../../analytics";
 import "./Gate.scss";
 
 const GATE_CODE = "1994";
+const SPINS_TO_ENTER = 9;
 let opening = false;
-
-// ...or by luck: after 8 spins, every spin has a small chance to tear the
-// gate open, rising slowly the longer you play (3% → 12%).
+let digits = "";
+let typed = "";
 let spins = 0;
+
 window.addEventListener("cube-spin", () => {
   spins += 1;
-  if (opening || spins < 8) return;
-  const chance = Math.min(0.12, 0.03 + (spins - 8) * 0.004);
-  if (Math.random() < chance) {
-    track("gate-luck");
-    setTimeout(openGate, 600); // let the spin land first
+  if (opening || spins < SPINS_TO_ENTER) return;
+  track("gate-9-spins");
+  setTimeout(openGate, 700); // let the spin land first
+});
+
+// typing the code on a keyboard works too
+window.addEventListener("keydown", (e) => {
+  if (opening || !/^\d$/.test(e.key) || location.pathname !== "/") return;
+  typed = (typed + e.key).slice(-4);
+  if (typed === GATE_CODE) {
+    track("gate-code-typed");
+    openGate();
   }
 });
 
-/** Call with the code line after every digit. */
-export function checkGate(code: string) {
-  if (opening || !code.includes(GATE_CODE)) return;
-  openGate();
+/** Call with the face that was just entered (digit or symbol). */
+export function enterDigit(face: string) {
+  if (opening || !/^\d$/.test(face)) return; // symbols don't break the code
+  digits = (digits + face).slice(-4);
+  if (digits === GATE_CODE) {
+    track("gate-code");
+    setTimeout(openGate, 300);
+  }
 }
 
 export function openGate() {
