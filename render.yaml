@@ -1,0 +1,20 @@
+# One-click hosting for the seeface1 API (accounts + saved progress) on Render.
+# Render → New → Blueprint → pick this repo. Then fill MONGODB_URI (from MongoDB Atlas).
+services:
+  - type: web
+    name: seeface1-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm ci
+    startCommand: node index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: seeface1
+      - key: ALLOWED_ORIGINS
+        value: https://seeface1.world
+      - key: IP_SALT
+        generateValue: true

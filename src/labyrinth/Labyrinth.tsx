@@ -18,6 +18,8 @@ import { createArt } from "./art";
 import { createWishes, readBlood, addBlood, WISH_COST, WISH_KINDS, type WishKind } from "./wishes";
 import { cleanNick, savedNick, saveNick } from "./nick";
 import { apiReady, registerPlayer } from "../api";
+import { noteLevel, noteRun, readProgress } from "../progress";
+import { accountsReady, currentAccount, deleteAccount, login, logout, refresh, register, type Account, type AuthError } from "../account";
 import LabMap from "./LabMap";
 import { onOnline } from "../online";
 import { createProps } from "./props";
@@ -84,10 +86,52 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
     }
   });
   const [consent, setConsent] = useState(false);
+  // optional account: save progress + play on any device
+  const [account, setAccount] = useState<Account | null>(() => currentAccount());
+  const [mode, setMode] = useState<"" | "save" | "delete">("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [authErr, setAuthErr] = useState("");
+  const progress = account?.progress ?? readProgress();
+  useEffect(() => {
+    // another device may have played since: pull the account's progress
+    if (currentAccount()) void refresh().then((a) => {
+      setAccount(a);
+      if (a) setV(a.nick);
+    });
+  }, []);
+  useEffect(() => {
+    if (account) setV(account.nick);
+  }, [account]);
+  const ERR: Record<AuthError, string> = {
+    taken: "that name is taken · log in, or pick another name",
+    wrong: "wrong name or password",
+    password: "password: at least 6 characters",
+    nick: "name: 2–16 letters or numbers",
+    email: "that email doesn't look right",
+    offline: "can't reach the labyrinth's memory right now · try again",
+    slow: "too many tries · wait a few minutes",
+  };
+  const auth = async (kind: "register" | "login") => {
+    const n = cleanNick(v);
+    if (!n) return setAuthErr(ERR.nick);
+    if (password.length < 6) return setAuthErr(ERR.password);
+    setBusy(true);
+    setAuthErr("");
+    const mail = email.trim();
+    const r = kind === "register" ? await register(n, password, mail || undefined, Boolean(mail) && consent) : await login(n, password);
+    setBusy(false);
+    if ("error" in r) return setAuthErr(ERR[r.error]);
+    setPassword("");
+    setMode("");
+    setAccount(r.account);
+    saveNick(r.account.nick);
+    track(kind === "register" ? "account-registered" : "account-login");
+  };
   const emailOk = email.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
   const enter = (e: React.FormEvent) => {
     e.preventDefault();
-    const n = cleanNick(v);
+    const n = account ? account.nick : cleanNick(v);
     if (!n) {
       setBad(true);
       setTimeout(() => setBad(false), 500);
@@ -120,6 +164,7 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           autoFocus
           value={v}
           onChange={(e) => setV(e.target.value)}
+          readOnly={!!account}
           placeholder="your name in the labyrinth"
           maxLength={16}
           autoComplete="off"
@@ -131,14 +176,95 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           ➝
         </button>
       </form>
-      {apiReady && (
+      {/* progress, and the optional account that saves it */}
+      <div className="lab-gate-progress">
+        ◈ {progress.blood} · best {progress.best} m{progress.levels.length ? ` · levels ${progress.levels.map((l) => ["", "I", "II", "III"][l]).join(" ")}` : ""}
+        {accountsReady &&
+          (account ? (
+            <>
+              {" "}
+              · <span className="saved">✓ saved to {account.nick}</span> ·{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  void logout().then(() => setAccount(null));
+                  track("account-logout");
+                }}
+              >
+                log out
+              </button>{" "}
+              ·{" "}
+              <button type="button" onClick={() => setMode(mode === "delete" ? "" : "delete")}>
+                delete
+              </button>
+            </>
+          ) : (
+            <>
+              {" "}
+              · only on this device ·{" "}
+              <button type="button" onClick={() => setMode(mode ? "" : "save")}>
+                {mode ? "close" : "save it / log in"}
+              </button>
+            </>
+          ))}
+      </div>
+      {accountsReady && !account && mode === "save" && (
+        <div className="lab-gate-account">
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="password (6+ characters)"
+            autoComplete="current-password"
+            maxLength={200}
+            onKeyDown={(e) => e.key === "Enter" && void auth("register")}
+          />
+          <div className="row">
+            <button type="button" disabled={busy} onClick={() => void auth("register")}>
+              register “{cleanNick(v) ?? v}”
+            </button>
+            <button type="button" disabled={busy} onClick={() => void auth("login")}>
+              log in
+            </button>
+          </div>
+          {authErr && <div className="err">{authErr}</div>}
+          <div className="hint">registering keeps your name and progress on any device. the email below is optional (only to recover your account).</div>
+        </div>
+      )}
+      {account && mode === "delete" && (
+        <div className="lab-gate-account">
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="your password, to delete everything" autoComplete="current-password" maxLength={200} />
+          <div className="row">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                const ok = await deleteAccount(password);
+                setBusy(false);
+                setPassword("");
+                if (!ok) return setAuthErr("wrong password");
+                setAuthErr("");
+                setMode("");
+                setAccount(null);
+                track("account-deleted");
+              }}
+            >
+              delete my account forever
+            </button>
+          </div>
+          {authErr && <div className="err">{authErr}</div>}
+          <div className="hint">your name becomes free again. progress stays only on this device.</div>
+        </div>
+      )}
+      {apiReady && !account && (
         <div className={"lab-gate-email" + (emailOk ? "" : " bad")}>
           <input
             type="email"
             inputMode="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="email (optional) · keep your ◈ and name"
+            placeholder="email (optional) · news, account recovery"
             autoComplete="email"
             maxLength={120}
           />
@@ -411,13 +537,7 @@ function Game({ nick }: { nick: string }) {
         // unsupported
       }
       const best = metres > readBest();
-      if (best) {
-        try {
-          localStorage.setItem(BEST_KEY, String(Math.round(metres)));
-        } catch {
-          // ignore
-        }
-      }
+      noteRun(Math.round(metres)); // progress (saved to the account if they have one)
       const bucket = metres < 50 ? "0-50" : metres < 150 ? "50-150" : metres < 400 ? "150-400" : metres < 1000 ? "400-1000" : "1000+";
       track(`caught-${bucket}m`);
       const result: RunResult = { metres, shards, depth, seconds: runTime, best };
@@ -790,6 +910,7 @@ function Game({ nick }: { nick: string }) {
         hunter.reset(pos.x, pos.z);
         shiftSfx.play();
         track(pulled > 0 ? `secret-level-${pulled}` : "secret-level-exit");
+        if (pulled > 0) noteLevel(pulled);
         el.classList.remove("rift");
         void el.offsetWidth;
         el.classList.add("rift");

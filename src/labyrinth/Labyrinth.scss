@@ -875,3 +875,75 @@
   60% { transform: translate(5px, 3px); filter: contrast(1.6); }
   80% { transform: translate(-3px, -2px); }
 }
+
+// ---------------------------------------------------------------- progress + optional account
+.lab-gate-progress {
+  font: italic 14px "Times New Roman", serif;
+  color: #a9a293;
+  text-align: center;
+  width: min(360px, 88vw);
+
+  .saved {
+    color: #b8f0c0;
+  }
+
+  button {
+    all: unset;
+    cursor: pointer;
+    color: #ffe6b8;
+    text-decoration: underline dotted;
+  }
+}
+
+.lab-gate-account {
+  display: grid;
+  gap: 8px;
+  width: min(320px, 82vw);
+
+  > input {
+    font: italic 15px "Times New Roman", serif;
+    color: #fff;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 230, 184, 0.35);
+    padding: 6px 2px;
+    outline: none;
+    user-select: text;
+    -webkit-user-select: text;
+    touch-action: auto;
+
+    &::placeholder {
+      color: #6f6a5c;
+    }
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .row button {
+    all: unset;
+    cursor: pointer;
+    font: italic 15px "Times New Roman", serif;
+    color: #ffe6b8;
+    border: 1px solid rgba(255, 230, 184, 0.4);
+    border-radius: 14px;
+    padding: 5px 12px;
+
+    &:disabled {
+      opacity: 0.5;
+    }
+  }
+
+  .err {
+    font: italic 13px "Times New Roman", serif;
+    color: #ff8a7a;
+  }
+
+  .hint {
+    font: italic 12px "Times New Roman", serif;
+    color: #6f6a5c;
+  }
+}

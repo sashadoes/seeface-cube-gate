@@ -12,6 +12,8 @@ export default function Privacy() {
           <li>which invite link brought you, if any</li>
           <li>a scrambled fingerprint of your connection, only to stop spam (no raw IP address)</li>
         </ul>
+        <h2 style={{ fontWeight: "normal" }}>accounts (optional)</h2>
+        <p>If you register to save your progress, we keep your nickname, a scrambled (hashed) version of your password, never the password itself, your progress (◈, best distance, levels found) and your email if you gave one. You can delete your account any time from the entry screen: everything is removed and your name becomes free again.</p>
         <h2 style={{ fontWeight: "normal" }}>what others see</h2>
         <p>Other players, and the people who run seeface1, see your nickname and where you walk in the labyrinth (live, and the path you took in the last few minutes). Nobody sees your email there.</p>
         <h2 style={{ fontWeight: "normal" }}>keepers</h2>
