@@ -165,3 +165,10 @@ Removed on request (they're in git history if ever wanted back; ask the owner fi
 - `src/marks/store.ts`: `LocalStore` (this browser only) for now; a shared Firebase store will implement the same `MarksStore` interface.
 - `mystery.ts` dispatches a `cube-spin` window event per spin for modes to listen to.
 - Planned: the radio (the owner's tracks as a station, plus visitor music; copyright and moderation still to be decided).
+
+## Branch `feature/labyrinth` (local only, not deployed)
+`/labyrinth` is stage 1 of the "3D social labyrinth". It's lazy-loaded and three.js only. The main page stays the simple cube.
+- `src/labyrinth/maze.ts`: an infinite deterministic maze (same for every visitor, which is ready for multiplayer). 4 m cells, 45% walls (above the percolation threshold, so it's always connected), one 3×3 room per 7×7 region with doors on every side, and ceiling light panels. `free()` handles collision.
+- `src/labyrinth/world.ts`: instanced monogram walls (wallpaper generated from the logo), a polished monogram floor that follows the player, the ceiling, flickering fluorescent panels (pool of 5 point lights), and floating black-glass digit cubes in rooms under spotlights. Weather (rain/snow/fog/storm) comes from `marks/weather.ts`.
+- `src/labyrinth/controls.ts`: WASD/arrows + drag to look + Shift to run; on phones, a left-half joystick and right-half look, and a tap spins a nearby cube.
+- Next stages: (2) live presence of other visitors (needs a realtime server: PartyKit/Cloudflare or Firebase, which the owner sets up), (3) proximity text chat with filter + block + report, (4) voice later behind an 18+ gate, push-to-talk. **No camera / random video pairing.**

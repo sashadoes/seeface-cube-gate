@@ -1,0 +1,68 @@
+// /labyrinth: full-screen WebGL, a faint reticle, and the phone joystick.
+
+.labyrinth {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  touch-action: none;
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// tiny centre point; it glows when a cube is close enough to spin
+.lab-reticle {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  transition: all 0.3s;
+
+  &.near {
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    background: transparent;
+    border: 1px solid rgba(255, 245, 210, 0.9);
+    box-shadow: 0 0 14px rgba(255, 240, 200, 0.7);
+    animation: lab-pulse 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes lab-pulse {
+  50% { transform: scale(1.25); }
+}
+
+.lab-stick {
+  position: fixed;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.06), transparent 70%);
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+
+  span {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
+  }
+}

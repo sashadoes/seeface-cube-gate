@@ -6,10 +6,23 @@ import { lazy, Suspense } from "react";
 
 // the marks mode (and its 3D engine) is only downloaded on /marks
 const MarksMode = lazy(() => import("./marks/MarksMode"));
+const Labyrinth = lazy(() => import("./labyrinth/Labyrinth"));
 
-const isMarks = location.pathname.replace(/\/+$/, "") === "/marks";
+const path = location.pathname.replace(/\/+$/, "");
+const isMarks = path === "/marks";
+const isLabyrinth = path === "/labyrinth";
 
 export default function App() {
+  if (isLabyrinth) {
+    return (
+      <>
+        <Suspense fallback={null}>
+          <Labyrinth />
+        </Suspense>
+        <MusicToggle />
+      </>
+    );
+  }
   return (
     <>
       <Cube />
