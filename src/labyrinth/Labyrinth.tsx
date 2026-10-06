@@ -575,6 +575,7 @@ function Game({ nick }: { nick: string }) {
         rifts,
         earn,
         radio,
+        others,
       };
 
     const resize = () => {
