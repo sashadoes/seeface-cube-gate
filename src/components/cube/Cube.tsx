@@ -14,6 +14,7 @@ import "./ScriptLoader.js";
 import { track } from "../../analytics";
 import { initMystery, mysteryStep, buzz } from "./mystery";
 import { initAlive } from "./alive";
+import { checkGate } from "./gate";
 
 import "./CubeStyle.scss";
 
@@ -33,7 +34,7 @@ let CubeBehave = {
   codeTypes: ["numbers", "symbols", "events", "luck"],
   dailyPass: dailyPasses[getYearsDay()],
   codes: {
-    numbers: ["1", "2", "3", "4", "5", "6"],
+    numbers: ["1", "2", "3", "4", "5", "9"],
     symbols: ["♠", "∑", "♖", "♘", "♕", "🀀", "▲"],
     events: ["☽", "☾"],
     luck: ["♔"],
@@ -721,6 +722,8 @@ export default function Cube() {
 
       if (codeInput) {
         var totalCode = codeInput.innerHTML + activeNumber;
+        // the hack: spin in the code → the gate to the labyrinth opens
+        checkGate(totalCode);
 
         if (totalCode.length < CubeBehave.maxSteps) {
           new Howl({
@@ -863,7 +866,7 @@ export default function Cube() {
                 className="side cube-side"
                 style={{ opacity: 0.9, backgroundColor: "rgba(0, 0, 0, 0.75)" }}
               >
-                <div className="cube-image active">6</div>
+                <div className="cube-image active">9</div>
               </div>
             </div>
           </div>

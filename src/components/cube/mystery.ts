@@ -213,6 +213,8 @@ export function initMystery(opts: { viewport: Viewport }) {
 export function mysteryStep() {
   step += 1;
   recordSpin(step);
+  // let optional modes (e.g. /marks) react to each spin
+  window.dispatchEvent(new CustomEvent("cube-spin", { detail: { step } }));
   apparitionsStep(step);
   const erupt = tranceSpin();
   const trance = getTrance();

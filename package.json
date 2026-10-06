@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && cp dist/index.html dist/404.html",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
     "howler": "^2.2.4",
+    "mqtt": "^5.16.0",
     "pixi.js": "^8.14.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

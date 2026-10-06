@@ -1,0 +1,35 @@
+.online-counter {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top));
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: italic 15px "Times New Roman", Times, serif;
+  color: #e9e4da;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.95);
+  pointer-events: none;
+  padding: 5px 10px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px dotted #6d6d6d;
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ffe6b8;
+    box-shadow: 0 0 10px 3px rgba(255, 230, 184, 0.65);
+    animation: online-breathe 2.6s ease-in-out infinite;
+  }
+
+  // someone just arrived
+  &.joined .dot {
+    background: #fff;
+    box-shadow: 0 0 20px 8px rgba(255, 245, 220, 0.95);
+  }
+}
+
+@keyframes online-breathe {
+  50% { opacity: 0.4; }
+}
