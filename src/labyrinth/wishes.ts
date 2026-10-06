@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { CELL, WALL_H } from "./maze";
 import type { Presence } from "./net";
+import { noteBlood } from "../progress";
 
 export const WISH_COST = 10;
 const BLOOD_KEY = "seeface-blood";
@@ -39,6 +40,7 @@ export function addBlood(n: number) {
   } catch {
     // ignore
   }
+  noteBlood();
   return v;
 }
 

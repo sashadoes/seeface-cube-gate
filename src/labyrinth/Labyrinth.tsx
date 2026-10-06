@@ -5,6 +5,12 @@ import { createWorld } from "./world";
 import { createInput, type Input } from "./controls";
 import { createHunter } from "./hunter";
 import { createResidents } from "./residents";
+import { createKeepers } from "./keepers";
+import { createEdge } from "./edge";
+import { createTwists, garble } from "./twists";
+import { ALL_DONE_BONUS, createQuests, type QuestKind, type QuestView } from "./quests";
+import { EMOTES, type Emote } from "./net";
+import { demonOf, demonTexture } from "./demons";
 import { createRadio } from "./radio";
 import { shareCard, type RunResult } from "./card";
 import { createPresence, type Presence } from "./net";
@@ -13,6 +19,8 @@ import { createArt } from "./art";
 import { createWishes, readBlood, addBlood, WISH_COST, WISH_KINDS, type WishKind } from "./wishes";
 import { cleanNick, savedNick, saveNick } from "./nick";
 import { apiReady, registerPlayer } from "../api";
+import { noteLevel, noteRun, readProgress } from "../progress";
+import { accountsReady, currentAccount, deleteAccount, login, logout, refresh, register, type Account, type AuthError } from "../account";
 import LabMap from "./LabMap";
 import { onOnline } from "../online";
 import { createProps } from "./props";
@@ -27,7 +35,7 @@ const PLACE_NAMES: Record<string, string> = {
   monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
   photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep",
 };
-import { free, spawn, roomOf, CELL } from "./maze";
+import { free, spawn, roomOf, roomCentre as roomCentreOf, CELL } from "./maze";
 import { loadWeather } from "../marks/weather";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
@@ -49,7 +57,7 @@ const isPhone = matchMedia("(pointer: coarse)").matches;
 const PROTECTED = 120; // seconds a newcomer can't be knifed
 const FOV = 72;
 
-type Hud = { event: EventKind | null; holding: boolean; level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null };
+type Hud = { event: EventKind | null; holding: boolean; level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null; meet?: { nick: string; d: number; a: number } | null };
 
 function readBest() {
   try {
@@ -79,10 +87,52 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
     }
   });
   const [consent, setConsent] = useState(false);
+  // optional account: save progress + play on any device
+  const [account, setAccount] = useState<Account | null>(() => currentAccount());
+  const [mode, setMode] = useState<"" | "save" | "delete">("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [authErr, setAuthErr] = useState("");
+  const progress = account?.progress ?? readProgress();
+  useEffect(() => {
+    // another device may have played since: pull the account's progress
+    if (currentAccount()) void refresh().then((a) => {
+      setAccount(a);
+      if (a) setV(a.nick);
+    });
+  }, []);
+  useEffect(() => {
+    if (account) setV(account.nick);
+  }, [account]);
+  const ERR: Record<AuthError, string> = {
+    taken: "that name is taken · log in, or pick another name",
+    wrong: "wrong name or password",
+    password: "password: at least 6 characters",
+    nick: "name: 2–16 letters or numbers",
+    email: "that email doesn't look right",
+    offline: "can't reach the labyrinth's memory right now · try again",
+    slow: "too many tries · wait a few minutes",
+  };
+  const auth = async (kind: "register" | "login") => {
+    const n = cleanNick(v);
+    if (!n) return setAuthErr(ERR.nick);
+    if (password.length < 6) return setAuthErr(ERR.password);
+    setBusy(true);
+    setAuthErr("");
+    const mail = email.trim();
+    const r = kind === "register" ? await register(n, password, mail || undefined, Boolean(mail) && consent) : await login(n, password);
+    setBusy(false);
+    if ("error" in r) return setAuthErr(ERR[r.error]);
+    setPassword("");
+    setMode("");
+    setAccount(r.account);
+    saveNick(r.account.nick);
+    track(kind === "register" ? "account-registered" : "account-login");
+  };
   const emailOk = email.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
   const enter = (e: React.FormEvent) => {
     e.preventDefault();
-    const n = cleanNick(v);
+    const n = account ? account.nick : cleanNick(v);
     if (!n) {
       setBad(true);
       setTimeout(() => setBad(false), 500);
@@ -115,6 +165,7 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           autoFocus
           value={v}
           onChange={(e) => setV(e.target.value)}
+          readOnly={!!account}
           placeholder="your name in the labyrinth"
           maxLength={16}
           autoComplete="off"
@@ -126,14 +177,95 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           ➝
         </button>
       </form>
-      {apiReady && (
+      {/* progress, and the optional account that saves it */}
+      <div className="lab-gate-progress">
+        ◈ {progress.blood} · best {progress.best} m{progress.levels.length ? ` · levels ${progress.levels.map((l) => ["", "I", "II", "III"][l]).join(" ")}` : ""}
+        {accountsReady &&
+          (account ? (
+            <>
+              {" "}
+              · <span className="saved">✓ saved to {account.nick}</span> ·{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  void logout().then(() => setAccount(null));
+                  track("account-logout");
+                }}
+              >
+                log out
+              </button>{" "}
+              ·{" "}
+              <button type="button" onClick={() => setMode(mode === "delete" ? "" : "delete")}>
+                delete
+              </button>
+            </>
+          ) : (
+            <>
+              {" "}
+              · only on this device ·{" "}
+              <button type="button" onClick={() => setMode(mode ? "" : "save")}>
+                {mode ? "close" : "save it / log in"}
+              </button>
+            </>
+          ))}
+      </div>
+      {accountsReady && !account && mode === "save" && (
+        <div className="lab-gate-account">
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="password (6+ characters)"
+            autoComplete="current-password"
+            maxLength={200}
+            onKeyDown={(e) => e.key === "Enter" && void auth("register")}
+          />
+          <div className="row">
+            <button type="button" disabled={busy} onClick={() => void auth("register")}>
+              register “{cleanNick(v) ?? v}”
+            </button>
+            <button type="button" disabled={busy} onClick={() => void auth("login")}>
+              log in
+            </button>
+          </div>
+          {authErr && <div className="err">{authErr}</div>}
+          <div className="hint">registering keeps your name and progress on any device. the email below is optional (only to recover your account).</div>
+        </div>
+      )}
+      {account && mode === "delete" && (
+        <div className="lab-gate-account">
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="your password, to delete everything" autoComplete="current-password" maxLength={200} />
+          <div className="row">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                const ok = await deleteAccount(password);
+                setBusy(false);
+                setPassword("");
+                if (!ok) return setAuthErr("wrong password");
+                setAuthErr("");
+                setMode("");
+                setAccount(null);
+                track("account-deleted");
+              }}
+            >
+              delete my account forever
+            </button>
+          </div>
+          {authErr && <div className="err">{authErr}</div>}
+          <div className="hint">your name becomes free again. progress stays only on this device.</div>
+        </div>
+      )}
+      {apiReady && !account && (
         <div className={"lab-gate-email" + (emailOk ? "" : " bad")}>
           <input
             type="email"
             inputMode="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="email (optional) · keep your ◈ and name"
+            placeholder="email (optional) · news, account recovery"
             autoComplete="email"
             maxLength={120}
           />
@@ -154,9 +286,70 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
 function Game({ nick }: { nick: string }) {
   const host = useRef<HTMLDivElement>(null);
   const wishRef = useRef<(k: WishKind | "room") => void>(() => {});
-  const mapRef = useRef<{ getPos: () => { x: number; z: number; yaw: number }; presence: Presence | null; wishList: () => { kind: string; x: number; z: number }[] } | null>(null);
+  const mapRef = useRef<{ getPos: () => { x: number; z: number; yaw: number }; presence: Presence | null; wishList: () => { kind: string; x: number; z: number }[]; edge?: () => { radius: number; centre: { x: number; z: number } } } | null>(null);
   const [wishOpen, setWishOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  // meeting someone from the map: who you're walking to, and messages like "x is coming to find you"
+  const meetRef = useRef<string | null>(null);
+  const [meetId, setMeetId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  const noticeTimer = useRef(0);
+  const say = (text: string) => {
+    setNotice(text);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(""), 5000);
+  };
+  // daily quests (same three for everyone today)
+  const questsRef = useRef<ReturnType<typeof createQuests> | null>(null);
+  if (!questsRef.current) questsRef.current = createQuests();
+  const [questList, setQuestList] = useState<QuestView[]>(() => questsRef.current!.list());
+  const [questsOpen, setQuestsOpen] = useState(false);
+  const questRef = useRef<(k: QuestKind, n?: number) => void>(() => {});
+
+  // chat with strangers + weird interactions
+  type Line = { key: number; id: string; nick: string; text: string; mine?: boolean };
+  const [chat, setChat] = useState<Line[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const muted = useRef(new Set<string>());
+  const lineKey = useRef(0);
+  const addLine = (l: Omit<Line, "key">) => {
+    const line = { ...l, key: ++lineKey.current };
+    setChat((c) => [...c.slice(-4), line]);
+    setTimeout(() => setChat((c) => c.filter((x) => x.key !== line.key)), 25_000);
+  };
+  const addLineRef = useRef(addLine);
+  addLineRef.current = addLine;
+  const lastHeard = useRef("");
+  const sendChat = () => {
+    const text = draft.trim();
+    if (!text) return setChatOpen(false);
+    if (presenceRef.current?.say(text)) {
+      addLine({ id: "me", nick, text, mine: true });
+      questRef.current("say");
+      setDraft("");
+      setChatOpen(false);
+      track("chat-said");
+    } else say("that can't be said here (or slow down)");
+  };
+  const emote = (k: Emote) => {
+    presenceRef.current?.emote(k);
+    questRef.current("emote");
+    say(`you ${k}`);
+    track(`emote-${k}`);
+  };
+  const sayRef = useRef(say);
+  sayRef.current = say;
+  const startMeet = (id: string | null) => {
+    meetRef.current = id;
+    setMeetId(id);
+    if (id) {
+      presenceRef.current?.call(id);
+      const p = presenceRef.current?.peers.get(id);
+      if (p) say(`going to find ${p.nick}`);
+      track("meet-start");
+    }
+  };
   const restartRef = useRef<() => void>(() => {});
   const inputRef = useRef<Input | null>(null);
   const presenceRef = useRef<Presence | null>(null);
@@ -184,6 +377,7 @@ function Game({ nick }: { nick: string }) {
     const world = createWorld();
     const hunter = createHunter();
     const residents = createResidents();
+    const keepers = createKeepers();
     const presence = createPresence();
     // also counted in the site-wide live counter (cube page)
     const stopOnline = onOnline(() => {});
@@ -194,7 +388,7 @@ function Game({ nick }: { nick: string }) {
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
     const rifts = createRifts();
-    world.scene.add(hunter.object, residents.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
+    world.scene.add(hunter.object, residents.group, keepers.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
@@ -217,6 +411,11 @@ function Game({ nick }: { nick: string }) {
 
     // Android: go fullscreen on the first touch (iOS: use "Add to Home Screen")
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (e.code === "Enter" || e.code === "KeyT") {
+        e.preventDefault();
+        setChatOpen(true);
+      }
       if (e.code === "KeyF") strikeRef.current();
       if (e.code === "KeyG") dropRef.current();
       if (e.code === "KeyP") snapRef.current();
@@ -250,6 +449,7 @@ function Game({ nick }: { nick: string }) {
     // movement feel: momentum, jumping, sprint FOV, lean
     const vel = { x: 0, z: 0 };
     let vy = 0, jumpY = 0, landDip = 0, lean = 0, lastYaw = 0;
+    let jumpedNow = false;
     let blood = readBlood();
     let nextBloodAt = 100; // +1 ◈ every 100 m walked
     const earn = (n: number, why: string) => {
@@ -347,13 +547,7 @@ function Game({ nick }: { nick: string }) {
         // unsupported
       }
       const best = metres > readBest();
-      if (best) {
-        try {
-          localStorage.setItem(BEST_KEY, String(Math.round(metres)));
-        } catch {
-          // ignore
-        }
-      }
+      noteRun(Math.round(metres)); // progress (saved to the account if they have one)
       const bucket = metres < 50 ? "0-50" : metres < 150 ? "50-150" : metres < 400 ? "150-400" : metres < 1000 ? "400-1000" : "1000+";
       track(`caught-${bucket}m`);
       const result: RunResult = { metres, shards, depth, seconds: runTime, best };
@@ -477,6 +671,7 @@ function Game({ nick }: { nick: string }) {
         wishes.make(k, x, z);
       }
       blood = addBlood(-WISH_COST);
+      questRef.current("wish");
       shiftSfx.play();
       track(`wish-${k}`);
       try {
@@ -489,6 +684,7 @@ function Game({ nick }: { nick: string }) {
       getPos: () => ({ x: pos.x, z: pos.z, yaw: input.yaw }),
       presence,
       wishList: () => wishes.list(),
+      edge: () => edge.state(pos.x),
     };
 
     // dev-only handle for debugging in the browser console
@@ -502,6 +698,15 @@ function Game({ nick }: { nick: string }) {
         state: () => ({ light, shards, depth, metres, alive, runTime }),
         setLight: (v: number) => (light = v),
         skipGrace: () => (runTime = GRACE + 1),
+        // for recording trailers (dev only): local-only peers never reach the relay
+        presence,
+        keepers,
+        sound,
+        renderer,
+        rifts,
+        earn,
+        radio,
+        others,
       };
 
     const resize = () => {
@@ -518,6 +723,82 @@ function Game({ nick }: { nick: string }) {
     let raf = 0;
     let lastDanger = 0;
     let wasNear = false;
+
+    // direction + distance to the person you're walking to (a = angle on screen, 0 = straight ahead)
+    const meetInfo = () => {
+      const p = meetRef.current ? presence.peers.get(meetRef.current) : treasure ? { nick: "◈ treasure", x: treasure.x, z: treasure.z } : null;
+      if (!p) return null;
+      const a = -(Math.atan2(-(p.x - pos.x), -(p.z - pos.z)) - input.yaw);
+      return { nick: p.nick, d: Math.round(Math.hypot(p.x - pos.x, p.z - pos.z)), a: Math.atan2(Math.sin(a), Math.cos(a)) };
+    };
+    // someone picked you on their map
+    presence.onCalled((from) => {
+      sayRef.current(`${from.nick} is coming to find you`);
+      sound.chime();
+      if (!meetRef.current) {
+        meetRef.current = from.id; // meet them halfway
+        setMeetId(from.id);
+      }
+      track("meet-called");
+    });
+
+    // what strangers say: clear up close, breaking up with distance, nothing past 80 m
+    presence.onSay((from, text) => {
+      if (muted.current.has(from.id)) return;
+      const d = Math.hypot(from.x - pos.x, from.z - pos.z);
+      if (d > 80) return;
+      const heard = garble(text, Math.max(0, Math.min(0.8, (d - 30) / 50)));
+      others.say(from.id, heard);
+      addLineRef.current({ id: from.id, nick: from.nick, text: heard });
+      lastHeard.current = text;
+    });
+    presence.onEmote((from, kind) => {
+      if (muted.current.has(from.id)) return;
+      others.emote(from.id, kind);
+      const d = Math.hypot(from.x - pos.x, from.z - pos.z);
+      if (kind === "scream" && d < 14) {
+        sound.thunder();
+        el.classList.remove("scream");
+        void el.offsetWidth;
+        el.classList.add("scream");
+      }
+      if (d < 20) sayRef.current(`${from.nick} ${kind === "stare" ? "stares at you" : kind === "spin" ? "spins" : kind === "melt" ? "melts into the floor" : kind === "float" ? "floats" : "screams"}`);
+    });
+
+    // quests: pay out and announce
+    const quest = (k: QuestKind, n = 1) => {
+      const r = questsRef.current!.bump(k, n);
+      if (r.quest) {
+        earn(r.quest.reward, "quest");
+        sayRef.current(`quest done: ${r.quest.text} · +${r.quest.reward} ◈`);
+        sound.chime();
+        track(`quest-${r.quest.kind}`);
+        setQuestList(questsRef.current!.list());
+      }
+      if (r.allDone) {
+        earn(ALL_DONE_BONUS, "quests-all");
+        setTimeout(() => sayRef.current(`all of today's quests done · +${ALL_DONE_BONUS} ◈ · new ones tomorrow`), 3000);
+        track("quests-all-done");
+      }
+    };
+    questRef.current = quest;
+    let questTick = 0;
+
+    // twist state
+    let lowGravT = 0, fogT = 0, colourT = 0, glimpseT = 0;
+    let treasure: { x: number; z: number; until: number } | null = null;
+
+    // the edge: the labyrinth is as big as the crowd inside
+    const edge = createEdge();
+    let edgeFog = 0, edgeWarned = false;
+    // twists: unpredictable things that happen to you
+    const twists = createTwists();
+    const doppel = new THREE.Sprite(new THREE.SpriteMaterial({ map: demonTexture(demonOf(presence.me)), transparent: true, depthWrite: false, opacity: 0 }));
+    doppel.scale.set(0.9, 2.8, 1);
+    doppel.center.set(0.5, 0);
+    doppel.visible = false;
+    world.scene.add(doppel);
+    let doppelT = -1, mirrorT = 0;
 
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
@@ -552,11 +833,13 @@ function Game({ nick }: { nick: string }) {
 
         // jump
         if (input.consumeJump() && jumpY <= 0.001) {
-          vy = eventKind === "inversion" ? 7.5 : 4.2;
+          vy = eventKind === "inversion" || lowGravT > 0 ? 7.5 : 4.2;
+          jumpedNow = true;
+          quest("jump");
           track("jump");
         }
         if (jumpY > 0 || vy > 0) {
-          vy -= (eventKind === "inversion" ? 6 : 13) * dt;
+          vy -= (eventKind === "inversion" || lowGravT > 0 ? 6 : 13) * dt;
           jumpY = Math.max(0, jumpY + vy * dt);
           if (jumpY === 0) {
             if (vy < -3) {
@@ -574,6 +857,7 @@ function Game({ nick }: { nick: string }) {
           props.take(pk);
           if (pk.kind === "relic") {
             hold(pk.colour!, pk.shape!);
+            quest("relic");
             sound.chime();
             track("relic-picked");
           } else if (pk.kind === "money") {
@@ -592,6 +876,7 @@ function Game({ nick }: { nick: string }) {
         }
         if (moved > 0) {
           metres += moved;
+          quest("walk", moved);
           if (metres > nextBloodAt) {
             nextBloodAt += 100;
             earn(1, "walk");
@@ -621,7 +906,7 @@ function Game({ nick }: { nick: string }) {
         // ---------------- the Hollow
         const h = runTime > GRACE ? hunter.update(dt, t, { px: pos.x, pz: pos.z, light, depth: depth + (levelAtX(pos.x) > 0 ? 3 : 0), isLit: world.isLit }) : { dist: 99, hunting: false };
         const danger = Math.max(0, 1 - h.dist / (CELL * 5)) * (h.hunting ? 1 : 0.45);
-        radio.set(danger);
+        radio.set(Math.max(danger, edgeFog * 0.7));
         lastDanger = danger;
         if (h.dist < 1.0 && !room) die();
       }
@@ -662,6 +947,10 @@ function Game({ nick }: { nick: string }) {
         hunter.reset(pos.x, pos.z);
         shiftSfx.play();
         track(pulled > 0 ? `secret-level-${pulled}` : "secret-level-exit");
+        if (pulled > 0) {
+          noteLevel(pulled);
+          quest("level");
+        }
         el.classList.remove("rift");
         void el.offsetWidth;
         el.classList.add("rift");
@@ -683,6 +972,7 @@ function Game({ nick }: { nick: string }) {
         metSomeone = true;
         meetSfx.play();
         earn(2, "meet");
+        quest("meet");
         track("met-someone");
         try {
           navigator.vibrate?.([30, 60, 30]);
@@ -691,6 +981,188 @@ function Game({ nick }: { nick: string }) {
         }
       }
       if (meet.nearest > 10) metSomeone = false;
+
+      // walking to someone you picked on the map
+      const mt = meetRef.current ? presence.peers.get(meetRef.current) : null;
+      if (meetRef.current && !mt) {
+        meetRef.current = null;
+        setMeetId(null);
+        sayRef.current("they left the labyrinth");
+      }
+      if (mt && Math.hypot(mt.x - pos.x, mt.z - pos.z) < 3) {
+        meetRef.current = null;
+        setMeetId(null);
+        sayRef.current(`you found ${mt.nick}`);
+        sound.chime();
+        track("meet-found");
+      }
+
+      // the edge of the labyrinth
+      const eg = edge.update(pos.x, pos.z, presence.online(), dt);
+      edgeFog = eg.fog;
+      world.setEdgeFog(Math.max(eg.fog, fogT > 0 ? 0.7 : 0));
+      if (eg.grew) sayRef.current(`the labyrinth grew · ${presence.online()} inside`);
+      if (eg.nearEdge && !edgeWarned) {
+        edgeWarned = true;
+        sayRef.current("the labyrinth ends here for now · it grows when more people come in");
+        track("edge-reached");
+      }
+      if (!eg.nearEdge && edgeFog === 0) edgeWarned = false;
+      if (eg.throwBack && alive) {
+        pos.x = eg.throwBack.x;
+        pos.z = eg.throwBack.z;
+        vel.x = vel.z = 0;
+        hunter.reset(pos.x, pos.z);
+        el.classList.remove("rift");
+        void el.offsetWidth;
+        el.classList.add("rift");
+        el.style.setProperty("--rift", "#ffffff");
+        sayRef.current("the static threw you back");
+        track("edge-thrown");
+      }
+
+      // twists
+      const tw = twists.update(dt, alive && runTime > 30);
+      if (tw === "blackout") {
+        light = Math.min(light, 15);
+        sayRef.current("the lights died");
+      }
+      if (tw === "doppel") {
+        doppelT = 0;
+        doppel.position.set(pos.x - Math.sin(input.yaw) * 7, 0, pos.z - Math.cos(input.yaw) * 7);
+        doppel.visible = true;
+      }
+      if (tw === "moved") {
+        const I = Math.floor(pos.x / CELL / 7) + (Math.random() < 0.5 ? -1 : 1), J = Math.floor(pos.z / CELL / 7) + (Math.random() < 0.5 ? -1 : 1);
+        const c = roomCentreOf(I, J);
+        pos.x = c.x;
+        pos.z = c.z;
+        hunter.reset(pos.x, pos.z);
+        el.classList.remove("rift");
+        void el.offsetWidth;
+        el.classList.add("rift");
+        el.style.setProperty("--rift", "#c8b8ff");
+        sayRef.current("the labyrinth moved you");
+      }
+      if (tw === "mirror") {
+        mirrorT = 7;
+        renderer.domElement.style.transform = "scaleX(-1)";
+        sayRef.current("everything is backwards");
+      }
+      if (tw === "money") {
+        for (let k = 0; k < 3; k++) {
+          const gx = pos.x - Math.sin(input.yaw) * (1.5 + k), gz = pos.z - Math.cos(input.yaw) * (1.5 + k);
+          if (free(gx, gz)) props.spawnMoney(gx, gz);
+        }
+        sayRef.current("someone's lost ◈ fell at your feet");
+      }
+      if (tw === "echo") sayRef.current(lastHeard.current ? `an echo: "${garble(lastHeard.current, 0.3)}"` : "someone whispered your name");
+      if (tw === "gravity") {
+        lowGravT = 12;
+        sayRef.current("gravity forgot you · jump");
+      }
+      if (tw === "whisper") {
+        // only real people: a whisper about someone who is actually in here
+        const ps = [...presence.peers.values()];
+        const p = ps[Math.floor(Math.random() * ps.length)];
+        if (p) {
+          const a = -(Math.atan2(-(p.x - pos.x), -(p.z - pos.z)) - input.yaw);
+          const r = Math.atan2(Math.sin(a), Math.cos(a));
+          const dir = Math.abs(r) < Math.PI / 4 ? "ahead" : Math.abs(r) > (3 * Math.PI) / 4 ? "behind you" : r < 0 ? "to your left" : "to your right";
+          sayRef.current(`a whisper: "${p.nick} is ${Math.round(Math.hypot(p.x - pos.x, p.z - pos.z))} m ${dir}"`);
+        } else sayRef.current("a whisper: \"bring someone. it's lonely down here\"");
+      }
+      if (tw === "glimpse" && runTime > GRACE && light > 30) {
+        // the Hollow, right there, for a blink
+        hunter.object.position.set(pos.x - Math.sin(input.yaw) * 9, 0, pos.z - Math.cos(input.yaw) * 9);
+        glimpseT = 1.3;
+      }
+      if (tw === "treasure") {
+        for (let k = 0; k < 30; k++) {
+          const a = Math.random() * Math.PI * 2, d = 15 + Math.random() * 15;
+          const x = pos.x + Math.sin(a) * d, z = pos.z + Math.cos(a) * d;
+          const c = { x: (Math.floor(x / CELL) + 0.5) * CELL, z: (Math.floor(z / CELL) + 0.5) * CELL };
+          if (!free(c.x, c.z)) continue;
+          for (let m = 0; m < 4; m++) props.spawnMoney(c.x + (m % 2 ? 0.6 : -0.6), c.z + (m < 2 ? 0.6 : -0.6));
+          treasure = { x: c.x, z: c.z, until: t + 90 };
+          sayRef.current("something was hidden near you · follow the arrow");
+          break;
+        }
+      }
+      if (tw === "fogwall") {
+        fogT = 7;
+        sayRef.current("a wall of fog rolled in");
+      }
+      if (tw === "colours") {
+        colourT = 9;
+        renderer.domElement.style.filter = "hue-rotate(150deg) saturate(1.7)";
+        sayRef.current("the colours went wrong");
+      }
+      lowGravT = Math.max(0, lowGravT - dt);
+      fogT = Math.max(0, fogT - dt);
+      if (colourT > 0) {
+        colourT -= dt;
+        if (colourT <= 0) renderer.domElement.style.filter = "";
+      }
+      if (glimpseT > 0) {
+        glimpseT -= dt;
+        if (glimpseT <= 0) hunter.reset(pos.x, pos.z);
+      }
+      if (treasure) {
+        if (Math.hypot(treasure.x - pos.x, treasure.z - pos.z) < 2.5) {
+          treasure = null;
+          sayRef.current("you found the treasure");
+          quest("treasure");
+        } else if (t > treasure.until) treasure = null;
+      }
+      // quests that count time, and keeping the list fresh
+      if (alive && light < 20) quest("dark", dt);
+      questTick -= dt;
+      if (questTick <= 0) {
+        questTick = 1;
+        setQuestList(questsRef.current!.list());
+      }
+      if (tw) track(`twist-${tw}`);
+      if (mirrorT > 0) {
+        mirrorT -= dt;
+        if (mirrorT <= 0) renderer.domElement.style.transform = "";
+      }
+      if (doppelT >= 0) {
+        // you, walking towards yourself, gone before it reaches you
+        doppelT += dt;
+        const dx = pos.x - doppel.position.x, dz = pos.z - doppel.position.z;
+        const dd = Math.hypot(dx, dz);
+        doppel.position.x += (dx / dd) * dt * 1.2;
+        doppel.position.z += (dz / dd) * dt * 1.2;
+        (doppel.material as THREE.SpriteMaterial).opacity = Math.min(0.8, doppelT) * (dd < 3 || doppelT > 6 ? 0 : 1);
+        if (dd < 3 || doppelT > 6) {
+          if (doppelT > 0.5) sayRef.current("you saw yourself");
+          doppel.visible = false;
+          doppelT = -1;
+        }
+      }
+
+      // keepers: characters with personalities who keep a lonely player company
+      const kAct = alive
+        ? keepers.update(dt, t, {
+            px: pos.x, pz: pos.z, yaw: input.yaw, light, nick, holding: !!held, jumped: jumpedNow, realNearest: meet.nearest,
+            place: levelAtX(pos.x) > 0 ? LEVELS[levelAtX(pos.x)].name : PLACE_NAMES[world.zone().kind] ?? "the labyrinth",
+            rift: rifts.nearest(pos.x, pos.z),
+          })
+        : null;
+      jumpedNow = false;
+      if (kAct) {
+        if (kAct.light) light = Math.min(100, light + kAct.light);
+        if (kAct.takeRelic && held && heldObj) {
+          camera.remove(heldObj);
+          held = null;
+          heldObj = null;
+        }
+        if (kAct.earn) earn(kAct.earn, kAct.why ?? "keeper");
+        if (kAct.why === "keeper-trade") quest("trade");
+        sound.chime();
+        track(kAct.why ?? "keeper");
+      }
 
       // ---------------- cubes: spin a new room's cube → shard + full light
       const c = world.nearestCube(pos.x, pos.z);
@@ -704,6 +1176,7 @@ function Game({ nick }: { nick: string }) {
           claimed.add(roomKey);
           shards += 1;
           earn(1, "shard");
+          quest("shards");
           shardSfx.play();
           track(`shard-${Math.min(shards, 60)}`);
           try {
@@ -732,7 +1205,7 @@ function Game({ nick }: { nick: string }) {
         setHud((prev) =>
           prev.dead
             ? { ...prev, online: presence.online() }
-            : { event: eventKind, holding: !!held, level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null }
+            : { event: eventKind, holding: !!held, level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null, meet: meetInfo() }
         );
       }
 
@@ -773,6 +1246,7 @@ function Game({ nick }: { nick: string }) {
       // snapshot: grab the frame right after it's drawn
       if (snapRequested) {
         snapRequested = false;
+        if (eventKind) quest("snap");
         const lvl = levelAtX(pos.x);
         const place = lvl > 0 ? LEVELS[lvl].name : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
         const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}`;
@@ -978,7 +1452,88 @@ function Game({ nick }: { nick: string }) {
         </div>
       )}
 
-      {mapOpen && mapRef.current && <LabMap source={mapRef.current} nick={nick} onClose={() => setMapOpen(false)} />}
+      {hud.meet && (
+        <div className="lab-meet" onPointerDown={stop} onPointerUp={stop}>
+          <span className="arrow" style={{ transform: `rotate(${hud.meet.a}rad)` }}>
+            ↑
+          </span>
+          <span className="who">
+            {hud.meet.nick} · {hud.meet.d} m
+          </span>
+          <button onClick={() => startMeet(null)} aria-label="stop">
+            ×
+          </button>
+        </div>
+      )}
+      {/* today's quests */}
+      <div className={"lab-quests" + (questsOpen ? " open" : "")} onPointerDown={stop} onPointerUp={stop}>
+        <button className="lab-quests-chip" onClick={() => setQuestsOpen((o) => !o)}>
+          ◇ quests {questList.filter((q) => q.done).length}/{questList.length}
+        </button>
+        {questsOpen && (
+          <ul>
+            {questList.map((q) => (
+              <li key={q.text} className={q.done ? "done" : ""}>
+                <span>{q.done ? "✓" : "◇"}</span> {q.text}
+                <em>
+                  {q.done ? "done" : q.kind === "walk" ? `${q.count}/${q.goal} m` : q.kind === "dark" ? `${q.count}/${q.goal} s` : `${q.count}/${q.goal}`} · +{q.reward} ◈
+                </em>
+              </li>
+            ))}
+            <li className="hint">new quests every day · the same for everyone</li>
+          </ul>
+        )}
+      </div>
+
+      {notice && (
+        <div className="lab-notice" key={notice}>
+          {notice}
+        </div>
+      )}
+
+      {/* chat with strangers: what people near you said */}
+      <div className="lab-chat" onPointerDown={stop} onPointerUp={stop}>
+        {chat.map((l) => (
+          <button
+            key={l.key}
+            className={"lab-chat-line" + (l.mine ? " mine" : "")}
+            title={l.mine ? "" : "tap to mute"}
+            onClick={() => {
+              if (l.mine) return;
+              muted.current.add(l.id);
+              setChat((c) => c.filter((x) => x.id !== l.id));
+              say(`${l.nick} muted`);
+              track("chat-mute");
+            }}
+          >
+            <b>{l.nick}</b> {l.text}
+          </button>
+        ))}
+        {chatOpen ? (
+          <form
+            className="lab-chat-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendChat();
+            }}
+          >
+            <input autoFocus value={draft} maxLength={80} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setChatOpen(false)} placeholder="say something to whoever is near…" />
+            <div className="lab-emotes">
+              {EMOTES.map((k) => (
+                <button type="button" key={k} onClick={() => emote(k)}>
+                  {k}
+                </button>
+              ))}
+            </div>
+          </form>
+        ) : (
+          <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label="talk">
+            talk…
+          </button>
+        )}
+      </div>
+
+      {mapOpen && mapRef.current && <LabMap source={mapRef.current} nick={nick} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} />}
 
       {hud.dead && (
         <div className="lab-dead" onPointerDown={stop} onPointerUp={stop}>

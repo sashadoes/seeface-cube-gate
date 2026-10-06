@@ -696,3 +696,311 @@
 .lab-gate p a {
   color: #a9a293;
 }
+
+// ---------------------------------------------------------------- meeting people
+.lab-map-wide {
+  all: unset;
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  font: italic 16px "Times New Roman", serif;
+  color: #e9e4da;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 16px;
+  padding: 5px 14px;
+  cursor: pointer;
+
+  &.on {
+    color: #ffe6b8;
+    border-color: #ffe6b8;
+  }
+}
+
+.lab-map-hint {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(26px + env(safe-area-inset-bottom));
+  text-align: center;
+  font: italic 15px "Times New Roman", serif;
+  color: #a9a293;
+  pointer-events: none;
+}
+
+.lab-meet {
+  position: fixed;
+  top: calc(64px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 14px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 230, 184, 0.35);
+  font: italic 16px "Times New Roman", serif;
+  color: #ffe6b8;
+
+  .arrow {
+    display: inline-block;
+    font-size: 22px;
+    transition: transform 0.1s linear;
+  }
+
+  button {
+    all: unset;
+    cursor: pointer;
+    padding: 0 6px;
+    font-size: 20px;
+    color: #cfc6b8;
+  }
+}
+
+.lab-notice {
+  position: fixed;
+  top: 32%;
+  left: 0;
+  right: 0;
+  z-index: 1002;
+  text-align: center;
+  font: italic 22px "Times New Roman", serif;
+  color: #fff6e2;
+  text-shadow: 0 0 18px rgba(255, 230, 184, 0.8);
+  pointer-events: none;
+  animation: lab-notice 5s ease-out both;
+}
+
+@keyframes lab-notice {
+  0% { opacity: 0; transform: translateY(8px); }
+  10%, 80% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+// ---------------------------------------------------------------- chat with strangers
+.lab-chat {
+  position: fixed;
+  left: 16px;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 1001;
+  width: min(360px, calc(100vw - 110px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font: italic 15px "Times New Roman", serif;
+}
+
+.lab-chat-line {
+  all: unset;
+  max-width: 100%;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff6e2;
+  cursor: pointer;
+  animation: lab-chat-in 0.3s ease-out both;
+  overflow-wrap: anywhere;
+
+  b {
+    font-weight: normal;
+    color: #ffcf8a;
+  }
+
+  &.mine b {
+    color: #a9a293;
+  }
+}
+
+@keyframes lab-chat-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+.lab-chat-open {
+  all: unset;
+  color: #a9a293;
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.lab-chat-form {
+  width: 100%;
+
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    font: italic 16px "Times New Roman", serif;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 230, 184, 0.4);
+    border-radius: 14px;
+    padding: 7px 12px;
+    outline: none;
+    user-select: text;
+    -webkit-user-select: text;
+    touch-action: auto;
+  }
+}
+
+.lab-emotes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+
+  button {
+    all: unset;
+    cursor: pointer;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: rgba(40, 10, 30, 0.7);
+    border: 1px solid rgba(255, 90, 216, 0.35);
+    color: #ffd0f2;
+  }
+}
+
+// someone screamed right next to you
+.labyrinth.scream canvas {
+  animation: lab-scream 0.7s linear;
+}
+
+@keyframes lab-scream {
+  0%, 100% { transform: none; filter: none; }
+  20% { transform: translate(6px, -4px); filter: saturate(2) hue-rotate(-20deg); }
+  40% { transform: translate(-7px, 5px); }
+  60% { transform: translate(5px, 3px); filter: contrast(1.6); }
+  80% { transform: translate(-3px, -2px); }
+}
+
+// ---------------------------------------------------------------- progress + optional account
+.lab-gate-progress {
+  font: italic 14px "Times New Roman", serif;
+  color: #a9a293;
+  text-align: center;
+  width: min(360px, 88vw);
+
+  .saved {
+    color: #b8f0c0;
+  }
+
+  button {
+    all: unset;
+    cursor: pointer;
+    color: #ffe6b8;
+    text-decoration: underline dotted;
+  }
+}
+
+.lab-gate-account {
+  display: grid;
+  gap: 8px;
+  width: min(320px, 82vw);
+
+  > input {
+    font: italic 15px "Times New Roman", serif;
+    color: #fff;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 230, 184, 0.35);
+    padding: 6px 2px;
+    outline: none;
+    user-select: text;
+    -webkit-user-select: text;
+    touch-action: auto;
+
+    &::placeholder {
+      color: #6f6a5c;
+    }
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .row button {
+    all: unset;
+    cursor: pointer;
+    font: italic 15px "Times New Roman", serif;
+    color: #ffe6b8;
+    border: 1px solid rgba(255, 230, 184, 0.4);
+    border-radius: 14px;
+    padding: 5px 12px;
+
+    &:disabled {
+      opacity: 0.5;
+    }
+  }
+
+  .err {
+    font: italic 13px "Times New Roman", serif;
+    color: #ff8a7a;
+  }
+
+  .hint {
+    font: italic 12px "Times New Roman", serif;
+    color: #6f6a5c;
+  }
+}
+
+// ---------------------------------------------------------------- quests
+.lab-quests {
+  position: fixed;
+  top: calc(48px + env(safe-area-inset-top));
+  right: 14px;
+  z-index: 1001;
+  max-width: min(300px, 70vw);
+  font: italic 14px "Times New Roman", serif;
+  color: #e9e4da;
+  text-align: right;
+
+  ul {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 230, 184, 0.2);
+    border-radius: 12px;
+    text-align: left;
+  }
+
+  li {
+    margin: 4px 0;
+
+    span {
+      color: #ffe6b8;
+    }
+
+    em {
+      display: block;
+      font-size: 12px;
+      color: #8f897c;
+      padding-left: 16px;
+    }
+
+    &.done {
+      opacity: 0.55;
+      text-decoration: line-through;
+    }
+
+    &.hint {
+      font-size: 11px;
+      color: #6f6a5c;
+    }
+  }
+}
+
+.lab-quests-chip {
+  all: unset;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 230, 184, 0.3);
+  color: #ffe6b8;
+  background: rgba(0, 0, 0, 0.35);
+}

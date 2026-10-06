@@ -6,6 +6,8 @@ export type Radio = {
   /** 0 = silent, 1 = it's right behind you */
   set: (danger: number) => void;
   resume: () => void;
+  /** a MediaStream of the static (for recording trailers) */
+  tap: () => MediaStream;
 };
 
 export function createRadio(): Radio {
@@ -57,6 +59,11 @@ export function createRadio(): Radio {
     },
     resume() {
       if (ctx.state !== "running") ctx.resume();
+    },
+    tap() {
+      const d = ctx.createMediaStreamDestination();
+      master.connect(d);
+      return d.stream;
     },
   };
 }

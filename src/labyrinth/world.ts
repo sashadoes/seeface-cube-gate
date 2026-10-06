@@ -23,6 +23,8 @@ export type World = {
   setWeather: (w: Weather) => void;
   nearestCube: (px: number, pz: number) => { mesh: THREE.Object3D; dist: number } | null;
   spinCube: (cube: THREE.Object3D) => void;
+  /** 0–1: the static fog at the edge of the labyrinth */
+  setEdgeFog: (f: number) => void;
 };
 
 function digitTexture(d: string) {
@@ -49,6 +51,7 @@ function digitTexture(d: string) {
 export function createWorld(): World {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0c0c0b);
+  let edgeFog = 0;
   scene.fog = new THREE.FogExp2(0x0c0c0b, 0.06);
 
   // ---------------------------------------------------------------- materials
@@ -258,7 +261,7 @@ export function createWorld(): World {
     const fog = scene.fog as THREE.FogExp2;
     fog.color.lerp(tmpCol.setHex(zone.fog), k);
     (scene.background as THREE.Color).copy(fog.color);
-    fog.density += (Math.min(zone.fogDensity + weatherFog + depthLevel * 0.008, 0.16) - fog.density) * k;
+    fog.density += (Math.min(zone.fogDensity + weatherFog + depthLevel * 0.008, 0.16) + edgeFog * 0.3 - fog.density) * Math.max(k, edgeFog > 0 ? 0.1 : 0);
     ambient.color.lerp(tmpCol.setHex(zone.ambient), k);
     ambient.intensity += (Math.max(zone.ambientIntensity - depthLevel * 0.015, 0.04) - ambient.intensity) * k;
     ceilMat.color.lerp(tmpCol.setHex(zone.ceiling), k);
@@ -336,7 +339,7 @@ export function createWorld(): World {
     depthLevel = depth;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone };
+  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f) };
 }
 
 export { roomOf };

@@ -97,6 +97,34 @@ export function createHunter(): Hunter {
   sprite.center.set(0.5, 0);
   const object = new THREE.Group();
   object.add(sprite);
+  // guest villain: if the owner puts an image they have the rights to at
+  // public/villains/guest.png, the Hollow wears it (darkened, fading into
+  // shadow at the bottom). No file → the usual silhouette.
+  const guest = new Image();
+  guest.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = 256;
+    c.height = 700;
+    const g = c.getContext("2d")!;
+    const w = 256, h = Math.min(700, (guest.height / guest.width) * w);
+    g.filter = "grayscale(0.35) contrast(1.25) brightness(0.8)";
+    g.drawImage(guest, 0, 0, w, h);
+    g.filter = "none";
+    // fade into the dark below the face
+    g.globalCompositeOperation = "destination-in";
+    const fade = g.createLinearGradient(0, 0, 0, 700);
+    fade.addColorStop(0, "rgba(0,0,0,1)");
+    fade.addColorStop(0.55, "rgba(0,0,0,0.95)");
+    fade.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = fade;
+    g.fillRect(0, 0, 256, 700);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    (sprite.material as THREE.SpriteMaterial).map = t;
+    (sprite.material as THREE.SpriteMaterial).needsUpdate = true;
+    sprite.scale.set(1.1, 3.0, 1);
+  };
+  guest.src = "/villains/guest.png";
   // a faint cold glow so you sometimes glimpse it before it reaches you
   const glow = new THREE.PointLight(0x9fb3ff, 0.6, 3.5, 2);
   glow.position.y = 2.6;

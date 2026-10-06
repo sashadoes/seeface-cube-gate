@@ -1,22 +1,29 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CELL, roomOf, wallEast, wallSouth } from "./maze";
 import type { Presence } from "./net";
 
 // The map: the labyrinth around you, everyone online (with nicknames), and
-// wishes. People beyond the edge show as arrows with their distance, so you
-// can walk towards each other.
+// wishes. People beyond the edge show as arrows with their distance. "everyone"
+// zooms out to fit all players. Tap someone to go and meet them: an arrow
+// guides you and they're told you're coming.
 
 type Source = {
   getPos: () => { x: number; z: number; yaw: number };
   presence: Presence | null;
   wishList: () => { kind: string; x: number; z: number }[];
+  edge?: () => { radius: number; centre: { x: number; z: number } };
 };
 
 const RADIUS = 9; // cells shown around you
 const WISH_GLYPH: Record<string, string> = { lantern: "☀", monolith: "▮", phototree: "❋", bigcube: "◼", statue: "☗" };
 
-export default function LabMap({ source, nick, onClose }: { source: Source; nick: string; onClose: () => void }) {
+export default function LabMap({ source, nick, onClose, onMeet, target }: { source: Source; nick: string; onClose: () => void; onMeet: (id: string) => void; target: string | null }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const [wide, setWide] = useState(false);
+  const wideRef = useRef(false);
+  wideRef.current = wide;
+  // where each player was drawn, for tapping
+  const hits = useRef<{ id: string; x: number; y: number }[]>([]);
 
   useEffect(() => {
     const c = canvas.current!;
@@ -31,22 +38,30 @@ export default function LabMap({ source, nick, onClose }: { source: Source; nick
       g.clearRect(0, 0, W, H);
 
       const me = source.getPos();
-      const scale = Math.min(W, H) / (RADIUS * 2 + 1) / CELL; // px per metre
+      const peersAll = source.presence ? [...source.presence.peers.values()] : [];
+      let scale = Math.min(W, H) / (RADIUS * 2 + 1) / CELL; // px per metre
+      if (wideRef.current && peersAll.length) {
+        // zoom out until everyone (on this level) fits
+        const far = Math.max(...peersAll.filter((p) => Math.abs(p.x - me.x) < 50_000).map((p) => Math.max(Math.abs(p.x - me.x), Math.abs(p.z - me.z))), 1);
+        scale = Math.min(scale, (Math.min(W, H) / 2 - 40) / far);
+      }
       const cx = W / 2, cy = H / 2;
       const sx = (x: number) => cx + (x - me.x) * scale;
       const sy = (z: number) => cy + (z - me.z) * scale;
       const ci = Math.floor(me.x / CELL), cj = Math.floor(me.z / CELL);
+      const R = Math.min(Math.ceil(Math.max(W, H) / 2 / scale / CELL) + 1, 60);
 
       // rooms (safe), then walls
       g.fillStyle = "rgba(255,240,210,0.07)";
-      for (let i = ci - RADIUS; i <= ci + RADIUS; i++)
-        for (let j = cj - RADIUS; j <= cj + RADIUS; j++)
+      for (let i = ci - R; i <= ci + R; i++)
+        for (let j = cj - R; j <= cj + R; j++)
           if (roomOf(i, j)) g.fillRect(sx(i * CELL), sy(j * CELL), CELL * scale + 0.5, CELL * scale + 0.5);
       g.strokeStyle = "rgba(233,228,218,0.55)";
       g.lineWidth = 1.5;
+      g.globalAlpha = Math.min(1, scale * CELL / 10);
       g.beginPath();
-      for (let i = ci - RADIUS; i <= ci + RADIUS; i++)
-        for (let j = cj - RADIUS; j <= cj + RADIUS; j++) {
+      for (let i = ci - R; i <= ci + R; i++)
+        for (let j = cj - R; j <= cj + R; j++) {
           if (wallEast(i, j)) {
             g.moveTo(sx((i + 1) * CELL), sy(j * CELL));
             g.lineTo(sx((i + 1) * CELL), sy((j + 1) * CELL));
@@ -57,6 +72,19 @@ export default function LabMap({ source, nick, onClose }: { source: Source; nick
           }
         }
       g.stroke();
+      g.globalAlpha = 1;
+
+      // the edge of the labyrinth (it grows with the crowd)
+      const e = source.edge?.();
+      if (e) {
+        g.strokeStyle = "rgba(200,190,255,0.55)";
+        g.setLineDash([6, 6]);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(sx(e.centre.x), sy(e.centre.z), e.radius * scale, 0, Math.PI * 2);
+        g.stroke();
+        g.setLineDash([]);
+      }
 
       // wishes
       g.font = "14px 'Times New Roman', serif";
@@ -69,8 +97,9 @@ export default function LabMap({ source, nick, onClose }: { source: Source; nick
       }
 
       // everyone else: inside the map, or an arrow at the edge with the distance
-      const peers = source.presence ? [...source.presence.peers.values()] : [];
+      const peers = peersAll;
       const margin = 26;
+      hits.current = [];
       for (const p of peers) {
         let x = sx(p.x), y = sy(p.z);
         const inside = x > margin && x < W - margin && y > margin && y < H - margin;
@@ -102,6 +131,14 @@ export default function LabMap({ source, nick, onClose }: { source: Source; nick
           g.fill();
           g.shadowBlur = 0;
         }
+        hits.current.push({ id: p.id, x, y });
+        if (p.id === target) {
+          g.strokeStyle = "#ffe6b8";
+          g.lineWidth = 1.5;
+          g.beginPath();
+          g.arc(x, y, 11 + Math.sin(performance.now() / 200) * 2, 0, Math.PI * 2);
+          g.stroke();
+        }
         g.fillStyle = "rgba(255,244,222,0.95)";
         g.font = "italic 13px 'Times New Roman', serif";
         // canvas text: never HTML, so nicknames can't inject anything
@@ -129,13 +166,35 @@ export default function LabMap({ source, nick, onClose }: { source: Source; nick
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [source, nick]);
+  }, [source, nick, target]);
 
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  const tap = (e: React.MouseEvent) => {
+    const r = canvas.current!.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    let best: string | null = null, bd = 30;
+    for (const h of hits.current) {
+      const d = Math.hypot(h.x - x, h.y - y);
+      if (d < bd) (bd = d), (best = h.id);
+    }
+    if (best) onMeet(best);
+    onClose();
+  };
+  const others = source.presence?.peers.size ?? 0;
   return (
-    <div className="lab-map" onPointerDown={stop} onPointerUp={stop} onClick={onClose}>
+    <div className="lab-map" onPointerDown={stop} onPointerUp={stop} onClick={tap}>
       <canvas ref={canvas} />
       <div className="lab-map-online">◉ {(source.presence?.online() ?? 1)} inside</div>
+      <button
+        className={"lab-map-wide" + (wide ? " on" : "")}
+        onClick={(e) => {
+          e.stopPropagation();
+          setWide((w) => !w);
+        }}
+      >
+        {wide ? "near me" : "everyone"}
+      </button>
+      <div className="lab-map-hint">{others ? "tap someone to go and meet them" : "nobody else inside right now · invite a friend ⊕"}</div>
       <button className="lab-map-close" aria-label="close map" onClick={onClose}>
         ×
       </button>
