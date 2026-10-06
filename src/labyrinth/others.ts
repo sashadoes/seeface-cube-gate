@@ -3,7 +3,7 @@
 // From far away you only see their light moving in a distant corridor, which is
 // how you find each other. A light signal makes them flare for a moment.
 import * as THREE from "three";
-import type { Peer, Presence } from "./net";
+import type { Emote, Peer, Presence } from "./net";
 import { DEMONS, demonOf, demonTexture } from "./demons";
 
 function glowTexture() {
@@ -21,7 +21,37 @@ function glowTexture() {
   return t;
 }
 
-type View = { group: THREE.Group; body: THREE.Sprite; glow: THREE.Sprite; label: THREE.Sprite; nick: string; held: THREE.Mesh; x: number; z: number; flare: number; lantern: number };
+type View = { group: THREE.Group; body: THREE.Sprite; glow: THREE.Sprite; label: THREE.Sprite; nick: string; held: THREE.Mesh; x: number; z: number; flare: number; lantern: number; bubble: THREE.Sprite | null; bubbleLife: number; emote: Emote | null; emoteT: number };
+
+/** What someone said, floating above them (canvas text: no HTML). */
+function bubbleSprite(text: string) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 110;
+  const g = c.getContext("2d")!;
+  g.font = "italic 30px 'Times New Roman', serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  const words = text.split(" ");
+  const lines = [""];
+  for (const w of words) {
+    const tryLine = (lines[lines.length - 1] + " " + w).trim();
+    if (g.measureText(tryLine).width > 480 && lines.length < 2) lines.push(w);
+    else lines[lines.length - 1] = tryLine;
+  }
+  g.fillStyle = "rgba(0,0,0,0.55)";
+  g.beginPath();
+  g.roundRect(6, lines.length === 1 ? 28 : 8, 500, lines.length === 1 ? 54 : 94, 20);
+  g.fill();
+  g.fillStyle = "#fff6e2";
+  lines.forEach((l, k) => g.fillText(l, 256, lines.length === 1 ? 55 : 34 + k * 40));
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, depthTest: false }));
+  s.scale.set(2.4, 0.52, 1);
+  s.position.y = 3.25;
+  return s;
+}
 
 /** Nickname floating above a wanderer (canvas text sprite). */
 function nameSprite(nick: string) {
@@ -46,6 +76,8 @@ function nameSprite(nick: string) {
 
 export type Others = {
   group: THREE.Group;
+  say: (id: string, text: string) => void;
+  emote: (id: string, kind: Emote) => void;
   update: (dt: number, t: number, px: number, pz: number) => { nearest: number; count: number };
 };
 
@@ -72,7 +104,7 @@ export function createOthers(presence: Presence): Others {
     held.visible = false;
     g.add(body, glow, label, held);
     group.add(g);
-    v = { group: g, body, glow, label, nick: p.nick, held, x: p.x, z: p.z, flare: 0, lantern: 1 };
+    v = { group: g, body, glow, label, nick: p.nick, held, x: p.x, z: p.z, flare: 0, lantern: 1, bubble: null, bubbleLife: 0, emote: null, emoteT: 0 };
     views.set(p.id, v);
     return v;
   }
@@ -121,6 +153,30 @@ export function createOthers(presence: Presence): Others {
       const d = Math.hypot(v.x - px, v.z - pz);
       (v.label.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, (14 - d) / 6));
       v.glow.scale.setScalar(0.9 + v.flare * 2.4);
+      // speech
+      if (v.bubble) {
+        v.bubbleLife -= dt;
+        (v.bubble.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, v.bubbleLife)) * Math.max(0, Math.min(1, (24 - d) / 8));
+        if (v.bubbleLife <= 0) {
+          v.group.remove(v.bubble);
+          v.bubble = null;
+        }
+      }
+      // weird interactions
+      let sx = 0.9, sy = 2.8, rot = 0, lift = 0;
+      if (v.emote) {
+        v.emoteT += dt;
+        const k = v.emoteT, e = Math.sin(Math.min(1, k / 3) * Math.PI); // 0 → 1 → 0 over 3 s
+        if (v.emote === "stare") (sx *= 1 + e * 0.4), (sy *= 1 + e * 0.4), (v.flare = Math.max(v.flare, e * 0.6));
+        if (v.emote === "spin") rot = k * 9;
+        if (v.emote === "melt") (sy *= 1 - e * 0.85), (sx *= 1 + e * 0.6);
+        if (v.emote === "float") lift = e * 1.6;
+        if (v.emote === "scream") (sx *= 1 + Math.sin(k * 60) * 0.08 * e), (v.flare = Math.max(v.flare, e));
+        if (k > 3) v.emote = null;
+      }
+      v.body.scale.set(sx, sy, 1);
+      (v.body.material as THREE.SpriteMaterial).rotation = rot;
+      v.body.position.y = lift;
       // ghostly: fades in and out, and now and then flickers almost away
       const flick = Math.sin(t * 13 + v.x * 3) > 0.97 ? 0.35 : 1;
       (v.body.material as THREE.SpriteMaterial).opacity = (0.62 + Math.sin(t * 2.2 + v.z) * 0.14) * flick;
@@ -139,5 +195,22 @@ export function createOthers(presence: Presence): Others {
     return { nearest, count: presence.peers.size };
   }
 
-  return { group, update };
+  return {
+    group,
+    update,
+    say(id, text) {
+      const v = views.get(id);
+      if (!v) return;
+      if (v.bubble) v.group.remove(v.bubble);
+      v.bubble = bubbleSprite(text);
+      v.bubbleLife = 7;
+      v.group.add(v.bubble);
+    },
+    emote(id, kind) {
+      const v = views.get(id);
+      if (!v) return;
+      v.emote = kind;
+      v.emoteT = 0;
+    },
+  };
 }

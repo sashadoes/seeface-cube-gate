@@ -181,6 +181,8 @@ export type Keepers = {
   update: (dt: number, t: number, ctx: Ctx) => KeeperAction | null;
   /** name of the keeper with you right now (for snapshots), or null */
   present: () => string | null;
+  /** make a keeper come now (used for recording trailers) */
+  summon: (kind: KeeperKind) => void;
 };
 
 export function createKeepers(): Keepers {
@@ -335,5 +337,13 @@ export function createKeepers(): Keepers {
     return act;
   }
 
-  return { group, update, present: () => (kind && !leaving ? KEEPERS[kind].name : null) };
+  return {
+    group,
+    update,
+    present: () => (kind && !leaving ? KEEPERS[kind].name : null),
+    summon(k) {
+      order = ORDER.indexOf(k);
+      nextAt = 0;
+    },
+  };
 }

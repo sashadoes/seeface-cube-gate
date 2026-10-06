@@ -6,6 +6,10 @@ import { createInput, type Input } from "./controls";
 import { createHunter } from "./hunter";
 import { createResidents } from "./residents";
 import { createKeepers } from "./keepers";
+import { createEdge } from "./edge";
+import { createTwists, garble } from "./twists";
+import { EMOTES, type Emote } from "./net";
+import { demonOf, demonTexture } from "./demons";
 import { createRadio } from "./radio";
 import { shareCard, type RunResult } from "./card";
 import { createPresence, type Presence } from "./net";
@@ -28,7 +32,7 @@ const PLACE_NAMES: Record<string, string> = {
   monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
   photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep",
 };
-import { free, spawn, roomOf, CELL } from "./maze";
+import { free, spawn, roomOf, roomCentre as roomCentreOf, CELL } from "./maze";
 import { loadWeather } from "../marks/weather";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
@@ -50,7 +54,7 @@ const isPhone = matchMedia("(pointer: coarse)").matches;
 const PROTECTED = 120; // seconds a newcomer can't be knifed
 const FOV = 72;
 
-type Hud = { event: EventKind | null; holding: boolean; level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null };
+type Hud = { event: EventKind | null; holding: boolean; level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null; meet?: { nick: string; d: number; a: number } | null };
 
 function readBest() {
   try {
@@ -155,9 +159,61 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
 function Game({ nick }: { nick: string }) {
   const host = useRef<HTMLDivElement>(null);
   const wishRef = useRef<(k: WishKind | "room") => void>(() => {});
-  const mapRef = useRef<{ getPos: () => { x: number; z: number; yaw: number }; presence: Presence | null; wishList: () => { kind: string; x: number; z: number }[] } | null>(null);
+  const mapRef = useRef<{ getPos: () => { x: number; z: number; yaw: number }; presence: Presence | null; wishList: () => { kind: string; x: number; z: number }[]; edge?: () => { radius: number; centre: { x: number; z: number } } } | null>(null);
   const [wishOpen, setWishOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  // meeting someone from the map: who you're walking to, and messages like "x is coming to find you"
+  const meetRef = useRef<string | null>(null);
+  const [meetId, setMeetId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  const noticeTimer = useRef(0);
+  const say = (text: string) => {
+    setNotice(text);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(""), 5000);
+  };
+  // chat with strangers + weird interactions
+  type Line = { key: number; id: string; nick: string; text: string; mine?: boolean };
+  const [chat, setChat] = useState<Line[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const muted = useRef(new Set<string>());
+  const lineKey = useRef(0);
+  const addLine = (l: Omit<Line, "key">) => {
+    const line = { ...l, key: ++lineKey.current };
+    setChat((c) => [...c.slice(-4), line]);
+    setTimeout(() => setChat((c) => c.filter((x) => x.key !== line.key)), 25_000);
+  };
+  const addLineRef = useRef(addLine);
+  addLineRef.current = addLine;
+  const lastHeard = useRef("");
+  const sendChat = () => {
+    const text = draft.trim();
+    if (!text) return setChatOpen(false);
+    if (presenceRef.current?.say(text)) {
+      addLine({ id: "me", nick, text, mine: true });
+      setDraft("");
+      setChatOpen(false);
+      track("chat-said");
+    } else say("that can't be said here (or slow down)");
+  };
+  const emote = (k: Emote) => {
+    presenceRef.current?.emote(k);
+    say(`you ${k}`);
+    track(`emote-${k}`);
+  };
+  const sayRef = useRef(say);
+  sayRef.current = say;
+  const startMeet = (id: string | null) => {
+    meetRef.current = id;
+    setMeetId(id);
+    if (id) {
+      presenceRef.current?.call(id);
+      const p = presenceRef.current?.peers.get(id);
+      if (p) say(`going to find ${p.nick}`);
+      track("meet-start");
+    }
+  };
   const restartRef = useRef<() => void>(() => {});
   const inputRef = useRef<Input | null>(null);
   const presenceRef = useRef<Presence | null>(null);
@@ -219,6 +275,11 @@ function Game({ nick }: { nick: string }) {
 
     // Android: go fullscreen on the first touch (iOS: use "Add to Home Screen")
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (e.code === "Enter" || e.code === "KeyT") {
+        e.preventDefault();
+        setChatOpen(true);
+      }
       if (e.code === "KeyF") strikeRef.current();
       if (e.code === "KeyG") dropRef.current();
       if (e.code === "KeyP") snapRef.current();
@@ -492,6 +553,7 @@ function Game({ nick }: { nick: string }) {
       getPos: () => ({ x: pos.x, z: pos.z, yaw: input.yaw }),
       presence,
       wishList: () => wishes.list(),
+      edge: () => edge.state(pos.x),
     };
 
     // dev-only handle for debugging in the browser console
@@ -505,6 +567,14 @@ function Game({ nick }: { nick: string }) {
         state: () => ({ light, shards, depth, metres, alive, runTime }),
         setLight: (v: number) => (light = v),
         skipGrace: () => (runTime = GRACE + 1),
+        // for recording trailers (dev only): local-only peers never reach the relay
+        presence,
+        keepers,
+        sound,
+        renderer,
+        rifts,
+        earn,
+        radio,
       };
 
     const resize = () => {
@@ -521,6 +591,59 @@ function Game({ nick }: { nick: string }) {
     let raf = 0;
     let lastDanger = 0;
     let wasNear = false;
+
+    // direction + distance to the person you're walking to (a = angle on screen, 0 = straight ahead)
+    const meetInfo = () => {
+      const p = meetRef.current ? presence.peers.get(meetRef.current) : null;
+      if (!p) return null;
+      const a = -(Math.atan2(-(p.x - pos.x), -(p.z - pos.z)) - input.yaw);
+      return { nick: p.nick, d: Math.round(Math.hypot(p.x - pos.x, p.z - pos.z)), a: Math.atan2(Math.sin(a), Math.cos(a)) };
+    };
+    // someone picked you on their map
+    presence.onCalled((from) => {
+      sayRef.current(`${from.nick} is coming to find you`);
+      sound.chime();
+      if (!meetRef.current) {
+        meetRef.current = from.id; // meet them halfway
+        setMeetId(from.id);
+      }
+      track("meet-called");
+    });
+
+    // what strangers say: clear up close, breaking up with distance, nothing past 80 m
+    presence.onSay((from, text) => {
+      if (muted.current.has(from.id)) return;
+      const d = Math.hypot(from.x - pos.x, from.z - pos.z);
+      if (d > 80) return;
+      const heard = garble(text, Math.max(0, Math.min(0.8, (d - 30) / 50)));
+      others.say(from.id, heard);
+      addLineRef.current({ id: from.id, nick: from.nick, text: heard });
+      lastHeard.current = text;
+    });
+    presence.onEmote((from, kind) => {
+      if (muted.current.has(from.id)) return;
+      others.emote(from.id, kind);
+      const d = Math.hypot(from.x - pos.x, from.z - pos.z);
+      if (kind === "scream" && d < 14) {
+        sound.thunder();
+        el.classList.remove("scream");
+        void el.offsetWidth;
+        el.classList.add("scream");
+      }
+      if (d < 20) sayRef.current(`${from.nick} ${kind === "stare" ? "stares at you" : kind === "spin" ? "spins" : kind === "melt" ? "melts into the floor" : kind === "float" ? "floats" : "screams"}`);
+    });
+
+    // the edge: the labyrinth is as big as the crowd inside
+    const edge = createEdge();
+    let edgeFog = 0, edgeWarned = false;
+    // twists: unpredictable things that happen to you
+    const twists = createTwists();
+    const doppel = new THREE.Sprite(new THREE.SpriteMaterial({ map: demonTexture(demonOf(presence.me)), transparent: true, depthWrite: false, opacity: 0 }));
+    doppel.scale.set(0.9, 2.8, 1);
+    doppel.center.set(0.5, 0);
+    doppel.visible = false;
+    world.scene.add(doppel);
+    let doppelT = -1, mirrorT = 0;
 
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
@@ -625,7 +748,7 @@ function Game({ nick }: { nick: string }) {
         // ---------------- the Hollow
         const h = runTime > GRACE ? hunter.update(dt, t, { px: pos.x, pz: pos.z, light, depth: depth + (levelAtX(pos.x) > 0 ? 3 : 0), isLit: world.isLit }) : { dist: 99, hunting: false };
         const danger = Math.max(0, 1 - h.dist / (CELL * 5)) * (h.hunting ? 1 : 0.45);
-        radio.set(danger);
+        radio.set(Math.max(danger, edgeFog * 0.7));
         lastDanger = danger;
         if (h.dist < 1.0 && !room) die();
       }
@@ -696,6 +819,101 @@ function Game({ nick }: { nick: string }) {
       }
       if (meet.nearest > 10) metSomeone = false;
 
+      // walking to someone you picked on the map
+      const mt = meetRef.current ? presence.peers.get(meetRef.current) : null;
+      if (meetRef.current && !mt) {
+        meetRef.current = null;
+        setMeetId(null);
+        sayRef.current("they left the labyrinth");
+      }
+      if (mt && Math.hypot(mt.x - pos.x, mt.z - pos.z) < 3) {
+        meetRef.current = null;
+        setMeetId(null);
+        sayRef.current(`you found ${mt.nick}`);
+        sound.chime();
+        track("meet-found");
+      }
+
+      // the edge of the labyrinth
+      const eg = edge.update(pos.x, pos.z, presence.online(), dt);
+      edgeFog = eg.fog;
+      world.setEdgeFog(eg.fog);
+      if (eg.grew) sayRef.current(`the labyrinth grew · ${presence.online()} inside`);
+      if (eg.nearEdge && !edgeWarned) {
+        edgeWarned = true;
+        sayRef.current("the labyrinth ends here for now · it grows when more people come in");
+        track("edge-reached");
+      }
+      if (!eg.nearEdge && edgeFog === 0) edgeWarned = false;
+      if (eg.throwBack && alive) {
+        pos.x = eg.throwBack.x;
+        pos.z = eg.throwBack.z;
+        vel.x = vel.z = 0;
+        hunter.reset(pos.x, pos.z);
+        el.classList.remove("rift");
+        void el.offsetWidth;
+        el.classList.add("rift");
+        el.style.setProperty("--rift", "#ffffff");
+        sayRef.current("the static threw you back");
+        track("edge-thrown");
+      }
+
+      // twists
+      const tw = twists.update(dt, alive && runTime > 30);
+      if (tw === "blackout") {
+        light = Math.min(light, 15);
+        sayRef.current("the lights died");
+      }
+      if (tw === "doppel") {
+        doppelT = 0;
+        doppel.position.set(pos.x - Math.sin(input.yaw) * 7, 0, pos.z - Math.cos(input.yaw) * 7);
+        doppel.visible = true;
+      }
+      if (tw === "moved") {
+        const I = Math.floor(pos.x / CELL / 7) + (Math.random() < 0.5 ? -1 : 1), J = Math.floor(pos.z / CELL / 7) + (Math.random() < 0.5 ? -1 : 1);
+        const c = roomCentreOf(I, J);
+        pos.x = c.x;
+        pos.z = c.z;
+        hunter.reset(pos.x, pos.z);
+        el.classList.remove("rift");
+        void el.offsetWidth;
+        el.classList.add("rift");
+        el.style.setProperty("--rift", "#c8b8ff");
+        sayRef.current("the labyrinth moved you");
+      }
+      if (tw === "mirror") {
+        mirrorT = 7;
+        renderer.domElement.style.transform = "scaleX(-1)";
+        sayRef.current("everything is backwards");
+      }
+      if (tw === "money") {
+        for (let k = 0; k < 3; k++) {
+          const gx = pos.x - Math.sin(input.yaw) * (1.5 + k), gz = pos.z - Math.cos(input.yaw) * (1.5 + k);
+          if (free(gx, gz)) props.spawnMoney(gx, gz);
+        }
+        sayRef.current("someone's lost ◈ fell at your feet");
+      }
+      if (tw === "echo") sayRef.current(lastHeard.current ? `an echo: "${garble(lastHeard.current, 0.3)}"` : "someone whispered your name");
+      if (tw) track(`twist-${tw}`);
+      if (mirrorT > 0) {
+        mirrorT -= dt;
+        if (mirrorT <= 0) renderer.domElement.style.transform = "";
+      }
+      if (doppelT >= 0) {
+        // you, walking towards yourself, gone before it reaches you
+        doppelT += dt;
+        const dx = pos.x - doppel.position.x, dz = pos.z - doppel.position.z;
+        const dd = Math.hypot(dx, dz);
+        doppel.position.x += (dx / dd) * dt * 1.2;
+        doppel.position.z += (dz / dd) * dt * 1.2;
+        (doppel.material as THREE.SpriteMaterial).opacity = Math.min(0.8, doppelT) * (dd < 3 || doppelT > 6 ? 0 : 1);
+        if (dd < 3 || doppelT > 6) {
+          if (doppelT > 0.5) sayRef.current("you saw yourself");
+          doppel.visible = false;
+          doppelT = -1;
+        }
+      }
+
       // keepers: characters with personalities who keep a lonely player company
       const kAct = alive
         ? keepers.update(dt, t, {
@@ -757,7 +975,7 @@ function Game({ nick }: { nick: string }) {
         setHud((prev) =>
           prev.dead
             ? { ...prev, online: presence.online() }
-            : { event: eventKind, holding: !!held, level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null }
+            : { event: eventKind, holding: !!held, level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null, meet: meetInfo() }
         );
       }
 
@@ -1003,7 +1221,68 @@ function Game({ nick }: { nick: string }) {
         </div>
       )}
 
-      {mapOpen && mapRef.current && <LabMap source={mapRef.current} nick={nick} onClose={() => setMapOpen(false)} />}
+      {hud.meet && (
+        <div className="lab-meet" onPointerDown={stop} onPointerUp={stop}>
+          <span className="arrow" style={{ transform: `rotate(${hud.meet.a}rad)` }}>
+            ↑
+          </span>
+          <span className="who">
+            {hud.meet.nick} · {hud.meet.d} m
+          </span>
+          <button onClick={() => startMeet(null)} aria-label="stop">
+            ×
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className="lab-notice" key={notice}>
+          {notice}
+        </div>
+      )}
+
+      {/* chat with strangers: what people near you said */}
+      <div className="lab-chat" onPointerDown={stop} onPointerUp={stop}>
+        {chat.map((l) => (
+          <button
+            key={l.key}
+            className={"lab-chat-line" + (l.mine ? " mine" : "")}
+            title={l.mine ? "" : "tap to mute"}
+            onClick={() => {
+              if (l.mine) return;
+              muted.current.add(l.id);
+              setChat((c) => c.filter((x) => x.id !== l.id));
+              say(`${l.nick} muted`);
+              track("chat-mute");
+            }}
+          >
+            <b>{l.nick}</b> {l.text}
+          </button>
+        ))}
+        {chatOpen ? (
+          <form
+            className="lab-chat-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendChat();
+            }}
+          >
+            <input autoFocus value={draft} maxLength={80} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setChatOpen(false)} placeholder="say something to whoever is near…" />
+            <div className="lab-emotes">
+              {EMOTES.map((k) => (
+                <button type="button" key={k} onClick={() => emote(k)}>
+                  {k}
+                </button>
+              ))}
+            </div>
+          </form>
+        ) : (
+          <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label="talk">
+            talk…
+          </button>
+        )}
+      </div>
+
+      {mapOpen && mapRef.current && <LabMap source={mapRef.current} nick={nick} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} />}
 
       {hud.dead && (
         <div className="lab-dead" onPointerDown={stop} onPointerUp={stop}>

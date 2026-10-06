@@ -5,6 +5,10 @@
 // server (same message shapes).
 import mqtt, { type MqttClient } from "mqtt";
 import { cleanNick } from "./nick";
+import { filterMark } from "../marks/filter";
+
+export const EMOTES = ["stare", "spin", "melt", "float", "scream"] as const;
+export type Emote = (typeof EMOTES)[number];
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
 const ROOT = "seeface1/lab/v1";
@@ -40,6 +44,15 @@ export type Presence = {
   /** the victim confirms a kill and hands over blood dollars */
   confirmKill: (attacker: string, amount: number) => void;
   onKillConfirmed: (fn: (amount: number) => void) => void;
+  /** tell someone you're coming to meet them (from the map) */
+  call: (target: string) => void;
+  onCalled: (fn: (from: Peer) => void) => void;
+  /** chat: a short line everyone near you can read (filtered on both ends) */
+  say: (text: string) => boolean;
+  onSay: (fn: (from: Peer, text: string) => void) => void;
+  /** weird interactions: stare, spin, melt, float, scream */
+  emote: (kind: Emote) => void;
+  onEmote: (fn: (from: Peer, kind: Emote) => void) => void;
   close: () => void;
 };
 
@@ -52,6 +65,11 @@ export function createPresence(myId?: string): Presence {
   const worldFns: ((path: string, data: Record<string, unknown>) => void)[] = [];
   const struckFns: ((from: Peer) => void)[] = [];
   const killFns: ((amount: number) => void)[] = [];
+  const callFns: ((from: Peer) => void)[] = [];
+  const sayFns: ((from: Peer, text: string) => void)[] = [];
+  const emoteFns: ((from: Peer, kind: Emote) => void)[] = [];
+  let lastSay = 0, lastEmote = 0;
+  let lastCall = 0;
   let client: MqttClient | null = null;
   let relay = 0;
   let lastSend = 0;
@@ -67,7 +85,7 @@ export function createPresence(myId?: string): Presence {
       will: { topic: `${ROOT}/bye/${me}`, payload: "1", qos: 0, retain: false },
     });
     client.on("connect", () => {
-      client!.subscribe([`${ROOT}/pos/+`, `${ROOT}/sig/+`, `${ROOT}/bye/+`, `${ROOT}/world/#`, `${ROOT}/hit/${me}`, `${ROOT}/kill/${me}`]);
+      client!.subscribe([`${ROOT}/pos/+`, `${ROOT}/sig/+`, `${ROOT}/bye/+`, `${ROOT}/world/#`, `${ROOT}/hit/${me}`, `${ROOT}/kill/${me}`, `${ROOT}/call/${me}`, `${ROOT}/say/+`, `${ROOT}/emo/+`]);
     });
     client.on("error", () => {
       // try the next relay
@@ -82,6 +100,32 @@ export function createPresence(myId?: string): Presence {
         try {
           const data = JSON.parse(payload.toString());
           if (data && typeof data === "object") worldFns.forEach((f) => f(parts.slice(4).join("/"), data));
+        } catch {
+          // ignore garbage
+        }
+        return;
+      }
+      if (parts[3] === "say" || parts[3] === "emo") {
+        const from = peers.get(parts[4]);
+        if (!from || payload.length > 400) return;
+        try {
+          const d = JSON.parse(payload.toString());
+          if (parts[3] === "say" && typeof d.t === "string") {
+            const text = filterMark(d.t); // never trust what another client sends
+            if (text) sayFns.forEach((f) => f(from, text));
+          }
+          if (parts[3] === "emo" && (EMOTES as readonly string[]).includes(d.k)) emoteFns.forEach((f) => f(from, d.k));
+        } catch {
+          // ignore garbage
+        }
+        return;
+      }
+      if (parts[3] === "call") {
+        try {
+          const d = JSON.parse(payload.toString());
+          // only people who are actually in the labyrinth with you
+          const from = typeof d.from === "string" ? peers.get(d.from) : undefined;
+          if (from) callFns.forEach((f) => f(from));
         } catch {
           // ignore garbage
         }
@@ -174,6 +218,33 @@ export function createPresence(myId?: string): Presence {
     },
     onKillConfirmed(fn) {
       killFns.push(fn);
+    },
+    call(target) {
+      // at most one call every 10 s
+      if (Date.now() - lastCall < 10_000) return;
+      lastCall = Date.now();
+      client?.publish(`${ROOT}/call/${target}`, JSON.stringify({ from: me }));
+    },
+    onCalled(fn) {
+      callFns.push(fn);
+    },
+    say(raw) {
+      const text = filterMark(raw);
+      if (!text || Date.now() - lastSay < 2500) return false;
+      lastSay = Date.now();
+      client?.publish(`${ROOT}/say/${me}`, JSON.stringify({ t: text }));
+      return true;
+    },
+    onSay(fn) {
+      sayFns.push(fn);
+    },
+    emote(kind) {
+      if (Date.now() - lastEmote < 1500) return;
+      lastEmote = Date.now();
+      client?.publish(`${ROOT}/emo/${me}`, JSON.stringify({ k: kind }));
+    },
+    onEmote(fn) {
+      emoteFns.push(fn);
     },
     publishWorld(path, data) {
       client?.publish(`${ROOT}/world/${path}`, JSON.stringify(data), { retain: true, qos: 1 });

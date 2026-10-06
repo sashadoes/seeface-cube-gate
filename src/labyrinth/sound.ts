@@ -12,6 +12,8 @@ export type Sound = {
   thunder: () => void;
   choir: (on: boolean) => void;
   chime: () => void;
+  /** a MediaStream of everything the game plays (for recording trailers) */
+  tap: () => MediaStream;
 };
 
 export function createSound(): Sound {
@@ -177,5 +179,10 @@ export function createSound(): Sound {
     thunder,
     choir,
     chime,
+    tap() {
+      const d = ctx.createMediaStreamDestination();
+      master.connect(d);
+      return d.stream;
+    },
   };
 }
