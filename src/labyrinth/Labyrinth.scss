@@ -66,3 +66,189 @@
     box-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
   }
 }
+
+// ---------------------------------------------------------------- survival HUD
+
+.lab-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(30, 0, 8, 0.55) 70%, rgba(0, 0, 0, 0.95) 100%);
+  transition: opacity 0.25s linear;
+  mix-blend-mode: multiply;
+}
+
+.lab-hud {
+  position: fixed;
+  left: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+  font-family: "Times New Roman", Times, serif;
+  color: #e9e4da;
+}
+
+.lab-light {
+  width: 54px;
+  height: 54px;
+  transform: rotate(-90deg);
+
+  .track {
+    fill: rgba(0, 0, 0, 0.5);
+    stroke: rgba(255, 255, 255, 0.12);
+    stroke-width: 3;
+  }
+
+  .fill {
+    fill: none;
+    stroke: #ffe9c4;
+    stroke-width: 3;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 4px rgba(255, 233, 196, 0.8));
+    transition: stroke-dasharray 0.15s linear;
+  }
+
+  text {
+    transform: rotate(90deg);
+    transform-origin: 27px 27px;
+    text-anchor: middle;
+    font-size: 16px;
+    fill: #ffe9c4;
+  }
+
+  &.low .fill {
+    stroke: #ff6a4a;
+    animation: lab-low 0.5s steps(2) infinite;
+  }
+}
+
+@keyframes lab-low {
+  50% { opacity: 0.3; }
+}
+
+.lab-shards {
+  font-size: 22px;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+
+  .glyph {
+    margin-right: 4px;
+    color: #bfe1ff;
+  }
+}
+
+.lab-depth {
+  display: flex;
+  gap: 3px;
+
+  i {
+    width: 2px;
+    height: 14px;
+    background: #e9e4da;
+    box-shadow: 0 0 4px #fff;
+  }
+}
+
+// the labyrinth shifts deeper: a pulse of white
+.labyrinth.shift::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  animation: lab-shift 1.6s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes lab-shift {
+  0% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+// ---------------------------------------------------------------- caught
+.lab-dead {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  background: radial-gradient(ellipse at center, rgba(20, 0, 4, 0.85), #000 75%);
+  font-family: "Times New Roman", Times, serif;
+  color: #f3efe6;
+  animation: lab-dead-in 1.4s ease-out both;
+}
+
+@keyframes lab-dead-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.lab-dead-eyes {
+  display: flex;
+  gap: 22px;
+  margin-bottom: 12px;
+
+  span {
+    width: 14px;
+    height: 9px;
+    border-radius: 50%;
+    background: #fffbea;
+    box-shadow: 0 0 18px 6px rgba(255, 250, 230, 0.6);
+    animation: lab-blink 3s infinite;
+  }
+}
+
+@keyframes lab-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+
+.lab-dead-metres {
+  font-size: clamp(64px, 18vw, 140px);
+  line-height: 1;
+  text-shadow: 0 0 30px rgba(255, 240, 200, 0.6);
+}
+
+.lab-dead-sub {
+  font-size: 22px;
+  font-style: italic;
+  color: #bdb7aa;
+  letter-spacing: 2px;
+
+  .lab-best {
+    color: #ffe27a;
+    text-shadow: 0 0 10px #ffb300;
+  }
+}
+
+.lab-dead-actions {
+  display: flex;
+  gap: 28px;
+  margin-top: 16px;
+
+  button {
+    all: unset;
+    cursor: pointer;
+    width: 64px;
+    height: 64px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    font-size: 30px;
+    color: #f3efe6;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 0 18px rgba(255, 240, 200, 0.15);
+    touch-action: manipulation;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+}

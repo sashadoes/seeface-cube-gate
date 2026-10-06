@@ -12,6 +12,10 @@ const MAX_PANELS = (VIEW * 2 + 2) ** 2;
 
 export type World = {
   scene: THREE.Scene;
+  /** Is (x, z) under a working fluorescent panel? (recharges the lantern, scares the Hollow) */
+  isLit: (x: number, z: number) => boolean;
+  /** Deeper levels: the labyrinth shifts (colour, fog). */
+  setDepth: (depth: number) => void;
   update: (px: number, pz: number, t: number, dt: number) => void;
   setWeather: (w: Weather) => void;
   nearestCube: (px: number, pz: number) => { mesh: THREE.Object3D; dist: number } | null;
@@ -60,6 +64,50 @@ function monogramTexture(light: string, dark: string, logoAlpha: number) {
   return t;
 }
 
+/** Mixed wall: random generated photos in a chess with dark monogram squares, logo watermark on top. */
+function mixedTexture(seed: string) {
+  const size = 512, half = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#2a2927";
+  g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  const logo = new Image();
+  const photo = new Image();
+  photo.crossOrigin = "anonymous";
+  let loaded = 0;
+  const draw = () => {
+    if (++loaded < 2) return;
+    const cells: [number, number, boolean][] = [[0, 0, true], [half, 0, false], [0, half, false], [half, half, true]];
+    for (const [x, y, isPhoto] of cells) {
+      if (isPhoto) {
+        g.filter = "grayscale(0.55) contrast(1.1) brightness(0.8)";
+        g.drawImage(photo, x, y, half, half);
+        g.filter = "none";
+        g.globalAlpha = 0.38;
+        g.drawImage(logo, x + half * 0.1, y + half * 0.1, half * 0.8, half * 0.8);
+      } else {
+        g.fillStyle = "#1c1b1a";
+        g.fillRect(x, y, half, half);
+        g.globalAlpha = 0.28;
+        g.drawImage(logo, x + half * 0.1, y + half * 0.1, half * 0.8, half * 0.8);
+      }
+      g.globalAlpha = 1;
+    }
+    t.needsUpdate = true;
+  };
+  logo.onload = draw;
+  photo.onload = draw;
+  photo.onerror = () => draw(); // offline: monogram only
+  logo.src = "/imgs/seeface-logo.png";
+  photo.src = `https://picsum.photos/seed/seeface1-${seed}/512`;
+  return t;
+}
+
 function digitTexture(d: string) {
   const c = document.createElement("canvas");
   c.width = c.height = 256;
@@ -105,6 +153,17 @@ export function createWorld(): World {
   const walls = new THREE.InstancedMesh(wallGeo, wallMat, MAX_WALLS);
   walls.frustumCulled = false;
   scene.add(walls);
+  // about a third of the walls carry random generated images mixed with the logo
+  const mixedWalls = ["a", "b", "c"].map((seed) => {
+    const m = new THREE.InstancedMesh(
+      wallGeo,
+      new THREE.MeshStandardMaterial({ map: mixedTexture(seed), roughness: 0.7, metalness: 0.05 }),
+      MAX_WALLS
+    );
+    m.frustumCulled = false;
+    scene.add(m);
+    return m;
+  });
 
   // floor + ceiling follow the visitor; textures scroll with world position
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 40, CELL * 40), floorMat);
@@ -127,8 +186,9 @@ export function createWorld(): World {
     return l;
   });
 
-  scene.add(new THREE.AmbientLight(0xb8b6ae, 0.55));
-  scene.add(new THREE.HemisphereLight(0xdedcd4, 0x1a1a18, 0.6));
+  const ambient = new THREE.AmbientLight(0xb8b6ae, 0.13);
+  scene.add(ambient);
+  scene.add(new THREE.HemisphereLight(0xdedcd4, 0x1a1a18, 0.16));
 
   // ---------------------------------------------------------------- cubes in rooms
   const faces = ["1", "2", "3", "4", "5", "6"].map(
@@ -205,17 +265,27 @@ export function createWorld(): World {
 
   function rebuild(ci: number, cj: number) {
     let n = 0;
+    const mixedCount = [0, 0, 0];
+    const putWall = (i: number, j: number, side: number, mat: THREE.Matrix4) => {
+      const h = rnd(i, j, 20 + side);
+      if (h < 0.33) {
+        const k = Math.floor(h * 9) % 3;
+        mixedWalls[k].setMatrixAt(mixedCount[k]++, mat);
+      } else {
+        walls.setMatrixAt(n++, mat);
+      }
+    };
     let np = 0;
     panelSpots = [];
     for (let i = ci - VIEW; i <= ci + VIEW; i++) {
       for (let j = cj - VIEW; j <= cj + VIEW; j++) {
         if (wallEast(i, j)) {
           p.set((i + 1) * CELL, WALL_H / 2, (j + 0.5) * CELL);
-          walls.setMatrixAt(n++, m4.compose(p, rotY, s1));
+          putWall(i, j, 0, m4.compose(p, rotY, s1));
         }
         if (wallSouth(i, j)) {
           p.set((i + 0.5) * CELL, WALL_H / 2, (j + 1) * CELL);
-          walls.setMatrixAt(n++, m4.compose(p, q.identity(), s1));
+          putWall(i, j, 1, m4.compose(p, q.identity(), s1));
         }
         if (hasPanel(i, j)) {
           const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL;
@@ -227,6 +297,10 @@ export function createWorld(): World {
     }
     walls.count = n;
     walls.instanceMatrix.needsUpdate = true;
+    mixedWalls.forEach((m, k) => {
+      m.count = mixedCount[k];
+      m.instanceMatrix.needsUpdate = true;
+    });
     panels.count = np;
     panels.instanceMatrix.needsUpdate = true;
 
@@ -328,7 +402,23 @@ export function createWorld(): World {
     g.userData.spin = 9;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube };
+  function isLit(x: number, z: number) {
+    const i = Math.floor(x / CELL), j = Math.floor(z / CELL);
+    if (!hasPanel(i, j) || rnd(i, j, 9) < 0.25) return false; // dying tubes don't count
+    return Math.hypot(x - (i + 0.5) * CELL, z - (j + 0.5) * CELL) < 2.3;
+  }
+
+  // each depth tints the labyrinth a little colder and thicker
+  const DEPTH_FOG = [0x0c0c0b, 0x0a0b0e, 0x0d0a0a, 0x080b0a, 0x0b090d];
+  function setDepth(depth: number) {
+    const col = DEPTH_FOG[depth % DEPTH_FOG.length];
+    (scene.fog as THREE.FogExp2).color.setHex(col);
+    (scene.background as THREE.Color).setHex(col);
+    (scene.fog as THREE.FogExp2).density = Math.min(0.06 + depth * 0.008, 0.11);
+    ambient.intensity = Math.max(0.13 - depth * 0.015, 0.05);
+  }
+
+  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth };
 }
 
 export { roomOf };
