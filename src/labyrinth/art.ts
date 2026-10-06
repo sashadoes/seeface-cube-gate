@@ -159,6 +159,27 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
     return m;
   });
 
+  // a glowing see/face sign: about a third of the posters are this instead
+  const logoSign = (() => {
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 358;
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#050505";
+    g.fillRect(0, 0, c.width, c.height);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const img = new Image();
+    img.onload = () => {
+      g.shadowColor = "rgba(255,240,210,0.95)";
+      g.shadowBlur = 28;
+      for (let k = 0; k < 2; k++) g.drawImage(img, 106, 29, 300, 300);
+      t.needsUpdate = true;
+    };
+    img.src = "/imgs/seeface-logo-transparent.png";
+    return t;
+  })();
+
   let lastCell = "";
 
   function placeRooms(px: number, pz: number) {
@@ -192,7 +213,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
     let k = 0;
     for (let i = ci - 5; i <= ci + 5 && k < posters.length; i++)
       for (let j = cj - 5; j <= cj + 5 && k < posters.length; j++) {
-        if (roomOf(i, j) || rnd(i, j, 60) > 0.12) continue;
+        if (roomOf(i, j) || rnd(i, j, 60) > 0.15) continue;
         // hang it on an existing wall of this cell
         const sides: [boolean, number, number, number][] = [
           [wallEast(i, j), (i + 1) * CELL - 0.17, (j + 0.5) * CELL, -Math.PI / 2],
@@ -205,8 +226,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
         const p = posters[k++];
         p.position.set(s[1], 1.75, s[2]);
         p.rotation.set(0, s[3], 0);
-        const a = art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`);
-        (p.material as THREE.MeshBasicMaterial).map = a.tex;
+        (p.material as THREE.MeshBasicMaterial).map = rnd(i, j, 62) < 0.35 ? logoSign : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
         (p.material as THREE.MeshBasicMaterial).needsUpdate = true;
         p.visible = true;
       }

@@ -33,14 +33,14 @@ export type ZoneDef = {
 };
 
 export const ZONES: Record<ZoneKind, ZoneDef> = {
-  monogram: { kind: "monogram", fog: 0x0c0c0b, fogDensity: 0.06, ambient: 0xb8b6ae, ambientIntensity: 0.13, ceiling: 0x8c8a85, panel: 0xf2f5ff, exposure: 1.25, wall: 0xe4dccd, floor: 0x5a554d, contrast: 1.15, bright: 1, logoChance: 0.55 },
-  pools: { kind: "pools", fog: 0x0a1416, fogDensity: 0.07, ambient: 0x9fd8e0, ambientIntensity: 0.22, ceiling: 0xd8e4e4, panel: 0xdff8ff, exposure: 1.3, wall: 0xbfeff2, floor: 0x2fa6ad, contrast: 0.85, bright: 1.25, logoChance: 0.18 },
-  red: { kind: "red", fog: 0x120404, fogDensity: 0.075, ambient: 0xff6a5a, ambientIntensity: 0.12, ceiling: 0x3a0e0c, panel: 0xffb08a, exposure: 1.2, wall: 0xc23a2c, floor: 0x3a0d0b, contrast: 1.3, bright: 0.85, logoChance: 0.25 },
-  neon: { kind: "neon", fog: 0x05020a, fogDensity: 0.05, ambient: 0x8a5cff, ambientIntensity: 0.08, ceiling: 0x050308, panel: 0xff3cf0, exposure: 1.35, wall: 0x6a5a8a, floor: 0x2a2440, contrast: 1.6, bright: 0.55, logoChance: 0.3, neon: true },
-  photo: { kind: "photo", fog: 0x0a0d08, fogDensity: 0.065, ambient: 0xc8e0b0, ambientIntensity: 0.16, ceiling: 0x2a3324, panel: 0xf6ffe0, exposure: 1.25, wall: 0xdfe6cf, floor: 0x3d4a30, contrast: 1.05, bright: 1.05, logoChance: 0.12 },
-  white: { kind: "white", fog: 0xd2cfc7, fogDensity: 0.035, ambient: 0xfffcf4, ambientIntensity: 0.55, ceiling: 0xeeebe3, panel: 0xffffff, exposure: 0.95, wall: 0xf2eee6, floor: 0xcdc9c0, contrast: 0.45, bright: 1.6, logoChance: 0.2 },
-  ash: { kind: "ash", fog: 0x0d0a08, fogDensity: 0.08, ambient: 0xff8a40, ambientIntensity: 0.1, ceiling: 0x1c1714, panel: 0xffa060, exposure: 1.2, wall: 0xa89c90, floor: 0x26211d, contrast: 1.3, bright: 1, logoChance: 0.2 },
-  deep: { kind: "deep", fog: 0x021014, fogDensity: 0.07, ambient: 0x2ad8c0, ambientIntensity: 0.16, ceiling: 0x06232a, panel: 0x7cffe8, exposure: 1.25, wall: 0x5fc8c0, floor: 0x0d3a40, contrast: 1.1, bright: 0.9, logoChance: 0.15 },
+  monogram: { kind: "monogram", fog: 0x0c0c0b, fogDensity: 0.06, ambient: 0xb8b6ae, ambientIntensity: 0.13, ceiling: 0x8c8a85, panel: 0xf2f5ff, exposure: 1.25, wall: 0xe4dccd, floor: 0x5a554d, contrast: 1.15, bright: 1, logoChance: 0.85 },
+  pools: { kind: "pools", fog: 0x0a1416, fogDensity: 0.07, ambient: 0x9fd8e0, ambientIntensity: 0.22, ceiling: 0xd8e4e4, panel: 0xdff8ff, exposure: 1.3, wall: 0xbfeff2, floor: 0x2fa6ad, contrast: 0.85, bright: 1.25, logoChance: 0.32 },
+  red: { kind: "red", fog: 0x120404, fogDensity: 0.075, ambient: 0xff6a5a, ambientIntensity: 0.12, ceiling: 0x3a0e0c, panel: 0xffb08a, exposure: 1.2, wall: 0xc23a2c, floor: 0x3a0d0b, contrast: 1.3, bright: 0.85, logoChance: 0.42 },
+  neon: { kind: "neon", fog: 0x05020a, fogDensity: 0.05, ambient: 0x8a5cff, ambientIntensity: 0.08, ceiling: 0x050308, panel: 0xff3cf0, exposure: 1.35, wall: 0x6a5a8a, floor: 0x2a2440, contrast: 1.6, bright: 0.55, logoChance: 0.5, neon: true },
+  photo: { kind: "photo", fog: 0x0a0d08, fogDensity: 0.065, ambient: 0xc8e0b0, ambientIntensity: 0.16, ceiling: 0x2a3324, panel: 0xf6ffe0, exposure: 1.25, wall: 0xdfe6cf, floor: 0x3d4a30, contrast: 1.05, bright: 1.05, logoChance: 0.23 },
+  white: { kind: "white", fog: 0xd2cfc7, fogDensity: 0.035, ambient: 0xfffcf4, ambientIntensity: 0.55, ceiling: 0xeeebe3, panel: 0xffffff, exposure: 0.95, wall: 0xf2eee6, floor: 0xcdc9c0, contrast: 0.45, bright: 1.6, logoChance: 0.35 },
+  ash: { kind: "ash", fog: 0x0d0a08, fogDensity: 0.08, ambient: 0xff8a40, ambientIntensity: 0.1, ceiling: 0x1c1714, panel: 0xffa060, exposure: 1.2, wall: 0xa89c90, floor: 0x26211d, contrast: 1.3, bright: 1, logoChance: 0.35 },
+  deep: { kind: "deep", fog: 0x021014, fogDensity: 0.07, ambient: 0x2ad8c0, ambientIntensity: 0.16, ceiling: 0x06232a, panel: 0x7cffe8, exposure: 1.25, wall: 0x5fc8c0, floor: 0x0d3a40, contrast: 1.1, bright: 0.9, logoChance: 0.27 },
 };
 
 const SURFACE: ZoneKind[] = ["monogram", "pools", "red", "neon", "photo", "white", "ash", "deep"];

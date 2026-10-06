@@ -1,34 +1,10 @@
-// Other wanderers in the labyrinth: each is a soft figure carrying a lantern.
+// Other wanderers in the labyrinth: each is a ghostly demonic creature (style
+// picked from their id, see demons.ts) carrying a lantern.
 // From far away you only see their light moving in a distant corridor, which is
 // how you find each other. A light signal makes them flare for a moment.
 import * as THREE from "three";
 import type { Peer, Presence } from "./net";
-
-function wandererTexture() {
-  const c = document.createElement("canvas");
-  c.width = 96;
-  c.height = 300;
-  const g = c.getContext("2d")!;
-  g.filter = "blur(3px)";
-  const grad = g.createLinearGradient(0, 0, 0, 300);
-  grad.addColorStop(0, "rgba(255,244,222,0.9)");
-  grad.addColorStop(0.7, "rgba(200,190,175,0.55)");
-  grad.addColorStop(1, "rgba(200,190,175,0)");
-  g.fillStyle = grad;
-  g.beginPath();
-  g.ellipse(48, 32, 16, 19, 0, 0, Math.PI * 2);
-  g.fill();
-  g.beginPath();
-  g.moveTo(30, 58);
-  g.quadraticCurveTo(14, 160, 26, 300);
-  g.lineTo(70, 300);
-  g.quadraticCurveTo(82, 160, 66, 58);
-  g.closePath();
-  g.fill();
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
+import { DEMONS, demonOf, demonTexture } from "./demons";
 
 function glowTexture() {
   const c = document.createElement("canvas");
@@ -75,7 +51,6 @@ export type Others = {
 
 export function createOthers(presence: Presence): Others {
   const group = new THREE.Group();
-  const bodyTex = wandererTexture();
   const glowTex = glowTexture();
   const views = new Map<string, View>();
 
@@ -83,10 +58,11 @@ export function createOthers(presence: Presence): Others {
     let v = views.get(p.id);
     if (v) return v;
     const g = new THREE.Group();
-    const body = new THREE.Sprite(new THREE.SpriteMaterial({ map: bodyTex, transparent: true, depthWrite: false }));
-    body.scale.set(0.8, 2.5, 1);
+    const kind = demonOf(p.id);
+    const body = new THREE.Sprite(new THREE.SpriteMaterial({ map: demonTexture(kind), transparent: true, depthWrite: false }));
+    body.scale.set(0.9, 2.8, 1);
     body.center.set(0.5, 0);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: DEMONS[kind].aura, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     glow.position.set(0.25, 1.25, 0);
     glow.scale.set(0.9, 0.9, 1);
     const label = nameSprite(p.nick);
@@ -145,7 +121,10 @@ export function createOthers(presence: Presence): Others {
       const d = Math.hypot(v.x - px, v.z - pz);
       (v.label.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, (14 - d) / 6));
       v.glow.scale.setScalar(0.9 + v.flare * 2.4);
-      (v.body.material as THREE.SpriteMaterial).opacity = 0.75 + Math.sin(t * 6 + v.z) * 0.08;
+      // ghostly: fades in and out, and now and then flickers almost away
+      const flick = Math.sin(t * 13 + v.x * 3) > 0.97 ? 0.35 : 1;
+      (v.body.material as THREE.SpriteMaterial).opacity = (0.62 + Math.sin(t * 2.2 + v.z) * 0.14) * flick;
+      v.body.position.x = Math.sin(t * 1.3 + v.z) * 0.06;
       nearest = Math.min(nearest, Math.hypot(v.x - px, v.z - pz));
     }
     // real lanterns for the nearest four
