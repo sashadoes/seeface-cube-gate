@@ -69,8 +69,9 @@ export function onOnline(fn: (n: number) => void) {
   listeners.add(fn);
   fn(count());
   // don't compete with the first paint
-  const idle = (window as unknown as { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback;
-  if (idle) idle(() => void start());
+  // (with a timeout: a page rendering 3D every frame may never be idle)
+  const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+  if (idle) idle(() => void start(), { timeout: 3000 });
   else setTimeout(() => void start(), 1200);
   return () => {
     listeners.delete(fn);
