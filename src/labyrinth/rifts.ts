@@ -72,6 +72,8 @@ export type Rifts = {
   update: (px: number, pz: number, t: number, dt: number) => number | null;
   /** where you arrive in a level (0 = back at the surface entrance) */
   arrival: (level: number) => { x: number; z: number };
+  /** the closest rift within a few regions, or null */
+  nearest: (px: number, pz: number) => { x: number; z: number } | null;
 };
 
 export function createRifts(): Rifts {
@@ -170,5 +172,18 @@ export function createRifts(): Rifts {
     return { x: c.x + 3.6, z: c.z + 3.6 }; // a few steps from the room's cube
   }
 
-  return { group, update, arrival };
+  function nearest(px: number, pz: number) {
+    const I0 = Math.floor(px / CELL / REGION), J0 = Math.floor(pz / CELL / REGION);
+    let best: { x: number; z: number } | null = null, bd = Infinity;
+    for (let I = I0 - 3; I <= I0 + 3; I++)
+      for (let J = J0 - 3; J <= J0 + 3; J++) {
+        const r = riftIn(I, J);
+        if (!r) continue;
+        const d = Math.hypot(r.x - px, r.z - pz);
+        if (d < bd) (bd = d), (best = { x: r.x, z: r.z });
+      }
+    return best;
+  }
+
+  return { group, update, arrival, nearest };
 }

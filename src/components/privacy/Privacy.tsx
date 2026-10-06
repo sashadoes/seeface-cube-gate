@@ -13,7 +13,9 @@ export default function Privacy() {
           <li>a scrambled fingerprint of your connection, only to stop spam (no raw IP address)</li>
         </ul>
         <h2 style={{ fontWeight: "normal" }}>what others see</h2>
-        <p>Other players see your nickname and where you walk in the labyrinth, never your email.</p>
+        <p>Other players, and the people who run seeface1, see your nickname and where you walk in the labyrinth (live, and the path you took in the last few minutes). Nobody sees your email there.</p>
+        <h2 style={{ fontWeight: "normal" }}>keepers</h2>
+        <p>Masked figures marked ✶ (the cartographer, the collector, the jester, the mourner) are characters of the game, not people.</p>
         <h2 style={{ fontWeight: "normal" }}>analytics</h2>
         <p>We count visits with GoatCounter: no cookies, no personal data.</p>
         <h2 style={{ fontWeight: "normal" }}>deleting your data</h2>

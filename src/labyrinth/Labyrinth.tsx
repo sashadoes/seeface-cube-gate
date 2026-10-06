@@ -5,6 +5,7 @@ import { createWorld } from "./world";
 import { createInput, type Input } from "./controls";
 import { createHunter } from "./hunter";
 import { createResidents } from "./residents";
+import { createKeepers } from "./keepers";
 import { createRadio } from "./radio";
 import { shareCard, type RunResult } from "./card";
 import { createPresence, type Presence } from "./net";
@@ -184,6 +185,7 @@ function Game({ nick }: { nick: string }) {
     const world = createWorld();
     const hunter = createHunter();
     const residents = createResidents();
+    const keepers = createKeepers();
     const presence = createPresence();
     // also counted in the site-wide live counter (cube page)
     const stopOnline = onOnline(() => {});
@@ -194,7 +196,7 @@ function Game({ nick }: { nick: string }) {
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
     const rifts = createRifts();
-    world.scene.add(hunter.object, residents.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
+    world.scene.add(hunter.object, residents.group, keepers.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
@@ -250,6 +252,7 @@ function Game({ nick }: { nick: string }) {
     // movement feel: momentum, jumping, sprint FOV, lean
     const vel = { x: 0, z: 0 };
     let vy = 0, jumpY = 0, landDip = 0, lean = 0, lastYaw = 0;
+    let jumpedNow = false;
     let blood = readBlood();
     let nextBloodAt = 100; // +1 ◈ every 100 m walked
     const earn = (n: number, why: string) => {
@@ -553,6 +556,7 @@ function Game({ nick }: { nick: string }) {
         // jump
         if (input.consumeJump() && jumpY <= 0.001) {
           vy = eventKind === "inversion" ? 7.5 : 4.2;
+          jumpedNow = true;
           track("jump");
         }
         if (jumpY > 0 || vy > 0) {
@@ -691,6 +695,27 @@ function Game({ nick }: { nick: string }) {
         }
       }
       if (meet.nearest > 10) metSomeone = false;
+
+      // keepers: characters with personalities who keep a lonely player company
+      const kAct = alive
+        ? keepers.update(dt, t, {
+            px: pos.x, pz: pos.z, yaw: input.yaw, light, nick, holding: !!held, jumped: jumpedNow, realNearest: meet.nearest,
+            place: levelAtX(pos.x) > 0 ? LEVELS[levelAtX(pos.x)].name : PLACE_NAMES[world.zone().kind] ?? "the labyrinth",
+            rift: rifts.nearest(pos.x, pos.z),
+          })
+        : null;
+      jumpedNow = false;
+      if (kAct) {
+        if (kAct.light) light = Math.min(100, light + kAct.light);
+        if (kAct.takeRelic && held && heldObj) {
+          camera.remove(heldObj);
+          held = null;
+          heldObj = null;
+        }
+        if (kAct.earn) earn(kAct.earn, kAct.why ?? "keeper");
+        sound.chime();
+        track(kAct.why ?? "keeper");
+      }
 
       // ---------------- cubes: spin a new room's cube → shard + full light
       const c = world.nearestCube(pos.x, pos.z);
