@@ -4,7 +4,8 @@ import { newRoomSkin } from "../components/cube/alive";
 import { track } from "../analytics";
 import { filterMark, MAX_MARK } from "./filter";
 import { marksStore, type Mark } from "./store";
-import { addMark, chamberTransition, initScene, showChamber } from "./scene";
+import { addMark, applyWeather, chamberTransition, initScene, showChamber } from "./scene";
+import { loadWeather } from "./weather";
 
 // /marks: an endless journey through chambers. Every 12 spins the room moves
 // on to a new chamber with a different set of marks on the wall. Once someone
@@ -64,6 +65,10 @@ export default function MarksMode() {
       if (!all.current.some((x) => x.id === m.id)) all.current = [...all.current, m];
     });
     track("marks-opened");
+    loadWeather().then((w) => {
+      applyWeather(w);
+      track(`weather-${w.kind}`);
+    });
 
     let chamber = 0;
     const onSpin = (e: Event) => {

@@ -1,10 +1,11 @@
-// The marks scene: the room goes darker, slow beams of light sweep down from
-// above, and marks left by other visitors sit in squares on the back wall.
-// A mark is only readable while a beam is passing over it.
+// The marks scene: the room goes darker, 3D spotlights on the viewer's side
+// aim at the cube (lights3d.ts), and marks left by other visitors sit in
+// squares on the back wall. A mark is only readable while a beam spills over it.
 import type { Mark } from "./store";
+import type { Weather } from "./weather";
+import { initLights, lightAtScreen, setWeather } from "./lights3d";
 import "./Marks.scss";
 
-type Beam = { el: HTMLDivElement; x: number; target: number; speed: number; angle: number; width: number };
 type Plate = { el: HTMLDivElement; x: number; y: number; mark: Mark };
 
 const SLOTS_X = [8, 22, 36, 50, 64, 78, 92]; // vw (centres)
@@ -14,20 +15,11 @@ const MAX_PLATES = 9;
 let layer: HTMLDivElement | null = null;
 let platesEl: HTMLDivElement;
 let dark: HTMLDivElement;
-const beams: Beam[] = [];
 let plates: Plate[] = [];
 let onRemove: ((m: Mark) => void) | null = null;
 let keeper = false;
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
-
-function newBeam(i: number): Beam {
-  const el = document.createElement("div");
-  el.className = "marks-beam";
-  layer!.appendChild(el);
-  const x = rand(5, 95);
-  return { el, x, target: rand(5, 95), speed: rand(1.2, 3.2), angle: rand(-18, 18), width: rand(9, 16) + i };
-}
 
 function freeSlot(): { x: number; y: number } | null {
   const taken = new Set(plates.map((p) => `${p.x}:${p.y}`));
@@ -77,30 +69,10 @@ function frame() {
   const vw = window.innerWidth / 100;
   const vh = window.innerHeight / 100;
 
-  for (const b of beams) {
-    const d = b.target - b.x;
-    if (Math.abs(d) < 0.5) {
-      b.target = rand(3, 97);
-      b.speed = rand(1.2, 3.4);
-      b.angle = rand(-18, 18);
-    }
-    b.x += Math.sign(d) * Math.min(Math.abs(d), b.speed * 0.03);
-    b.el.style.left = b.x + "vw";
-    b.el.style.width = b.width + "vw";
-    b.el.style.transform = `translateX(-50%) rotate(${b.angle.toFixed(2)}deg)`;
-  }
-
-  // light on each plate: how close the nearest beam passes at that height
+  // light on each plate: how much of a spotlight spills onto it
   for (const p of plates) {
-    let light = 0;
-    for (const b of beams) {
-      const yPx = p.y * vh + 40; // beam starts above the screen
-      const beamX = b.x * vw - Math.tan((b.angle * Math.PI) / 180) * yPx;
-      const half = (b.width * vw) / 2;
-      const l = 1 - Math.abs(beamX - p.x * vw) / half;
-      if (l > light) light = l;
-    }
-    p.el.style.setProperty("--light", Math.max(0, Math.min(1, light)).toFixed(3));
+    const l = lightAtScreen(p.x * vw, p.y * vh + p.el.offsetHeight / 2);
+    p.el.style.setProperty("--light", l.toFixed(3));
   }
 
   requestAnimationFrame(frame);
@@ -121,7 +93,17 @@ export function initScene(opts: { keeper: boolean; onRemove: (m: Mark) => void }
   platesEl.className = "marks-plates";
   layer.append(dark, platesEl);
   (wrapper ?? document.body).prepend(layer);
-  for (let i = 0; i < 3; i++) beams.push(newBeam(i));
+
+  // the light rig renders above the cube (additive), under the fog and UI
+  const gl = document.createElement("div");
+  gl.className = "marks-gl-host";
+  (wrapper ?? document.body).appendChild(gl);
+  initLights(gl);
+
+  const bolt = document.createElement("div");
+  bolt.className = "marks-lightning";
+  document.body.appendChild(bolt);
+
   requestAnimationFrame(frame);
 }
 
@@ -143,5 +125,15 @@ export function chamberTransition(next: () => void) {
   dark.classList.add("pass");
   setTimeout(next, 700);
   setTimeout(() => dark.classList.remove("pass"), 1500);
-  beams.forEach((b) => (b.target = rand(3, 97)));
+}
+
+/** The visitor's weather: light colour, particles, fog, darkness. */
+export function applyWeather(w: Weather) {
+  setWeather(w);
+  const fog = document.querySelector(".fogwrapper");
+  fog?.classList.toggle("marks-fog-heavy", w.kind === "fog" || w.kind === "drizzle");
+  // how dark the room is: clear day is brightest, storms and nights darkest
+  const darkness =
+    w.kind === "storm" ? 0.88 : w.kind === "rain" ? 0.8 : w.kind === "cloudy" || w.kind === "fog" ? 0.76 : w.isDay ? 0.6 : 0.82;
+  dark.style.setProperty("--darkness", String(darkness));
 }
