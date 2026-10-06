@@ -48,14 +48,15 @@ function readBest() {
 }
 
 /** Every player picks a nickname before entering. */
+/** A nickname is mandatory on every entry (pre-filled with the last one). */
 export default function Labyrinth() {
-  const [nick, setNick] = useState<string | null>(savedNick);
+  const [nick, setNick] = useState<string | null>(null);
   if (!nick) return <NickGate onDone={setNick} />;
   return <Game nick={nick} />;
 }
 
 function NickGate({ onDone }: { onDone: (n: string) => void }) {
-  const [v, setV] = useState("");
+  const [v, setV] = useState(() => savedNick() ?? "");
   const [bad, setBad] = useState(false);
   const enter = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,8 +66,9 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
       setTimeout(() => setBad(false), 500);
       return;
     }
+    const changed = n !== savedNick();
     saveNick(n);
-    track("nick-chosen");
+    track(changed ? "nick-chosen" : "nick-confirmed");
     onDone(n);
   };
   return (
