@@ -23,6 +23,8 @@ export type World = {
   setWeather: (w: Weather) => void;
   nearestCube: (px: number, pz: number) => { mesh: THREE.Object3D; dist: number } | null;
   spinCube: (cube: THREE.Object3D) => void;
+  /** 0–1: how wet the floor is (shiny, reflective) */
+  setWet: (w: number) => void;
   /** 0–1: the static fog at the edge of the labyrinth */
   setEdgeFog: (f: number) => void;
 };
@@ -52,6 +54,7 @@ export function createWorld(): World {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0c0c0b);
   let edgeFog = 0;
+  let wet = 0;
   scene.fog = new THREE.FogExp2(0x0c0c0b, 0.06);
 
   // ---------------------------------------------------------------- materials
@@ -134,6 +137,19 @@ export function createWorld(): World {
   const flashLight = new THREE.AmbientLight(0xc8d8ff, 0);
   scene.add(flashLight);
 
+  // soft round drops/flakes (plain points are squares up close)
+  const dropTexture = (() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 32;
+    const g = c.getContext("2d")!;
+    const r = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    r.addColorStop(0, "rgba(255,255,255,1)");
+    r.addColorStop(0.45, "rgba(255,255,255,0.5)");
+    r.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = r;
+    g.fillRect(0, 0, 32, 32);
+    return new THREE.CanvasTexture(c);
+  })();
   let weatherFog = 0;
   let depthLevel = 0;
   function setWeather(w: Weather) {
@@ -153,10 +169,11 @@ export function createWorld(): World {
       precip = new THREE.Points(
         geo,
         new THREE.PointsMaterial({
+          map: dropTexture,
           color: w.kind === "snow" ? 0xffffff : 0xaac4ff,
-          size: w.kind === "snow" ? 0.06 : 0.025,
+          size: w.kind === "snow" ? 0.07 : 0.035,
           transparent: true,
-          opacity: w.kind === "snow" ? 0.9 : 0.55,
+          opacity: w.kind === "snow" ? 0.9 : 0.6,
           depthWrite: false,
         })
       );
@@ -255,6 +272,10 @@ export function createWorld(): World {
     const fm = zoneFloorMaterial(zone);
     if (floor.material !== fm) floor.material = fm;
     fm.map?.offset.set(px / CELL, -pz / CELL);
+    // wet floors turn glossy (each zone keeps its own dry look underneath)
+    fm.userData.dry ??= { r: fm.roughness, m: fm.metalness };
+    fm.roughness = fm.userData.dry.r + (0.04 - fm.userData.dry.r) * wet;
+    fm.metalness = fm.userData.dry.m + (0.55 - fm.userData.dry.m) * wet * 0.6;
 
     // the atmosphere drifts towards this location's
     const k = Math.min(1, dt * 1.5);
@@ -339,7 +360,7 @@ export function createWorld(): World {
     depthLevel = depth;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f) };
+  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => (wet = w) };
 }
 
 export { roomOf };

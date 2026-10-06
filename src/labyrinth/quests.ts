@@ -1,7 +1,7 @@
 // Daily quests: three a day, the same three for everyone (picked from the UTC
 // date), so people can talk about them. Doing one pays ◈; doing all three
 // pays a bonus. Progress for today is kept in this browser.
-export type QuestKind = "walk" | "shards" | "level" | "meet" | "say" | "emote" | "snap" | "relic" | "trade" | "dark" | "treasure" | "wish" | "jump";
+export type QuestKind = "walk" | "shards" | "level" | "meet" | "say" | "emote" | "snap" | "relic" | "trade" | "dark" | "treasure" | "wish" | "jump" | "flood";
 
 type QuestDef = { kind: QuestKind; goal: number; text: string; reward: number };
 
@@ -20,6 +20,7 @@ const POOL: QuestDef[] = [
   { kind: "treasure", goal: 1, text: "find a hidden treasure", reward: 6 },
   { kind: "wish", goal: 1, text: "make a wish", reward: 5 },
   { kind: "jump", goal: 25, text: "jump 25 times", reward: 3 },
+  { kind: "flood", goal: 1, text: "survive a flood", reward: 12 },
 ];
 
 export const ALL_DONE_BONUS = 10;

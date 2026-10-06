@@ -8,7 +8,11 @@ import type { WeatherKind } from "../marks/weather";
 export type Sound = {
   resume: () => void;
   setWeather: (kind: WeatherKind, intensity: number, wind: number) => void;
-  step: (zone: ZoneKind, running: boolean) => void;
+  step: (zone: ZoneKind, running: boolean, wet?: number) => void;
+  /** the flood siren: 0 = off, 1 = full wail */
+  siren: (level: number) => void;
+  /** a waterfall landing, d metres away */
+  crash: (d: number) => void;
   thunder: () => void;
   choir: (on: boolean) => void;
   chime: () => void;
@@ -64,8 +68,9 @@ export function createSound(): Sound {
   }, 1800);
 
   // ---------------------------------------------------------- one-shots
-  function step(zone: ZoneKind, running: boolean) {
+  function step(zone: ZoneKind, running: boolean, wet = 0) {
     const now = ctx.currentTime;
+    if (wet > 0.05) splash(wet, running);
     const src = ctx.createBufferSource();
     src.buffer = noiseBuf;
     const f = ctx.createBiquadFilter();
@@ -101,6 +106,82 @@ export function createSound(): Sound {
     o.connect(og).connect(master);
     o.start(now);
     o.stop(now + 0.12);
+  }
+
+  // wet floor: a short splash and a small drip under each step
+  function splash(wet: number, running: boolean) {
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 2200 + Math.random() * 1600;
+    f.Q.value = 1.4;
+    const g = ctx.createGain();
+    const vol = (running ? 0.3 : 0.2) * Math.min(1, wet);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(vol, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    src.connect(f).connect(g).connect(master);
+    src.start(now, Math.random() * 1.5, 0.3);
+    // the drip: a tiny falling "plip"
+    const o = ctx.createOscillator();
+    const og = ctx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(900 + Math.random() * 500, now + 0.04);
+    o.frequency.exponentialRampToValueAtTime(260, now + 0.12);
+    og.gain.setValueAtTime(0, now + 0.04);
+    og.gain.linearRampToValueAtTime(vol * 0.35, now + 0.05);
+    og.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    o.connect(og).connect(master);
+    o.start(now + 0.04);
+    o.stop(now + 0.2);
+  }
+
+  // the flood siren: two detuned saws sweeping up and down, like an air-raid siren
+  const sirenGain = ctx.createGain();
+  sirenGain.gain.value = 0;
+  const sirenLp = ctx.createBiquadFilter();
+  sirenLp.type = "lowpass";
+  sirenLp.frequency.value = 2200;
+  sirenLp.connect(sirenGain).connect(master);
+  const sirenOsc = [0, 7].map((det) => {
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.value = 500;
+    o.detune.value = det;
+    o.connect(sirenLp);
+    o.start();
+    return o;
+  });
+  const sirenLfo = ctx.createOscillator();
+  sirenLfo.frequency.value = 0.22;
+  const sirenDepth = ctx.createGain();
+  sirenDepth.gain.value = 330;
+  sirenLfo.connect(sirenDepth);
+  sirenOsc.forEach((o) => {
+    o.frequency.value = 800;
+    sirenDepth.connect(o.frequency);
+  });
+  sirenLfo.start();
+
+  // a waterfall crashing down: a roar with a long wash after it
+  function crash(d: number) {
+    const now = ctx.currentTime;
+    const vol = Math.max(0.05, Math.min(1, 1.4 / (1 + d * 0.25)));
+    const src = noise();
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.setValueAtTime(3000, now);
+    f.frequency.exponentialRampToValueAtTime(500, now + 3);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.7 * vol, now + 0.05);
+    g.gain.setTargetAtTime(0.25 * vol, now + 0.3, 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 3.4);
+    src.connect(f).connect(g).connect(master);
+    src.start(now);
+    src.stop(now + 3.5);
   }
 
   function thunder() {
@@ -206,6 +287,10 @@ export function createSound(): Sound {
       windLevel = Math.min(0.02 + windKmh / 400, 0.18);
     },
     step,
+    siren(level) {
+      sirenGain.gain.setTargetAtTime(level * 0.09, ctx.currentTime, 0.4);
+    },
+    crash,
     thunder,
     choir,
     chime,

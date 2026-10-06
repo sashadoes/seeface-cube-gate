@@ -4,9 +4,9 @@
 // lost ◈ falls at your feet, an echo, gravity forgets you, a whisper tells you
 // where a real person is, the Hollow shows itself for a blink, a treasure is
 // hidden nearby (with an arrow), a wall of fog rolls in, the colours go wrong.
-export type TwistKind = "blackout" | "doppel" | "moved" | "mirror" | "money" | "echo" | "gravity" | "whisper" | "glimpse" | "treasure" | "fogwall" | "colours";
+export type TwistKind = "blackout" | "doppel" | "moved" | "mirror" | "money" | "echo" | "gravity" | "whisper" | "glimpse" | "treasure" | "fogwall" | "colours" | "waterfall";
 
-const KINDS: TwistKind[] = ["blackout", "doppel", "moved", "mirror", "money", "echo", "gravity", "whisper", "glimpse", "treasure", "treasure", "fogwall", "colours"];
+const KINDS: TwistKind[] = ["blackout", "doppel", "moved", "mirror", "money", "echo", "gravity", "whisper", "glimpse", "treasure", "treasure", "fogwall", "colours", "waterfall", "waterfall"];
 
 export function createTwists() {
   let next = 40 + Math.random() * 30;

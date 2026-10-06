@@ -1015,3 +1015,29 @@
   0%, 100% { opacity: 0.8; }
   50% { opacity: 1; }
 }
+
+// ---------------------------------------------------------------- the flood
+.lab-flood-fx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 1.5s;
+  opacity: 0;
+
+  &[data-phase="warn"] {
+    opacity: 1;
+    // a rotating red emergency light
+    background: conic-gradient(from 0deg at 50% -10%, rgba(255, 30, 20, 0.35), rgba(255, 30, 20, 0) 25%, rgba(255, 30, 20, 0) 50%, rgba(255, 30, 20, 0.35) 75%, rgba(255, 30, 20, 0));
+    animation: lab-siren 1.2s linear infinite;
+  }
+
+  &[data-phase="flood"] {
+    opacity: 1;
+    background: linear-gradient(to bottom, rgba(40, 90, 140, 0.12), rgba(20, 60, 110, 0.32));
+  }
+}
+
+@keyframes lab-siren {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(0.3); }
+}

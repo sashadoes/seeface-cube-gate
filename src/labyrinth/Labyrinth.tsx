@@ -37,7 +37,9 @@ const PLACE_NAMES: Record<string, string> = {
   photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep",
 };
 import { free, spawn, roomOf, roomCentre as roomCentreOf, CELL } from "./maze";
-import { loadWeather } from "../marks/weather";
+import type { WeatherKind } from "../marks/weather";
+import { skyAt, SKY_NOTICE } from "./sky";
+import { createFlood } from "./flood";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
 
@@ -380,6 +382,10 @@ function Game({ nick }: { nick: string }) {
     const residents = createResidents();
     const keepers = createKeepers();
     const queen = createPopQueen();
+    const flood = createFlood();
+    const floodFx = document.createElement("div");
+    floodFx.className = "lab-flood-fx";
+    el.appendChild(floodFx);
     const presence = createPresence();
     // also counted in the site-wide live counter (cube page)
     const stopOnline = onOnline(() => {});
@@ -390,7 +396,7 @@ function Game({ nick }: { nick: string }) {
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
     const rifts = createRifts();
-    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
+    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, flood.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
@@ -433,13 +439,21 @@ function Game({ nick }: { nick: string }) {
     window.addEventListener("pointerdown", wake);
     window.addEventListener("keydown", wake);
 
-    let thunderTimer: ReturnType<typeof setInterval> | undefined;
-    loadWeather().then((w) => {
+    // the labyrinth's own weather (changes every few minutes, the same for everyone)
+    let skyKind: WeatherKind | null = null;
+    let thunderIn = 8;
+    let wet = 0;
+    const WETNESS: Partial<Record<WeatherKind, number>> = { drizzle: 0.45, rain: 0.85, storm: 1, snow: 0.2 };
+    const applySky = (announce: boolean) => {
+      const w = skyAt();
+      if (w.kind === skyKind) return;
+      skyKind = w.kind;
       world.setWeather(w);
       sound.setWeather(w.kind, w.intensity, w.wind);
-      if (w.kind === "storm") thunderTimer = setInterval(() => !document.hidden && sound.thunder(), 6000 + Math.random() * 8000);
+      if (announce) sayRef.current(SKY_NOTICE[w.kind]);
       track(`weather-${w.kind}`);
-    });
+    };
+    applySky(false);
 
     // ---------------------------------------------------------------- run state
     const start = spawn();
@@ -711,6 +725,7 @@ function Game({ nick }: { nick: string }) {
         radio,
         others,
         queen,
+        flood,
       };
 
     const resize = () => {
@@ -791,6 +806,7 @@ function Game({ nick }: { nick: string }) {
     // twist state
     let lowGravT = 0, fogT = 0, colourT = 0, glimpseT = 0;
     let treasure: { x: number; z: number; until: number } | null = null;
+    let floodOn = false;
 
     // the edge: the labyrinth is as big as the crowd inside
     const edge = createEdge();
@@ -848,7 +864,7 @@ function Game({ nick }: { nick: string }) {
           if (jumpY === 0) {
             if (vy < -3) {
               landDip = 0.12;
-              sound.step(world.zone().kind, running);
+              sound.step(world.zone().kind, running, wet);
             }
             vy = 0;
           }
@@ -888,7 +904,7 @@ function Game({ nick }: { nick: string }) {
           bob += moved * (running ? 1.5 : 1.8);
           walkedSfx += moved;
           if (walkedSfx > nextStep) {
-            sound.step(world.zone().kind, running);
+            sound.step(world.zone().kind, running, wet);
             nextStep = walkedSfx + (running ? 2.0 : 1.5);
           }
         }
@@ -1093,6 +1109,11 @@ function Game({ nick }: { nick: string }) {
           break;
         }
       }
+      if (tw === "waterfall") {
+        const sp = Math.hypot(vel.x, vel.z);
+        flood.surprise(pos.x, pos.z, sp > 0.5 ? vel.x / sp : -Math.sin(input.yaw), sp > 0.5 ? vel.z / sp : -Math.cos(input.yaw));
+        sayRef.current("drip… drip… move!");
+      }
       if (tw === "fogwall") {
         fogT = 7;
         sayRef.current("a wall of fog rolled in");
@@ -1244,6 +1265,53 @@ function Game({ nick }: { nick: string }) {
       }
       if (eventKind === "eclipse") renderer.toneMappingExposure *= 0.97;
 
+      // weather: check the sky now and then; floors get wet in the rain, storms thunder
+      if (Math.floor(t * 2) !== Math.floor((t - dt) * 2) && !floodOn) applySky(true);
+      const wetTarget = floodOn ? 1 : WETNESS[skyKind ?? "clear"] ?? 0;
+      wet += (wetTarget - wet) * Math.min(1, dt * (wetTarget > wet ? 0.15 : 0.03));
+      world.setWet(wet);
+      if (skyKind === "storm" || floodOn) {
+        thunderIn -= dt;
+        if (thunderIn <= 0) {
+          thunderIn = 6 + Math.random() * 10;
+          sound.thunder();
+        }
+      }
+
+      // the flood
+      const sp = Math.hypot(vel.x, vel.z);
+      const fl = flood.update(dt, t, { px: pos.x, pz: pos.z, vx: sp > 0.5 ? vel.x / sp : -Math.sin(input.yaw), vz: sp > 0.5 ? vel.z / sp : -Math.cos(input.yaw), alive });
+      sound.siren(fl.phase === "warn" ? 1 : fl.phase === "flood" ? 0.35 : 0);
+      for (const d of fl.crashes) sound.crash(d);
+      if (fl.changed) {
+        floodFx.dataset.phase = fl.changed;
+        if (fl.changed === "warn") {
+          sayRef.current("⚠ the flood is coming · get into a room");
+          track("flood-warn");
+        }
+        if (fl.changed === "flood") {
+          floodOn = true;
+          world.setWeather({ kind: "storm", intensity: 1, wind: 40, isDay: false, temp: 10 });
+          sound.setWeather("storm", 1, 40);
+          skyKind = null;
+          sayRef.current("the flood");
+        }
+        if (fl.changed === "none") {
+          floodOn = false;
+          applySky(false);
+          if (alive) {
+            sayRef.current("the water is gone. you survived the flood");
+            quest("flood");
+            track("flood-survived");
+          }
+        }
+      }
+      if (fl.killed && alive) {
+        killedBy = "the flood";
+        track("flood-killed");
+        die();
+      }
+
       // the Pop Queen's show
       const qa = queen.update(dt, t, { px: pos.x, pz: pos.z, yaw: input.yaw, active: eventKind === "popqueen" && alive });
       const qd = queen.near(pos.x, pos.z);
@@ -1298,7 +1366,6 @@ function Game({ nick }: { nick: string }) {
       window.removeEventListener("keydown", wake);
       window.removeEventListener("keydown", onKey);
       presence.close();
-      clearInterval(thunderTimer);
       stopOnline();
       renderer.dispose();
       el.innerHTML = "";
