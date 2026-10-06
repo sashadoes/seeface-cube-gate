@@ -1,6 +1,9 @@
 // The gate: the cube page is the way into the 3D labyrinth.
-// Hidden rule (never shown on screen): spin in the code 1 9 9 4 (the owner's
-// code; the cube's faces are 1 2 3 4 5 9). That's the hack.
+// Two ways in (never explained on screen):
+//   · play: every spin, tap, touch or key press counts, and after a random
+//     10–20 of them (new number every visit, ~15 on average) the gate opens.
+//   · or the code 1 9 9 4 opens it at once: spun in (digits count across the
+//     4-digit line resets, symbol faces are skipped) or typed on a keyboard.
 // The room glitches, the cube rushes at you, a light tears open with the logo
 // burning through, and you fall into /labyrinth.
 import { Howl } from "howler";
@@ -8,12 +11,42 @@ import { track } from "../../analytics";
 import "./Gate.scss";
 
 const GATE_CODE = "1994";
+const ACTIONS_TO_ENTER = 10 + Math.floor(Math.random() * 11); // 10–20
 let opening = false;
+let digits = "";
+let typed = "";
+let actions = 0;
 
-/** Call with the code line after every digit. */
-export function checkGate(code: string) {
-  if (opening || !code.includes(GATE_CODE)) return;
-  openGate();
+function act() {
+  if (opening || location.pathname !== "/") return;
+  actions += 1;
+  if (actions >= ACTIONS_TO_ENTER) {
+    track("gate-actions");
+    setTimeout(openGate, 700); // let the last spin land first
+  }
+}
+// a spin is a touch too: count touches/clicks and key presses, not spins twice
+window.addEventListener("pointerdown", act, { capture: true, passive: true });
+
+window.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  act();
+  if (opening || !/^\d$/.test(e.key) || location.pathname !== "/") return;
+  typed = (typed + e.key).slice(-4);
+  if (typed === GATE_CODE) {
+    track("gate-code-typed");
+    openGate();
+  }
+});
+
+/** Call with the face that was just entered (digit or symbol). */
+export function enterDigit(face: string) {
+  if (opening || !/^\d$/.test(face)) return; // symbols don't break the code
+  digits = (digits + face).slice(-4);
+  if (digits === GATE_CODE) {
+    track("gate-code");
+    setTimeout(openGate, 300);
+  }
 }
 
 export function openGate() {
