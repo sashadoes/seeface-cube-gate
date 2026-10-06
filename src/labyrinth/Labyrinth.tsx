@@ -56,7 +56,8 @@ export default function Labyrinth() {
 }
 
 function NickGate({ onDone }: { onDone: (n: string) => void }) {
-  const [v, setV] = useState(() => savedNick() ?? "");
+  // default for newcomers: face_ + 4 random digits (e.g. face_2492)
+  const [v, setV] = useState(() => savedNick() ?? `face_${Math.floor(1000 + Math.random() * 9000)}`);
   const [bad, setBad] = useState(false);
   const enter = (e: React.FormEvent) => {
     e.preventDefault();
