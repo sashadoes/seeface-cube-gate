@@ -1,13 +1,17 @@
 // Simple and mysterious: the cube is the only thing a visitor faces, plus the
-// music switch. No counters, buttons or messages.
+// music switch. /marks adds the marks journey (light beams + visitors' marks).
 import Cube from "./components/cube/Cube";
 import MusicToggle from "./components/music/MusicToggle";
+import MarksMode from "./marks/MarksMode";
+
+const isMarks = location.pathname.replace(/\/+$/, "") === "/marks";
 
 export default function App() {
   return (
     <>
       <Cube />
       <MusicToggle />
+      {isMarks && <MarksMode />}
     </>
   );
 }

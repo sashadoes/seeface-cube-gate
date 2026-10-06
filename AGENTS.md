@@ -156,3 +156,12 @@ Removed on request (they're in git history if ever wanted back; ask the owner fi
 - No real-money gambling, purchases or deceptive odds, ever.
 - **SEO:** `index.html` has the title/description ("seeface1 — a mystery project"), canonical, Open Graph/Twitter cards (`public/og-image.jpg`, 1200×630), and JSON-LD (WebSite + Organization "seeface1", alternate names see/face / seeface). A visually hidden `<header class="sr-only">` holds the h1 for search engines and screen readers (the no-text-on-screen rule still holds). `public/robots.txt`, `public/sitemap.xml` (update `lastmod` on big changes), `public/site.webmanifest`. When the Instagram handle is known, add it to `sameAs` in the JSON-LD.
 - **Engagement analytics:** `src/engagement.ts`: visible-time milestones `time-15s/30s/1m/2m/3m/5m/10m/20m`; music events `music-playing` (first real playback), `music-30s/1m/3m/7m` (listened time), `music-on/off` (switch).
+
+## Branch `feature/marks` (local only, not deployed)
+`/marks` mode, which leaves the main page untouched. `App.tsx` renders `MarksMode` only on that path. The build copies `index.html` to `404.html` so the `/marks` deep link works on GitHub Pages.
+- `src/marks/scene.ts` + `Marks.scss`: a darker room, 3 light beams sweeping from above, and marks in squares on the back wall that are only readable while a beam passes (`--light`).
+- `src/marks/MarksMode.tsx`: an endless journey with a new chamber every 12 spins (new skin + new random marks). After 12 lifetime spins, an 18% chance per spin of a quill ✎ (7 s) opens the composer (80 chars, 3-minute cooldown). `?keeper` shows × to remove marks.
+- `src/marks/filter.ts`: the owner chose auto-filtering only. It blocks offensive words (EN/UA/RU/PL, leetspeak and spacing tricks), links, emails, phones and @handles. Test cases live in the scratchpad.
+- `src/marks/store.ts`: `LocalStore` (this browser only) for now; a shared Firebase store will implement the same `MarksStore` interface.
+- `mystery.ts` dispatches a `cube-spin` window event per spin for modes to listen to.
+- Planned: the radio (the owner's tracks as a station, plus visitor music; copyright and moderation still to be decided).
