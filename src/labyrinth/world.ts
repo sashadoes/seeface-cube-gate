@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { CELL, WALL_H, hasPanel, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
 import type { Weather } from "../marks/weather";
+import { zoneAt, zoneMaterials, zoneOfCell, type ZoneDef, type ZoneKind } from "./zones";
 
 const VIEW = 7; // cells around the visitor that exist
 const MAX_WALLS = (VIEW * 2 + 2) ** 2 * 2;
@@ -16,6 +17,8 @@ export type World = {
   isLit: (x: number, z: number) => boolean;
   /** Deeper levels: the labyrinth shifts (colour, fog). */
   setDepth: (depth: number) => void;
+  /** the zone the visitor is in (for exposure etc.) */
+  zone: () => ZoneDef;
   update: (px: number, pz: number, t: number, dt: number) => void;
   setWeather: (w: Weather) => void;
   nearestCube: (px: number, pz: number) => { mesh: THREE.Object3D; dist: number } | null;
@@ -165,11 +168,31 @@ export function createWorld(): World {
     return m;
   });
 
+  // every other location has its own walls and floor
+  const zm = zoneMaterials();
+  const zoneWalls: Partial<Record<ZoneKind, THREE.InstancedMesh>> = {};
+  for (const k of ["pools", "red", "neon", "white"] as const) {
+    const m = new THREE.InstancedMesh(wallGeo, zm[k].wall, MAX_WALLS);
+    m.frustumCulled = false;
+    scene.add(m);
+    zoneWalls[k] = m;
+  }
+  const floorFor: Record<ZoneKind, THREE.MeshStandardMaterial> = {
+    monogram: null as unknown as THREE.MeshStandardMaterial, // set below
+    pools: zm.pools.floor,
+    red: zm.red.floor,
+    neon: zm.neon.floor,
+    photo: zm.photo.floor,
+    white: zm.white.floor,
+  };
+  for (const m of Object.values(floorFor)) if (m?.map) m.map.repeat.set(40, 40);
+
   // floor + ceiling follow the visitor; textures scroll with world position
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 40, CELL * 40), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floorTex.repeat.set(40, 40);
   floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+  floorFor.monogram = floorMat;
   scene.add(floor);
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 40, CELL * 40), ceilMat);
   ceil.rotation.x = Math.PI / 2;
@@ -223,10 +246,11 @@ export function createWorld(): World {
   const flashLight = new THREE.AmbientLight(0xc8d8ff, 0);
   scene.add(flashLight);
 
+  let weatherFog = 0;
+  let depthLevel = 0;
   function setWeather(w: Weather) {
     weather = w;
-    const fog = scene.fog as THREE.FogExp2;
-    fog.density = w.kind === "fog" ? 0.13 : w.kind === "drizzle" || w.kind === "rain" ? 0.08 : w.kind === "storm" ? 0.09 : 0.06;
+    weatherFog = w.kind === "fog" ? 0.07 : w.kind === "drizzle" || w.kind === "rain" ? 0.02 : w.kind === "storm" ? 0.03 : 0;
     const tint = w.kind === "storm" || w.kind === "rain" ? 0xc9d8ff : w.isDay ? 0xfff0dc : 0xd9e2ff;
     panelMat.emissive.setHex(tint);
     panelLights.forEach((l) => l.color.setHex(tint));
@@ -255,6 +279,8 @@ export function createWorld(): World {
 
   // ---------------------------------------------------------------- rebuild around the visitor
   let lastCell = "";
+  let currentZone: ZoneDef = zoneAt(0, 0);
+  const tmpCol = new THREE.Color();
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const s1 = new THREE.Vector3(1, 1, 1);
@@ -266,9 +292,15 @@ export function createWorld(): World {
   function rebuild(ci: number, cj: number) {
     let n = 0;
     const mixedCount = [0, 0, 0];
+    const zoneCount: Partial<Record<ZoneKind, number>> = { pools: 0, red: 0, neon: 0, white: 0 };
     const putWall = (i: number, j: number, side: number, mat: THREE.Matrix4) => {
+      const zone = zoneOfCell(i, j).kind;
       const h = rnd(i, j, 20 + side);
-      if (h < 0.33) {
+      const zw = zoneWalls[zone];
+      if (zw) {
+        zw.setMatrixAt(zoneCount[zone]!++, mat);
+      } else if (zone === "photo" || h < 0.33) {
+        // photo garden: every wall is images; monogram halls: a third are
         const k = Math.floor(h * 9) % 3;
         mixedWalls[k].setMatrixAt(mixedCount[k]++, mat);
       } else {
@@ -301,6 +333,10 @@ export function createWorld(): World {
       m.count = mixedCount[k];
       m.instanceMatrix.needsUpdate = true;
     });
+    for (const [k, m] of Object.entries(zoneWalls)) {
+      m!.count = zoneCount[k as ZoneKind] ?? 0;
+      m!.instanceMatrix.needsUpdate = true;
+    }
     panels.count = np;
     panels.instanceMatrix.needsUpdate = true;
 
@@ -340,7 +376,23 @@ export function createWorld(): World {
     // floor/ceiling stay under the visitor; texture offset keeps the world fixed
     floor.position.set(px, 0, pz);
     ceil.position.set(px, WALL_H, pz);
-    floorTex.offset.set(px / CELL, -pz / CELL);
+    const zone = zoneAt(px, pz);
+    currentZone = zone;
+    const fm = floorFor[zone.kind];
+    if (floor.material !== fm) floor.material = fm;
+    fm.map?.offset.set(px / CELL, -pz / CELL);
+
+    // the atmosphere drifts towards this location's
+    const k = Math.min(1, dt * 1.5);
+    const fog = scene.fog as THREE.FogExp2;
+    fog.color.lerp(tmpCol.setHex(zone.fog), k);
+    (scene.background as THREE.Color).copy(fog.color);
+    fog.density += (Math.min(zone.fogDensity + weatherFog + depthLevel * 0.008, 0.16) - fog.density) * k;
+    ambient.color.lerp(tmpCol.setHex(zone.ambient), k);
+    ambient.intensity += (Math.max(zone.ambientIntensity - depthLevel * 0.015, 0.04) - ambient.intensity) * k;
+    ceilMat.color.lerp(tmpCol.setHex(zone.ceiling), k);
+    panelMat.emissive.lerp(tmpCol.setHex(zone.panel), k);
+    panelLights.forEach((l) => l.color.lerp(tmpCol.setHex(zone.panel), k));
 
     // nearest panels get real (flickering) light
     panelSpots.sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz));
@@ -408,17 +460,12 @@ export function createWorld(): World {
     return Math.hypot(x - (i + 0.5) * CELL, z - (j + 0.5) * CELL) < 2.3;
   }
 
-  // each depth tints the labyrinth a little colder and thicker
-  const DEPTH_FOG = [0x0c0c0b, 0x0a0b0e, 0x0d0a0a, 0x080b0a, 0x0b090d];
+  // each depth makes every location a little darker and thicker
   function setDepth(depth: number) {
-    const col = DEPTH_FOG[depth % DEPTH_FOG.length];
-    (scene.fog as THREE.FogExp2).color.setHex(col);
-    (scene.background as THREE.Color).setHex(col);
-    (scene.fog as THREE.FogExp2).density = Math.min(0.06 + depth * 0.008, 0.11);
-    ambient.intensity = Math.max(0.13 - depth * 0.015, 0.05);
+    depthLevel = depth;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth };
+  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone };
 }
 
 export { roomOf };

@@ -15,6 +15,8 @@ import { cleanNick, savedNick, saveNick } from "./nick";
 import LabMap from "./LabMap";
 import { onOnline } from "../online";
 import { createProps } from "./props";
+import { createRifts } from "./rifts";
+import { LEVELS, levelAtX } from "./zones";
 import { free, spawn, roomOf, CELL } from "./maze";
 import { loadWeather } from "../marks/weather";
 import { track } from "../analytics";
@@ -37,7 +39,7 @@ const isPhone = matchMedia("(pointer: coarse)").matches;
 const PROTECTED = 120; // seconds a newcomer can't be knifed
 const FOV = 72;
 
-type Hud = { light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null };
+type Hud = { level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null };
 
 function readBest() {
   try {
@@ -108,7 +110,7 @@ function Game({ nick }: { nick: string }) {
   const signalRef = useRef<() => void>(() => {});
   const [invited, setInvited] = useState(false);
   const [stick, setStick] = useState({ active: false, ox: 0, oy: 0, x: 0, y: 0 });
-  const [hud, setHud] = useState<Hud>({ light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
+  const [hud, setHud] = useState<Hud>({ level: 0, light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
   const strikeRef = useRef<() => void>(() => {});
   const [shareState, setShareState] = useState<"" | "busy" | "done">("");
 
@@ -135,7 +137,8 @@ function Game({ nick }: { nick: string }) {
     const artLayer = createArt(wishes.roomSeed);
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
-    world.scene.add(hunter.object, residents.group, others.group, artLayer.group, wishes.group, props.group, camera);
+    const rifts = createRifts();
+    world.scene.add(hunter.object, residents.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
@@ -188,6 +191,8 @@ function Game({ nick }: { nick: string }) {
     let blood = readBlood();
     let nextBloodAt = 100; // +1 ◈ every 100 m walked
     const earn = (n: number, why: string) => {
+      // secret levels pay double
+      if (n > 0 && levelAtX(pos.x) > 0) n *= 2;
       blood = addBlood(n);
       track(`blood-${why}`);
     };
@@ -469,7 +474,7 @@ function Game({ nick }: { nick: string }) {
         lantern.distance = 5 + 10 * lvl;
 
         // ---------------- the Hollow
-        const h = runTime > GRACE ? hunter.update(dt, t, { px: pos.x, pz: pos.z, light, depth, isLit: world.isLit }) : { dist: 99, hunting: false };
+        const h = runTime > GRACE ? hunter.update(dt, t, { px: pos.x, pz: pos.z, light, depth: depth + (levelAtX(pos.x) > 0 ? 3 : 0), isLit: world.isLit }) : { dist: 99, hunting: false };
         const danger = Math.max(0, 1 - h.dist / (CELL * 5)) * (h.hunting ? 1 : 0.45);
         radio.set(danger);
         lastDanger = danger;
@@ -500,6 +505,30 @@ function Game({ nick }: { nick: string }) {
       residents.update(dt, t, { px: pos.x, pz: pos.z, light });
       artLayer.update(pos.x, pos.z, dt);
       props.update(pos.x, pos.z, t);
+
+      // rifts: step into one and fall into a secret level (or back up)
+      const pulled = alive ? rifts.update(pos.x, pos.z, t, dt) : null;
+      if (pulled !== null) {
+        const to = rifts.arrival(pulled);
+        pos.x = to.x;
+        pos.z = to.z;
+        vel.x = vel.z = 0;
+        input.yaw = Math.PI / 4;
+        hunter.reset(pos.x, pos.z);
+        shiftSfx.play();
+        track(pulled > 0 ? `secret-level-${pulled}` : "secret-level-exit");
+        el.classList.remove("rift");
+        void el.offsetWidth;
+        el.classList.add("rift");
+        el.style.setProperty("--rift", `#${LEVELS[pulled].colour.toString(16).padStart(6, "0")}`);
+        try {
+          navigator.vibrate?.([80, 40, 80, 40, 200]);
+        } catch {
+          // unsupported
+        }
+      }
+      // each location has its own exposure (the white is blinding)
+      renderer.toneMappingExposure += (world.zone().exposure - renderer.toneMappingExposure) * Math.min(1, dt * 1.5);
 
       // other wanderers
       presence.send({ x: pos.x, z: pos.z, yaw: input.yaw, light, nick });
@@ -558,7 +587,7 @@ function Game({ nick }: { nick: string }) {
         setHud((prev) =>
           prev.dead
             ? { ...prev, online: presence.online() }
-            : { light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null }
+            : { level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null }
         );
       }
 
@@ -645,6 +674,7 @@ function Game({ nick }: { nick: string }) {
           <span className="glyph">◆</span>
           {hud.shards}
         </div>
+        {hud.level > 0 && <div className="lab-level">{["", "I", "II", "III"][hud.level]}</div>}
         <div className="lab-depth">
           {Array.from({ length: hud.depth + 1 }, (_, i) => (
             <i key={i} />

@@ -1,7 +1,8 @@
-// Props: the labyrinth looks lived-in, as if people stayed here and vanished.
-// Furniture sets, an old TV breathing static, floor lamps, blood stains, money
-// on the floor (pick it up: ◈), the rare knife, and, very rarely and deep in,
-// a coffee table with white lines and a coca shrub.
+// Props: colourful strange objects floating and turning in the corridors
+// (orbs, knots, crystals, an eye, neon rings, a melting column, a tesseract),
+// blood stains, money on the floor (pick it up: ◈), the rare knife, and, very
+// rarely and deep in, a coffee table with white lines and a coca shrub.
+// (No furniture: removed at the owner's request.)
 //
 // Unpredictable but shared: the layout re-rolls every hour, and everyone online
 // in the same hour sees the same props in the same places.
@@ -14,18 +15,12 @@ export type Pickup = { key: string; kind: "money" | "knife"; x: number; z: numbe
 // ------------------------------------------------------------------ shared materials / textures
 
 const M = {
-  wood: new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 0.75 }),
   darkWood: new THREE.MeshStandardMaterial({ color: 0x1e1610, roughness: 0.7 }),
-  fabric: new THREE.MeshStandardMaterial({ color: 0x4a3f36, roughness: 0.95 }),
-  fabricRed: new THREE.MeshStandardMaterial({ color: 0x4a1a18, roughness: 0.95 }),
-  sheet: new THREE.MeshStandardMaterial({ color: 0xb8b2a6, roughness: 0.95 }),
-  metal: new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.25, metalness: 0.9 }),
   blade: new THREE.MeshStandardMaterial({ color: 0xe8ecf0, roughness: 0.12, metalness: 1, emissive: 0x202428 }),
   black: new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.4 }),
   mirror: new THREE.MeshStandardMaterial({ color: 0x1b1d20, roughness: 0.04, metalness: 1 }),
   powder: new THREE.MeshStandardMaterial({ color: 0xf4f4f2, roughness: 1, emissive: 0x303030 }),
   leaf: new THREE.MeshStandardMaterial({ color: 0x2f6b2a, roughness: 0.8, side: THREE.DoubleSide }),
-  shade: new THREE.MeshBasicMaterial({ color: 0xffd9a0 }),
 };
 
 function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void) {
@@ -74,27 +69,6 @@ const billTex = canvasTex(256, 112, (g) => {
 });
 const billMat = new THREE.MeshStandardMaterial({ map: billTex, roughness: 0.9, side: THREE.DoubleSide });
 
-// the old TV: one shared static texture, refreshed a few times a second
-const staticCanvas = document.createElement("canvas");
-staticCanvas.width = 96;
-staticCanvas.height = 72;
-const staticTex = new THREE.CanvasTexture(staticCanvas);
-staticTex.colorSpace = THREE.SRGBColorSpace;
-const staticMat = new THREE.MeshBasicMaterial({ map: staticTex, toneMapped: false });
-function refreshStatic() {
-  const g = staticCanvas.getContext("2d")!;
-  const img = g.createImageData(96, 72);
-  for (let i = 0; i < img.data.length; i += 4) {
-    const v = Math.random() * 200 + 30;
-    img.data[i] = v * 0.92;
-    img.data[i + 1] = v * 0.97;
-    img.data[i + 2] = v;
-    img.data[i + 3] = 255;
-  }
-  g.putImageData(img, 0, 0);
-  staticTex.needsUpdate = true;
-}
-
 function glintTex() {
   return canvasTex(64, 64, (g) => {
     const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -113,77 +87,125 @@ const box = (w: number, h: number, d: number, m: THREE.Material, x = 0, y = 0, z
   return mesh;
 };
 
-// ------------------------------------------------------------------ furniture sets
+// ------------------------------------------------------------------ strange objects
 
-function chairAndTable(g: THREE.Group) {
-  g.add(box(1, 0.06, 0.7, M.wood, 0, 0.75, 0));
-  for (const [x, z] of [[-0.45, -0.3], [0.45, -0.3], [-0.45, 0.3], [0.45, 0.3]]) g.add(box(0.05, 0.75, 0.05, M.darkWood, x, 0.375, z));
-  const chair = new THREE.Group();
-  chair.add(box(0.45, 0.05, 0.45, M.wood, 0, 0.45, 0), box(0.45, 0.5, 0.05, M.wood, 0, 0.72, -0.2));
-  for (const [x, z] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) chair.add(box(0.04, 0.45, 0.04, M.darkWood, x, 0.225, z));
-  chair.position.set(0.2, 0, 0.75);
-  chair.rotation.y = 2.6; // pushed back, as if someone just stood up
-  g.add(chair);
-}
+/** A vivid colour from a seed. */
+const vivid = (seed: number, l = 0.55) => new THREE.Color().setHSL(seed % 1, 0.85, l);
 
-function sofaAndLamp(g: THREE.Group) {
-  g.add(box(1.9, 0.42, 0.85, M.fabricRed, 0, 0.21, 0), box(1.9, 0.5, 0.2, M.fabricRed, 0, 0.62, -0.33));
-  g.add(box(0.2, 0.32, 0.85, M.fabricRed, -0.95, 0.5, 0), box(0.2, 0.32, 0.85, M.fabricRed, 0.95, 0.5, 0));
-  const lamp = new THREE.Group();
-  lamp.add(box(0.04, 1.5, 0.04, M.metal, 0, 0.75, 0));
-  const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, 0.28, 16, 1, true), M.shade);
-  shade.position.y = 1.6;
-  lamp.add(shade);
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glint, color: 0xffd9a0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-  glow.scale.setScalar(1.6);
-  glow.position.y = 1.6;
-  lamp.add(glow);
-  lamp.position.set(1.25, 0, -0.1);
-  g.add(lamp);
-}
+/** iridescent-ish material: colour + strong emissive glow so it reads in the dark */
+const glowMat = (seed: number, glow = 0.55) =>
+  new THREE.MeshStandardMaterial({ color: vivid(seed), emissive: vivid(seed + 0.08, 0.45), emissiveIntensity: glow, roughness: 0.2, metalness: 0.35 });
 
-function bed(g: THREE.Group) {
-  g.add(box(1.0, 0.35, 2.0, M.darkWood, 0, 0.17, 0), box(0.96, 0.18, 1.96, M.sheet, 0, 0.44, 0));
-  g.add(box(0.6, 0.12, 0.35, M.sheet, 0, 0.58, -0.75), box(1.0, 0.8, 0.06, M.darkWood, 0, 0.4, -1.0));
-  // a blanket thrown aside
-  const b = box(0.9, 0.04, 0.9, M.fabric, 0.15, 0.55, 0.4);
-  b.rotation.set(0.05, 0.4, 0.08);
-  g.add(b);
-}
-
-function tvCorner(g: THREE.Group) {
-  g.add(box(0.8, 0.5, 0.5, M.darkWood, 0, 0.25, 0)); // cabinet
-  const tv = new THREE.Group();
-  tv.add(box(0.62, 0.48, 0.45, M.black, 0, 0, 0));
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.36), staticMat);
-  screen.position.set(0, 0.01, 0.226);
-  tv.add(screen);
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glint, color: 0xcfe0ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
-  glow.scale.setScalar(1.5);
-  glow.position.set(0, 0, 0.4);
-  tv.add(glow);
-  tv.position.y = 0.74;
-  g.add(tv);
-  const chair = new THREE.Group();
-  chair.add(box(0.6, 0.38, 0.6, M.fabric, 0, 0.19, 0), box(0.6, 0.55, 0.14, M.fabric, 0, 0.6, -0.24));
-  chair.position.set(0, 0, 1.4);
-  chair.rotation.y = Math.PI;
-  g.add(chair);
-}
-
-function shelf(g: THREE.Group) {
-  g.add(box(1.2, 1.9, 0.32, M.darkWood, 0, 0.95, 0));
-  for (let k = 0; k < 4; k++) {
-    for (let b = 0; b < 6; b++) {
-      if (Math.random() < 0.3) continue;
-      const book = box(0.08 + Math.random() * 0.06, 0.22 + Math.random() * 0.08, 0.22, [M.fabricRed, M.fabric, M.wood][b % 3], -0.45 + b * 0.17, 0.25 + k * 0.45, 0.06);
-      book.rotation.z = (Math.random() - 0.5) * 0.25;
-      g.add(book);
-    }
+function orbs(g: THREE.Group, seed: number) {
+  for (let k = 0; k < 5; k++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.16 + (k % 3) * 0.09, 24, 16), glowMat(seed + k * 0.13, 0.7));
+    m.position.set(Math.cos(k * 1.3) * 0.7, 1.1 + k * 0.28, Math.sin(k * 1.3) * 0.7);
+    g.add(m);
   }
+  g.userData.anim = (o: THREE.Object3D, t: number) => {
+    o.rotation.y = t * 0.4;
+    o.children.forEach((c, k) => (c.position.y = 1.1 + k * 0.28 + Math.sin(t * 1.3 + k) * 0.18));
+  };
 }
 
-const SETS = [chairAndTable, sofaAndLamp, bed, tvCorner, shelf];
+function knot(g: THREE.Group, seed: number) {
+  const m = new THREE.Mesh(new THREE.TorusKnotGeometry(0.42, 0.11, 140, 16, 2 + Math.floor(seed * 3), 3), glowMat(seed, 0.8));
+  m.position.y = 1.6;
+  g.add(m);
+  g.userData.anim = (o: THREE.Object3D, t: number) => {
+    o.children[0].rotation.set(t * 0.5, t * 0.8, 0);
+    o.children[0].position.y = 1.6 + Math.sin(t) * 0.1;
+  };
+}
+
+function candyStack(g: THREE.Group, seed: number) {
+  for (let k = 0; k < 6; k++) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.5 - k * 0.05, 0.38, 0.5 - k * 0.05), glowMat(seed + k * 0.17, 0.4));
+    c.position.y = 0.19 + k * 0.38;
+    c.rotation.y = k * 0.35;
+    g.add(c);
+  }
+  g.userData.anim = (o: THREE.Object3D, t: number) => o.children.forEach((c, k) => (c.rotation.y = k * 0.35 + Math.sin(t * 0.7 + k) * 0.4));
+}
+
+function crystals(g: THREE.Group, seed: number) {
+  for (let k = 0; k < 9; k++) {
+    const h = 0.5 + Math.random() * 1.4;
+    const c = new THREE.Mesh(new THREE.ConeGeometry(0.12 + Math.random() * 0.1, h, 5), glowMat(seed + k * 0.05, 0.9));
+    c.position.set((Math.random() - 0.5) * 0.7, h / 2, (Math.random() - 0.5) * 0.7);
+    c.rotation.set((Math.random() - 0.5) * 0.5, Math.random() * 3, (Math.random() - 0.5) * 0.5);
+    g.add(c);
+  }
+  g.userData.anim = (o: THREE.Object3D, t: number) =>
+    o.children.forEach((c, k) => (((c as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = 0.6 + Math.sin(t * 2 + k) * 0.35));
+}
+
+function eye(g: THREE.Group, seed: number) {
+  const white = new THREE.Mesh(new THREE.SphereGeometry(0.55, 32, 24), new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.3 }));
+  const iris = new THREE.Mesh(new THREE.CircleGeometry(0.25, 32), new THREE.MeshBasicMaterial({ color: vivid(seed, 0.5) }));
+  const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.11, 24), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+  iris.position.z = 0.55;
+  pupil.position.z = 0.552;
+  const front = new THREE.Group();
+  front.add(iris, pupil);
+  const ball = new THREE.Group();
+  ball.add(white, front);
+  ball.position.y = 1.7;
+  g.add(ball);
+  // the eye turns to watch whoever is near (set by update via userData.watch)
+  g.userData.anim = (o: THREE.Object3D, t: number, px: number, pz: number) => {
+    const b = o.children[0];
+    b.lookAt(px, 1.6, pz);
+    b.position.y = 1.7 + Math.sin(t * 0.9) * 0.08;
+    front.scale.y = Math.sin(t * 0.5) > 0.985 ? 0.1 : 1; // a slow blink
+  };
+}
+
+function rings(g: THREE.Group, seed: number) {
+  for (let k = 0; k < 3; k++) {
+    const r = new THREE.Mesh(new THREE.TorusGeometry(0.5 + k * 0.22, 0.03, 10, 64), new THREE.MeshBasicMaterial({ color: vivid(seed + k * 0.2, 0.6) }));
+    r.position.y = 1.6;
+    g.add(r);
+  }
+  g.userData.anim = (o: THREE.Object3D, t: number) =>
+    o.children.forEach((r, k) => r.rotation.set(t * (0.6 + k * 0.3), t * (0.4 - k * 0.2), k));
+}
+
+function meltingColumn(g: THREE.Group, seed: number) {
+  const geo = new THREE.CylinderGeometry(0.28, 0.45, 2.6, 24, 30);
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  const base = Float32Array.from(pos.array as Float32Array);
+  const m = new THREE.Mesh(geo, glowMat(seed, 0.5));
+  m.position.y = 1.3;
+  g.add(m);
+  g.userData.anim = (o: THREE.Object3D, t: number) => {
+    // the column drips and sways like warm wax
+    for (let i = 0; i < pos.count; i++) {
+      const y = base[i * 3 + 1];
+      const sag = Math.sin(t * 0.8 + y * 2.2) * 0.06 * (1.3 - y);
+      pos.setXYZ(i, base[i * 3] * (1 + sag), y + Math.sin(t + base[i * 3] * 6) * 0.02, base[i * 3 + 2] * (1 + sag));
+    }
+    pos.needsUpdate = true;
+  };
+}
+
+function tesseract(g: THREE.Group, seed: number) {
+  const mat = new THREE.LineBasicMaterial({ color: vivid(seed, 0.65) });
+  const outer = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), mat);
+  const inner = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.5, 0.5, 0.5)), mat);
+  const h = new THREE.Group();
+  h.add(outer, inner);
+  h.position.y = 1.6;
+  g.add(h);
+  g.userData.anim = (o: THREE.Object3D, t: number) => {
+    h.rotation.set(t * 0.3, t * 0.5, t * 0.2);
+    const s = 0.5 + Math.sin(t * 1.2) * 0.25;
+    inner.scale.setScalar(s / 0.5);
+    inner.rotation.set(-t * 0.6, t * 0.2, 0);
+  };
+}
+
+const STRANGE = [orbs, knot, candyStack, crystals, eye, rings, meltingColumn, tesseract];
 
 // ------------------------------------------------------------------ rare + pickups
 
@@ -267,7 +289,6 @@ export function createProps(): Props {
   const taken = new Set<string>();
   let lastCell = "";
   let hour = -1;
-  let lastStatic = 0;
 
   function cellProps(i: number, j: number, h: number) {
     if (roomOf(i, j)) return null;
@@ -286,17 +307,17 @@ export function createProps(): Props {
     const wall = walls[Math.floor(rnd(i, j, salt + 1) * 4)];
     const deep = Math.hypot(cx, cz) > 60;
 
-    if (r < 0.075 && wall[0]) {
-      SETS[Math.floor(rnd(i, j, salt + 2) * SETS.length)](g);
-      g.position.set(wall[1], 0, wall[2]);
-      g.rotation.y = wall[3];
-    } else if (r < 0.14) {
+    if (r < 0.1) {
+      const seed = rnd(i, j, salt + 2);
+      STRANGE[Math.floor(seed * STRANGE.length)](g, rnd(i, j, salt + 12));
+      g.position.set(cx + (rnd(i, j, salt + 13) - 0.5) * 1.6, 0, cz + (rnd(i, j, salt + 14) - 0.5) * 1.6);
+    } else if (r < 0.155) {
       const s = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), bloodMat);
       s.rotation.set(-Math.PI / 2, 0, rnd(i, j, salt + 3) * 6);
       s.position.set(cx + (rnd(i, j, salt + 4) - 0.5) * 2, 0.012, cz + (rnd(i, j, salt + 5) - 0.5) * 2);
       s.scale.setScalar(0.6 + rnd(i, j, salt + 6));
       g.add(s);
-    } else if (r < 0.175) {
+    } else if (r < 0.19) {
       const key = `m:${h}:${i}:${j}`;
       if (!taken.has(key)) {
         const pile = moneyPile();
@@ -304,7 +325,7 @@ export function createProps(): Props {
         g.add(pile);
         pickups.push({ key, kind: "money", x: pile.position.x, z: pile.position.z, obj: pile });
       }
-    } else if (r < 0.181) {
+    } else if (r < 0.196) {
       const key = `k:${h}:${i}:${j}`;
       if (!taken.has(key)) {
         const k = knife();
@@ -312,7 +333,7 @@ export function createProps(): Props {
         g.add(k);
         pickups.push({ key, kind: "knife", x: k.position.x, z: k.position.z, obj: k });
       }
-    } else if (deep && r < 0.1835 && wall[0]) {
+    } else if (deep && r < 0.1985 && wall[0]) {
       (rnd(i, j, salt + 11) < 0.5 ? cokeTable : cocaShrub)(g);
       g.position.set(wall[1], 0, wall[2]);
       g.rotation.y = wall[3];
@@ -356,9 +377,9 @@ export function createProps(): Props {
       lastCell = key;
       rebuild(ci, cj, h);
     }
-    if (t - lastStatic > 0.09) {
-      lastStatic = t;
-      refreshStatic();
+    for (const p of cells.values()) {
+      const anim = p.obj.userData.anim as ((o: THREE.Object3D, t: number, px: number, pz: number) => void) | undefined;
+      if (anim) anim(p.obj, t, px, pz);
     }
     for (const p of cells.values())
       for (const pk of p.pickups) {

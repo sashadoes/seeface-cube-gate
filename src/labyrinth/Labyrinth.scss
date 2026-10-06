@@ -539,3 +539,28 @@
   color: #ff8a7a;
   letter-spacing: 2px;
 }
+
+// secret level marker (I / II / III)
+.lab-level {
+  font: italic 20px "Times New Roman", serif;
+  color: #fff;
+  text-shadow: 0 0 10px #fff, 0 0 22px rgba(120, 240, 255, 0.8);
+  letter-spacing: 2px;
+}
+
+// falling through a rift: a flash in the rift's colour
+.labyrinth.rift::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: radial-gradient(circle, #fff 0%, var(--rift, #fff) 35%, #000 80%);
+  animation: lab-rift 1.8s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes lab-rift {
+  0% { opacity: 1; transform: scale(0.2) rotate(0); }
+  30% { opacity: 1; transform: scale(1.4) rotate(120deg); }
+  100% { opacity: 0; transform: scale(2.4) rotate(260deg); }
+}
