@@ -13,6 +13,7 @@ import { createArt } from "./art";
 import { createWishes, readBlood, addBlood, WISH_COST, WISH_KINDS, type WishKind } from "./wishes";
 import { cleanNick, savedNick, saveNick } from "./nick";
 import LabMap from "./LabMap";
+import { onOnline } from "../online";
 import { createProps } from "./props";
 import { free, spawn, roomOf, CELL } from "./maze";
 import { loadWeather } from "../marks/weather";
@@ -123,6 +124,8 @@ function Game({ nick }: { nick: string }) {
     const hunter = createHunter();
     const residents = createResidents();
     const presence = createPresence();
+    // also counted in the site-wide live counter (cube page)
+    const stopOnline = onOnline(() => {});
     presenceRef.current = presence;
     const others = createOthers(presence);
     const wishes = createWishes(presence);
@@ -568,6 +571,7 @@ function Game({ nick }: { nick: string }) {
       window.removeEventListener("keydown", wake);
       window.removeEventListener("keydown", onKey);
       presence.close();
+      stopOnline();
       renderer.dispose();
       el.innerHTML = "";
     };

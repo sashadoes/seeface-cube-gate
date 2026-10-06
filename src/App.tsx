@@ -2,6 +2,7 @@
 // music switch. /marks adds the marks journey (light beams + visitors' marks).
 import Cube from "./components/cube/Cube";
 import MusicToggle from "./components/music/MusicToggle";
+import OnlineCounter from "./components/online/OnlineCounter";
 import { lazy, Suspense } from "react";
 
 // the marks mode (and its 3D engine) is only downloaded on /marks
@@ -27,6 +28,7 @@ export default function App() {
     <>
       <Cube />
       <MusicToggle />
+      <OnlineCounter />
       {isMarks && (
         <Suspense fallback={null}>
           <MarksMode />
