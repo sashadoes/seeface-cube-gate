@@ -1,5 +1,5 @@
 // Walking controls.
-//   computer: W/A/S/D or arrows to move, drag (or ←/→) to look, Shift to run, E/Space to spin a cube
+//   computer: W/A/S/D or arrows to move, drag (or ←/→) to look, Shift to run, Space to jump, E to spin a cube, F to strike
 //   phone:    left half = joystick (appears where you touch), right half = drag to look, tap = spin a cube
 
 export type Input = {
@@ -7,7 +7,12 @@ export type Input = {
   yaw: number;
   pitch: number;
   run: boolean;
+  /** held by the on-screen run button (phones) */
+  runHeld: boolean;
   consumeTap: () => boolean;
+  /** Space / jump button */
+  consumeJump: () => boolean;
+  jumpPressed: boolean;
   joystick: { active: boolean; ox: number; oy: number; x: number; y: number };
 };
 
@@ -18,6 +23,13 @@ export function createInput(target: HTMLElement): Input {
     yaw: 0,
     pitch: 0,
     run: false,
+    runHeld: false,
+    jumpPressed: false,
+    consumeJump: () => {
+      const j = input.jumpPressed;
+      input.jumpPressed = false;
+      return j;
+    },
     consumeTap: () => {
       const t = tapped;
       tapped = false;
@@ -28,13 +40,15 @@ export function createInput(target: HTMLElement): Input {
   let tapped = false;
 
   const LOOK = 0.0042;
+  const LOOK_TOUCH = 0.0062;
   const clampPitch = () => (input.pitch = Math.max(-1.1, Math.min(1.1, input.pitch)));
 
   // ---------------------------------------------------------------- keyboard
   window.addEventListener("keydown", (e) => {
     if ((e.target as HTMLElement)?.tagName === "INPUT") return;
     keys.add(e.code);
-    if (e.code === "KeyE" || e.code === "Space") tapped = true;
+    if (e.code === "KeyE") tapped = true;
+    if (e.code === "Space" && !e.repeat) input.jumpPressed = true;
   });
   window.addEventListener("keyup", (e) => keys.delete(e.code));
 
@@ -55,8 +69,9 @@ export function createInput(target: HTMLElement): Input {
     if (!p) return;
     if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 8) p.moved = true;
     if (p.kind === "look") {
-      input.yaw -= (e.clientX - p.lx) * LOOK;
-      input.pitch -= (e.clientY - p.ly) * LOOK;
+      const k = e.pointerType === "touch" ? LOOK_TOUCH : LOOK;
+      input.yaw -= (e.clientX - p.lx) * k;
+      input.pitch -= (e.clientY - p.ly) * k;
       clampPitch();
     } else {
       const R = 60;
@@ -96,7 +111,7 @@ export function createInput(target: HTMLElement): Input {
     const len = Math.hypot(x, z);
     input.move.x = len > 1 ? x / len : x;
     input.move.z = len > 1 ? z / len : z;
-    input.run = keys.has("ShiftLeft") || keys.has("ShiftRight") || Math.hypot(input.joystick.x, input.joystick.y) > 0.92;
+    input.run = input.runHeld || keys.has("ShiftLeft") || keys.has("ShiftRight") || Math.hypot(input.joystick.x, input.joystick.y) > 0.92;
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
