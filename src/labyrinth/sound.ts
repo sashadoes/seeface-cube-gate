@@ -12,6 +12,8 @@ export type Sound = {
   thunder: () => void;
   choir: (on: boolean) => void;
   chime: () => void;
+  /** the Pop Queen's music-box tune: 0 = off, 1 = she's right here */
+  showtune: (level: number) => void;
   /** a MediaStream of everything the game plays (for recording trailers) */
   tap: () => MediaStream;
 };
@@ -165,8 +167,36 @@ export function createSound(): Sound {
     });
   }
 
+  // the Pop Queen's tune: a slightly detuned music box, minor and sweet
+  const showGain = ctx.createGain();
+  showGain.gain.value = 0;
+  showGain.connect(master);
+  const TUNE = [659.3, 784, 987.8, 784, 880, 698.5, 587.3, 698.5, 659.3, 523.3, 587.3, 493.9];
+  let note = 0, showLevel = 0;
+  setInterval(() => {
+    if (showLevel <= 0.01) return;
+    const now = ctx.currentTime;
+    const f = TUNE[note++ % TUNE.length] * (1 + (Math.random() - 0.5) * 0.012); // a little out of tune
+    for (const [mult, vol] of [[1, 0.2], [2, 0.06], [3.01, 0.03]] as const) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = f * mult;
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(vol, now + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+      o.connect(g).connect(showGain);
+      o.start(now);
+      o.stop(now + 1);
+    }
+  }, 260);
+
   return {
     resume: () => ctx.state !== "running" && ctx.resume(),
+    showtune(level) {
+      showLevel = level;
+      showGain.gain.setTargetAtTime(level * 0.9, ctx.currentTime, 0.3);
+    },
     setWeather(kind, intensity, windKmh) {
       const now = ctx.currentTime;
       const wet = kind === "rain" || kind === "storm" ? 0.1 + intensity * 0.14 : kind === "drizzle" ? 0.06 : 0;

@@ -1004,3 +1004,14 @@
   color: #ffe6b8;
   background: rgba(0, 0, 0, 0.35);
 }
+
+// the Pop Queen's show: stage lights
+.lab-event-fx[data-kind="popqueen"] {
+  background: radial-gradient(ellipse at 50% 0%, rgba(160, 200, 255, 0.2), rgba(90, 40, 200, 0.18) 45%, rgba(20, 0, 40, 0.4));
+  animation: lab-stage 3.2s ease-in-out infinite;
+}
+
+@keyframes lab-stage {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}

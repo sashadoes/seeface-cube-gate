@@ -6,6 +6,7 @@ import { createInput, type Input } from "./controls";
 import { createHunter } from "./hunter";
 import { createResidents } from "./residents";
 import { createKeepers } from "./keepers";
+import { createPopQueen } from "./popqueen";
 import { createEdge } from "./edge";
 import { createTwists, garble } from "./twists";
 import { ALL_DONE_BONUS, createQuests, type QuestKind, type QuestView } from "./quests";
@@ -378,6 +379,7 @@ function Game({ nick }: { nick: string }) {
     const hunter = createHunter();
     const residents = createResidents();
     const keepers = createKeepers();
+    const queen = createPopQueen();
     const presence = createPresence();
     // also counted in the site-wide live counter (cube page)
     const stopOnline = onOnline(() => {});
@@ -388,7 +390,7 @@ function Game({ nick }: { nick: string }) {
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
     const rifts = createRifts();
-    world.scene.add(hunter.object, residents.group, keepers.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
+    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
@@ -617,6 +619,7 @@ function Game({ nick }: { nick: string }) {
     function endEvent(k: EventKind) {
       delete eventOverlay.dataset.kind;
       if (k === "choir") sound.choir(false);
+      if (k === "popqueen") sound.showtune(0);
       rainCards.splice(0).forEach((c) => rainGroup.remove(c));
     }
 
@@ -707,6 +710,7 @@ function Game({ nick }: { nick: string }) {
         earn,
         radio,
         others,
+        queen,
       };
 
     const resize = () => {
@@ -1239,6 +1243,18 @@ function Game({ nick }: { nick: string }) {
         }
       }
       if (eventKind === "eclipse") renderer.toneMappingExposure *= 0.97;
+
+      // the Pop Queen's show
+      const qa = queen.update(dt, t, { px: pos.x, pz: pos.z, yaw: input.yaw, active: eventKind === "popqueen" && alive });
+      const qd = queen.near(pos.x, pos.z);
+      sound.showtune(eventKind === "popqueen" ? Math.max(0.15, Math.min(1, 1 - (qd - 2) / 18)) : 0);
+      if (qa?.steal) {
+        const lost = Math.min(blood, qa.steal);
+        if (lost > 0) blood = addBlood(-lost);
+        sayRef.current(lost > 0 ? `the Pop Queen took ${lost} ◈` : "the Pop Queen bowed. you had nothing to give");
+        caughtSfx.play();
+        track("popqueen-caught");
+      }
       if (heldObj) heldObj.rotation.y += dt * 1.5;
 
       renderer.render(world.scene, camera);
@@ -1247,6 +1263,12 @@ function Game({ nick }: { nick: string }) {
       if (snapRequested) {
         snapRequested = false;
         if (eventKind) quest("snap");
+        const fq = queen.flash(pos.x, pos.z, input.yaw);
+        if (fq?.flashed) {
+          earn(fq.flashed, "popqueen-photo");
+          sayRef.current(`she hates cameras · +${fq.flashed} ◈`);
+          track("popqueen-photo");
+        }
         const lvl = levelAtX(pos.x);
         const place = lvl > 0 ? LEVELS[lvl].name : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
         const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}`;

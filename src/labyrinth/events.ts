@@ -3,7 +3,7 @@
 // 6 minutes there's a slot; about half the slots hold an event of ~35 s.
 // These are the moments worth a Snapshot.
 
-export type EventKind = "eclipse" | "photo-rain" | "choir" | "gold-hour" | "inversion" | "bloom";
+export type EventKind = "eclipse" | "photo-rain" | "choir" | "gold-hour" | "inversion" | "bloom" | "popqueen";
 
 export const EVENTS: Record<EventKind, { name: string; glyph: string }> = {
   eclipse: { name: "the eclipse", glyph: "◐" },
@@ -12,6 +12,7 @@ export const EVENTS: Record<EventKind, { name: string; glyph: string }> = {
   "gold-hour": { name: "gold hour", glyph: "◈" },
   inversion: { name: "the inversion", glyph: "⇅" },
   bloom: { name: "the bloom", glyph: "❋" },
+  popqueen: { name: "the Pop Queen's show", glyph: "♛" },
 };
 
 const KINDS = Object.keys(EVENTS) as EventKind[];
