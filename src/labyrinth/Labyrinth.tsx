@@ -256,11 +256,24 @@ function Game({ nick }: { nick: string }) {
         } else if (Date.now() > until) clearInterval(look);
       }, 400);
     }
+    // shortcut: /labyrinth?level=1|2|3 starts straight inside a secret level
+    const startLevel = Number(new URLSearchParams(location.search).get("level"));
+    const enterStartLevel = () => {
+      if (startLevel >= 1 && startLevel <= 3) {
+        const to = rifts.arrival(startLevel);
+        pos.x = to.x;
+        pos.z = to.z;
+        hunter.reset(pos.x, pos.z);
+        track(`secret-level-${startLevel}-link`);
+      }
+    };
     restartRef.current = () => {
       setShareState("");
       newRun();
+      enterStartLevel();
     };
     newRun();
+    enterStartLevel();
 
     function die() {
       alive = false;
