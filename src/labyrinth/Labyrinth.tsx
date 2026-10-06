@@ -36,10 +36,11 @@ const PLACE_NAMES: Record<string, string> = {
   monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
   photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep",
 };
-import { free, spawn, roomOf, roomCentre as roomCentreOf, CELL } from "./maze";
+import { free, spawn, roomOf, safeSpot as roomCentreOf, CELL } from "./maze";
 import type { WeatherKind } from "../marks/weather";
 import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
+import { createPlaces, PLACE_NAMES as PLACE_TITLES } from "./places";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
 
@@ -383,6 +384,9 @@ function Game({ nick }: { nick: string }) {
     const keepers = createKeepers();
     const queen = createPopQueen();
     const flood = createFlood();
+    const places = createPlaces();
+    let inPlace: ReturnType<typeof places.update>["inside"] = null;
+    const placesSeen = new Set<string>();
     const floodFx = document.createElement("div");
     floodFx.className = "lab-flood-fx";
     el.appendChild(floodFx);
@@ -396,7 +400,7 @@ function Game({ nick }: { nick: string }) {
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
     const rifts = createRifts();
-    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, flood.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
+    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, flood.group, places.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
@@ -982,7 +986,7 @@ function Game({ nick }: { nick: string }) {
         }
       }
       // each location has its own exposure (the white is blinding)
-      renderer.toneMappingExposure += (world.zone().exposure - renderer.toneMappingExposure) * Math.min(1, dt * 1.5);
+      renderer.toneMappingExposure += ((inPlace?.kind === "dark" ? 0.12 : world.zone().exposure) - renderer.toneMappingExposure) * Math.min(1, dt * 1.5);
 
       // other wanderers
       presence.send({ x: pos.x, z: pos.z, yaw: input.yaw, light, nick, held: held ? held.colour : 0 });
@@ -1171,7 +1175,7 @@ function Game({ nick }: { nick: string }) {
       const kAct = alive
         ? keepers.update(dt, t, {
             px: pos.x, pz: pos.z, yaw: input.yaw, light, nick, holding: !!held, jumped: jumpedNow, realNearest: meet.nearest,
-            place: levelAtX(pos.x) > 0 ? LEVELS[levelAtX(pos.x)].name : PLACE_NAMES[world.zone().kind] ?? "the labyrinth",
+            place: levelAtX(pos.x) > 0 ? LEVELS[levelAtX(pos.x)].name : inPlace ? PLACE_TITLES[inPlace.kind] : PLACE_NAMES[world.zone().kind] ?? "the labyrinth",
             rift: rifts.nearest(pos.x, pos.z),
           })
         : null;
@@ -1312,6 +1316,38 @@ function Game({ nick }: { nick: string }) {
         die();
       }
 
+      // places: the open, the theater, the mall, the museum, the supermarket, the dark room
+      const pl = places.update(pos.x, pos.z, t, dt);
+      inPlace = pl.inside;
+      world.setCeiling(pl.inside?.kind !== "open");
+      if (pl.entered) {
+        const k = pl.entered.kind;
+        sayRef.current(k === "dark" ? "you found the dark room" : PLACE_TITLES[k]);
+        track(`place-${k}`);
+        if (!placesSeen.has(k) && k !== "dark") {
+          placesSeen.add(k);
+          quest("place");
+        }
+        if (k === "dark") quest("darkroom");
+      }
+      if (pl.darkCubeNear) {
+        // once a day, the cube in the dark pays whoever finds it
+        const key = `seeface-dark-${Math.floor(Date.now() / 86_400_000)}`;
+        let paid = true;
+        try {
+          paid = localStorage.getItem(key) === "1";
+          if (!paid) localStorage.setItem(key, "1");
+        } catch {
+          // ignore
+        }
+        if (!paid) {
+          earn(20, "dark-cube");
+          sound.chime();
+          sayRef.current("the cube remembers you · +20 ◈");
+          track("dark-cube");
+        }
+      }
+
       // the Pop Queen's show
       const qa = queen.update(dt, t, { px: pos.x, pz: pos.z, yaw: input.yaw, active: eventKind === "popqueen" && alive });
       const qd = queen.near(pos.x, pos.z);
@@ -1338,7 +1374,7 @@ function Game({ nick }: { nick: string }) {
           track("popqueen-photo");
         }
         const lvl = levelAtX(pos.x);
-        const place = lvl > 0 ? LEVELS[lvl].name : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
+        const place = lvl > 0 ? LEVELS[lvl].name : inPlace ? PLACE_TITLES[inPlace.kind] : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
         const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}`;
         setSnapState("busy");
         makeSnapshot(renderer.domElement, { nick, place, event: eventKind ? EVENTS[eventKind].name : null, inviteUrl })

@@ -3,7 +3,7 @@
 // floating in every room under its own spotlight. Only the cells around the
 // visitor exist at any time; they are rebuilt as you walk (infinite maze).
 import * as THREE from "three";
-import { CELL, WALL_H, hasPanel, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
+import { CELL, WALL_H, hasPanel, placeAt, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
 import type { Weather } from "../marks/weather";
 import { WALL_VARIANTS, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, type ZoneDef } from "./zones";
 
@@ -23,6 +23,8 @@ export type World = {
   setWeather: (w: Weather) => void;
   nearestCube: (px: number, pz: number) => { mesh: THREE.Object3D; dist: number } | null;
   spinCube: (cube: THREE.Object3D) => void;
+  /** hide the ceiling (under the open sky) */
+  setCeiling: (on: boolean) => void;
   /** 0–1: how wet the floor is (shiny, reflective) */
   setWet: (w: number) => void;
   /** 0–1: the static fog at the edge of the labyrinth */
@@ -55,6 +57,7 @@ export function createWorld(): World {
   scene.background = new THREE.Color(0x0c0c0b);
   let edgeFog = 0;
   let wet = 0;
+  let openSky = false; // under the open sky: night instead of the corridor fog
   scene.fog = new THREE.FogExp2(0x0c0c0b, 0.06);
 
   // ---------------------------------------------------------------- materials
@@ -237,6 +240,7 @@ export function createWorld(): World {
     const rooms: { I: number; J: number; d: number }[] = [];
     for (let I = I0 - 1; I <= I0 + 1; I++)
       for (let J = J0 - 1; J <= J0 + 1; J++) {
+        if (placeAt(I, J)) continue; // places have their own things, no cube
         const c = roomCentre(I, J);
         rooms.push({ I, J, d: Math.hypot(c.x - (ci + 0.5) * CELL, c.z - (cj + 0.5) * CELL) });
       }
@@ -280,9 +284,9 @@ export function createWorld(): World {
     // the atmosphere drifts towards this location's
     const k = Math.min(1, dt * 1.5);
     const fog = scene.fog as THREE.FogExp2;
-    fog.color.lerp(tmpCol.setHex(zone.fog), k);
+    fog.color.lerp(tmpCol.setHex(openSky ? 0x060914 : zone.fog), k);
     (scene.background as THREE.Color).copy(fog.color);
-    fog.density += (Math.min(zone.fogDensity + weatherFog + depthLevel * 0.008, 0.16) + edgeFog * 0.3 - fog.density) * Math.max(k, edgeFog > 0 ? 0.1 : 0);
+    fog.density += ((openSky ? 0.022 : Math.min(zone.fogDensity + weatherFog + depthLevel * 0.008, 0.16)) + edgeFog * 0.3 - fog.density) * Math.max(k, edgeFog > 0 ? 0.1 : 0);
     ambient.color.lerp(tmpCol.setHex(zone.ambient), k);
     ambient.intensity += (Math.max(zone.ambientIntensity - depthLevel * 0.015, 0.04) - ambient.intensity) * k;
     ceilMat.color.lerp(tmpCol.setHex(zone.ceiling), k);
@@ -360,7 +364,11 @@ export function createWorld(): World {
     depthLevel = depth;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => (wet = w) };
+  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => (wet = w), setCeiling: (on: boolean) => {
+    ceil.visible = on;
+    panels.visible = on;
+    openSky = !on;
+  } };
 }
 
 export { roomOf };

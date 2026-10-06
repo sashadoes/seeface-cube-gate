@@ -4,7 +4,7 @@
 // leave it slowly closes again. At the edge the fog turns to static and throws
 // you back inside. Each level (surface and secret levels) has its own edge
 // around its own entrance.
-import { CELL, roomCentre } from "./maze";
+import { CELL, safeSpot } from "./maze";
 import { LEVEL_OFFSET, levelAtX } from "./zones";
 
 const BASE = 70; // metres of labyrinth for one lonely person
@@ -42,7 +42,7 @@ export function createEdge() {
       outside = 0;
       const k = (radius - 20) / Math.max(dist, 1);
       const tx = cx + (px - cx) * k, tz = pz * k;
-      throwBack = roomCentre(Math.floor(tx / CELL / 7), Math.floor(tz / CELL / 7));
+      throwBack = safeSpot(Math.floor(tx / CELL / 7), Math.floor(tz / CELL / 7));
     }
     return { fog, grew, throwBack, nearEdge: fog > 0.3 };
   }

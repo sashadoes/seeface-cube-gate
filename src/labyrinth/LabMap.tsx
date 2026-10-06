@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { CELL, roomOf, wallEast, wallSouth } from "./maze";
+import { CELL, PLACE, placeAt, roomOf, wallEast, wallSouth } from "./maze";
+import { PLACE_NAMES } from "./places";
 import type { Presence } from "./net";
 
 // The map: the labyrinth around you, everyone online (with nicknames), and
@@ -73,6 +74,20 @@ export default function LabMap({ source, nick, onClose, onMeet, target }: { sour
         }
       g.stroke();
       g.globalAlpha = 1;
+
+      // places (the dark room stays secret)
+      g.font = "italic 13px 'Times New Roman', serif";
+      g.textAlign = "center";
+      for (let I = Math.floor((ci - R) / 7); I <= Math.floor((ci + R) / 7); I++)
+        for (let J = Math.floor((cj - R) / 7); J <= Math.floor((cj + R) / 7); J++) {
+          const k = placeAt(I, J);
+          if (!k || k === "dark") continue;
+          const x0 = sx((I * 7 + 1) * CELL), z0 = sy((J * 7 + 1) * CELL), w = PLACE * CELL * scale;
+          g.fillStyle = "rgba(255,230,184,0.06)";
+          g.fillRect(x0, z0, w, w);
+          g.fillStyle = "rgba(255,230,184,0.75)";
+          g.fillText(PLACE_NAMES[k], x0 + w / 2, z0 + w / 2);
+        }
 
       // the edge of the labyrinth (it grows with the crowd)
       const e = source.edge?.();

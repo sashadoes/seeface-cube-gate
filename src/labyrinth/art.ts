@@ -4,7 +4,7 @@
 // the black-and-white art glows differently from room to room. Corridors get the odd
 // glowing photo poster. All emissive: only a fixed pool of 4 real lights.
 import * as THREE from "three";
-import { CELL, WALL_H, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
+import { CELL, WALL_H, placeAt, placeOf, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
 
 type Art = { tex: THREE.Texture; color: THREE.Color; ready: boolean };
 const cache = new Map<string, Art>();
@@ -187,11 +187,18 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
     const list: { I: number; J: number; d: number }[] = [];
     for (let I = I0 - 1; I <= I0 + 1; I++)
       for (let J = J0 - 1; J <= J0 + 1; J++) {
+        if (placeAt(I, J)) continue; // places are dressed by places.ts
         const c = roomCentre(I, J);
         list.push({ I, J, d: Math.hypot(c.x - px, c.z - pz) });
       }
     list.sort((a, b) => a.d - b.d);
     rooms.forEach((r, k) => {
+      if (!list[k]) {
+        r.g.clear();
+        r.g.userData.key = "";
+        r.light.intensity = 0;
+        return;
+      }
       const { I, J } = list[k];
       const override = seedFor(I, J);
       const key = `${I}:${J}:${override ?? ""}`;
@@ -213,7 +220,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
     let k = 0;
     for (let i = ci - 5; i <= ci + 5 && k < posters.length; i++)
       for (let j = cj - 5; j <= cj + 5 && k < posters.length; j++) {
-        if (roomOf(i, j) || rnd(i, j, 60) > 0.15) continue;
+        if (roomOf(i, j) || placeOf(i, j) || rnd(i, j, 60) > 0.15) continue;
         // hang it on an existing wall of this cell
         const sides: [boolean, number, number, number][] = [
           [wallEast(i, j), (i + 1) * CELL - 0.17, (j + 0.5) * CELL, -Math.PI / 2],
@@ -248,7 +255,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
       // the room's light takes the colour of its image
       if (r.art?.ready) r.light.color.lerp(r.art.color, Math.min(1, dt * 2));
       const d = Math.hypot(r.g.position.x - px, r.g.position.z - pz);
-      r.light.intensity = d < CELL * 6 ? 7 : 0;
+      r.light.intensity = r.g.userData.key && d < CELL * 6 ? 7 : 0;
     }
   }
 

@@ -5,7 +5,7 @@
 //   wisp     – a small light that appears when your lantern is nearly dead and
 //              drifts ahead of you towards the nearest safe room
 import * as THREE from "three";
-import { CELL, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
+import { CELL, placeAt, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
 
 export type Residents = {
   group: THREE.Group;
@@ -115,6 +115,7 @@ export function createResidents(): Residents {
     let bd = Infinity;
     for (let I = I0 - 1; I <= I0 + 1; I++)
       for (let J = J0 - 1; J <= J0 + 1; J++) {
+        if (placeAt(I, J)) continue; // places are not safe rooms
         const c = roomCentre(I, J);
         const d = Math.hypot(c.x - px, c.z - pz);
         if (d < bd) (bd = d), (best = c);

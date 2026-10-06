@@ -8,7 +8,7 @@
 //   jester       – dares you to jump; +1 ◈ if you do
 //   mourner      – shares her light when yours is weak
 import * as THREE from "three";
-import { CELL, free, roomCentre } from "./maze";
+import { CELL, free, placeAt, roomCentre } from "./maze";
 
 export type KeeperKind = "cartographer" | "collector" | "jester" | "mourner";
 
@@ -52,6 +52,7 @@ function nearestRoom(px: number, pz: number) {
   let best = roomCentre(I0, J0), bd = Infinity;
   for (let I = I0 - 1; I <= I0 + 1; I++)
     for (let J = J0 - 1; J <= J0 + 1; J++) {
+      if (placeAt(I, J)) continue; // places are not safe rooms
       const c = roomCentre(I, J);
       const d = Math.hypot(c.x - px, c.z - pz);
       if (d < bd) (bd = d), (best = c);

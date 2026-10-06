@@ -2,7 +2,7 @@
 // maze and drop you into a secret level; inside a secret level, rifts lead back
 // up. Positions are deterministic, so everyone finds the same rifts.
 import * as THREE from "three";
-import { CELL, roomCentre, roomOf, rnd, spawn } from "./maze";
+import { CELL, placeAt, placeOf, roomCentre, roomOf, rnd, safeSpot, spawn } from "./maze";
 import { LEVELS, LEVEL_OFFSET, levelAtX } from "./zones";
 
 const REGION = 8; // cells
@@ -90,7 +90,7 @@ export function createRifts(): Rifts {
   function riftIn(I: number, J: number): { x: number; z: number; target: number } | null {
     const i = I * REGION + 1 + Math.floor(rnd(I, J, 92) * (REGION - 2));
     const j = J * REGION + 1 + Math.floor(rnd(I, J, 93) * (REGION - 2));
-    if (roomOf(i, j)) return null;
+    if (roomOf(i, j) || placeOf(i, j)) return null;
     const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL;
     const level = levelAtX(x);
     if (level === 0) {
@@ -168,6 +168,7 @@ export function createRifts(): Rifts {
       return { x: s.x + 2.4, z: s.z + 2.4 };
     }
     const I = Math.round((level * LEVEL_OFFSET) / CELL / 7);
+    if (placeAt(I, 0)) return safeSpot(I, 0);
     const c = roomCentre(I, 0);
     return { x: c.x + 3.6, z: c.z + 3.6 }; // a few steps from the room's cube
   }

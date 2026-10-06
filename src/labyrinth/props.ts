@@ -7,7 +7,7 @@
 // Unpredictable but shared: the layout re-rolls every hour, and everyone online
 // in the same hour sees the same props in the same places.
 import * as THREE from "three";
-import { CELL, WALL_H, roomOf, rnd, wallEast, wallSouth } from "./maze";
+import { CELL, WALL_H, roomOf, rnd, wallEast, wallSouth, placeOf } from "./maze";
 
 const RADIUS = 6; // cells around the player that get props
 export type Pickup = { key: string; kind: "money" | "knife" | "relic"; x: number; z: number; obj: THREE.Object3D; colour?: number; shape?: number };
@@ -310,6 +310,8 @@ export function createProps(): Props {
 
   function cellProps(i: number, j: number, h: number) {
     if (roomOf(i, j)) return null;
+    const pl = placeOf(i, j);
+    if (pl && (pl.kind === "dark" || pl.kind === "market" || pl.kind === "museum")) return null; // keep those places as they are
     const salt = 1000 + (h % 5000);
     const r = rnd(i, j, salt);
     const g = new THREE.Group();
