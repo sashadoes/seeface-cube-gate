@@ -12,7 +12,7 @@ import { createOthers } from "./others";
 import { createArt } from "./art";
 import { createWishes, readBlood, addBlood, WISH_COST, WISH_KINDS, type WishKind } from "./wishes";
 import { cleanNick, savedNick, saveNick } from "./nick";
-import { registerPlayer } from "../api";
+import { apiReady, registerPlayer } from "../api";
 import LabMap from "./LabMap";
 import { onOnline } from "../online";
 import { createProps } from "./props";
@@ -126,22 +126,24 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           ➝
         </button>
       </form>
-      <div className={"lab-gate-email" + (emailOk ? "" : " bad")}>
-        <input
-          type="email"
-          inputMode="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="email (optional) · keep your ◈ and name"
-          autoComplete="email"
-          maxLength={120}
-        />
-        {email.trim() && (
-          <label>
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> send me news from seeface1
-          </label>
-        )}
-      </div>
+      {apiReady && (
+        <div className={"lab-gate-email" + (emailOk ? "" : " bad")}>
+          <input
+            type="email"
+            inputMode="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="email (optional) · keep your ◈ and name"
+            autoComplete="email"
+            maxLength={120}
+          />
+          {email.trim() && (
+            <label>
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> send me news from seeface1
+            </label>
+          )}
+        </div>
+      )}
       <p>
         2–16 letters or numbers. not your real name. · <a href="/privacy">privacy</a>
       </p>

@@ -1,23 +1,18 @@
 // The gate: the cube page is the way into the 3D labyrinth.
-// Hidden rule (never shown on screen): spin at least 12 times this visit, then
-// enter today's code (2 digits in a row, from dailyPass.json). That's the hack.
+// Hidden rule (never shown on screen): spin in the code 1 9 9 4 (the owner's
+// code; the cube's faces are 1 2 3 4 5 9). That's the hack.
 // The room glitches, the cube rushes at you, a light tears open with the logo
 // burning through, and you fall into /labyrinth.
 import { Howl } from "howler";
 import { track } from "../../analytics";
 import "./Gate.scss";
 
-const MIN_SPINS = 12;
-let spins = 0;
+const GATE_CODE = "1994";
 let opening = false;
 
-window.addEventListener("cube-spin", () => {
-  spins += 1;
-});
-
 /** Call with the code line after every digit. */
-export function checkGate(code: string, dailyPass: string) {
-  if (opening || !dailyPass || spins < MIN_SPINS || !code.includes(dailyPass)) return;
+export function checkGate(code: string) {
+  if (opening || !code.includes(GATE_CODE)) return;
   openGate();
 }
 

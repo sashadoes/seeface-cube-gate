@@ -4,6 +4,9 @@
 const base: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? `http://${location.hostname}:8787` : "");
 
+/** False when no API is configured (then the email field is hidden). */
+export const apiReady = Boolean(base);
+
 export async function registerPlayer(p: { nick: string; email?: string; consent: boolean; ref?: string | null }) {
   if (!base) return false;
   try {
