@@ -90,7 +90,7 @@ export default function Watch() {
       client.on("connect", () => {
         setRelay(RELAYS[r].replace("wss://", "").split(":")[0]);
         // listen only: no publish anywhere in this file
-        client!.subscribe([`${SITE}/+`, `${LAB}/pos/+`, `${LAB}/bye/+`, `${LAB}/world/#`]);
+        client!.subscribe([`${SITE}/+`, `${LAB}/pos/#`, `${LAB}/bye/+`, `${LAB}/world/#`]);
       });
       client.on("error", () => {
         client?.end(true);
@@ -126,7 +126,8 @@ export default function Watch() {
           wishes.current += 1;
           return;
         }
-        const id = parts[4];
+        // positions arrive as pos/<area>/<id>; bye as bye/<id>
+        const id = parts[parts.length - 1];
         if (!id || id.length > 16) return;
         if (parts[3] === "bye") {
           const p = players.current.get(id);

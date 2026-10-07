@@ -125,7 +125,12 @@ export function createFx(renderer: THREE.WebGLRenderer, scene: THREE.Scene, came
     },
     setSize(w: number, h: number) {
       composer.setSize(w, h);
-      bloom.resolution.set(w / 2, h / 2);
+      // phones get a cheaper glow (a third of the screen size)
+      const k = matchMedia("(pointer: coarse)").matches ? 3 : 2;
+      bloom.resolution.set(w / k, h / k);
+    },
+    setPixelRatio(pr: number) {
+      composer.setPixelRatio(pr);
     },
     update(dt: number, t: number, me: { x: number; z: number; moving: boolean; sky: boolean; zoneTint: number }) {
       if (!enabled) return;

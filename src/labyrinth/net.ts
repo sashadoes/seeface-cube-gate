@@ -12,7 +12,24 @@ export type Emote = (typeof EMOTES)[number];
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
 const ROOT = "seeface1/lab/v1";
-const SEND_HZ = 6;
+// phones send a little less often (battery, data)
+const SEND_HZ = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches ? 4 : 6;
+// interest areas: you only receive the positions of people in your 64 m square
+// and the 8 around it; everyone also sends a light "here I am" beacon every 5 s
+// (for the map, the online count and invites to far-away friends)
+const AREA_M = 64;
+const BEACON_MS = 5000;
+const FAR_STALE_MS = 16000;
+const areaOf = (x: number, z: number) => `${Math.floor(x / AREA_M)}_${Math.floor(z / AREA_M)}`;
+const areasAround = (x: number, z: number) => {
+  const ax = Math.floor(x / AREA_M), az = Math.floor(z / AREA_M);
+  const out: string[] = [];
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) out.push(`${ax + i}_${az + j}`);
+  return out;
+};
+
+/** someone far away: only their beacon (coarse position) */
+export type FarPeer = { id: string; nick: string; x: number; z: number; last: number };
 const STALE_MS = 5000;
 
 export type Peer = {
@@ -31,6 +48,8 @@ export type Peer = {
 export type Presence = {
   me: string;
   peers: Map<string, Peer>;
+  /** everyone in the labyrinth (beacons every 5 s), including people far away */
+  far: Map<string, FarPeer>;
   send: (s: { x: number; z: number; yaw: number; light: number; nick: string; held?: number }) => void;
   signal: () => void;
   onSignal: (fn: (p: Peer) => void) => void;
@@ -61,6 +80,7 @@ const finite = (n: unknown, lim = 1e7) => typeof n === "number" && Number.isFini
 export function createPresence(myId?: string): Presence {
   const me = myId ?? Math.random().toString(36).slice(2, 10);
   const peers = new Map<string, Peer>();
+  const far = new Map<string, FarPeer>();
   const signalFns: ((p: Peer) => void)[] = [];
   const worldFns: ((path: string, data: Record<string, unknown>) => void)[] = [];
   const struckFns: ((from: Peer) => void)[] = [];
@@ -85,7 +105,9 @@ export function createPresence(myId?: string): Presence {
       will: { topic: `${ROOT}/bye/${me}`, payload: "1", qos: 0, retain: false },
     });
     client.on("connect", () => {
-      client!.subscribe([`${ROOT}/pos/+`, `${ROOT}/sig/+`, `${ROOT}/bye/+`, `${ROOT}/world/#`, `${ROOT}/hit/${me}`, `${ROOT}/kill/${me}`, `${ROOT}/call/${me}`, `${ROOT}/say/+`, `${ROOT}/emo/+`]);
+      subscribedAreas = new Set();
+      lastArea = "";
+      client!.subscribe([`${ROOT}/where/+`, `${ROOT}/sig/+`, `${ROOT}/bye/+`, `${ROOT}/world/#`, `${ROOT}/hit/${me}`, `${ROOT}/kill/${me}`, `${ROOT}/call/${me}`, `${ROOT}/say/+`, `${ROOT}/emo/+`]);
     });
     client.on("error", () => {
       // try the next relay
@@ -145,7 +167,9 @@ export function createPresence(myId?: string): Presence {
         if (parts[3] === "kill" && finite(d.amount, 100)) killFns.forEach((f) => f(Math.max(0, Math.round(d.amount as number))));
         return;
       }
-      const kind = parts[3], id = parts[4];
+      const kind = parts[3];
+      // positions arrive as pos/<area>/<id>
+      const id = kind === "pos" ? parts[5] : parts[4];
       if (!id || id === me || id.length > 16) return;
       if (kind === "bye") {
         peers.delete(id);
@@ -165,6 +189,9 @@ export function createPresence(myId?: string): Presence {
         if (p) Object.assign(p, { x: m.x, z: m.z, yaw: m.y, light: m.l, nick, held, last: Date.now() });
         else peers.set(id, { id, x: m.x as number, z: m.z as number, yaw: m.y as number, light: m.l as number, nick, held, last: Date.now(), signal: 0 });
       }
+      if (kind === "where" && finite(m.x) && finite(m.z)) {
+        far.set(id, { id, nick: cleanNick(m.n) ?? "wanderer", x: m.x as number, z: m.z as number, last: Date.now() });
+      }
       if (kind === "sig") {
         const p = peers.get(id);
         if (p) {
@@ -180,12 +207,34 @@ export function createPresence(myId?: string): Presence {
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const [id, p] of peers) if (now - p.last > STALE_MS) peers.delete(id);
+    for (const [id, p] of far) if (now - p.last > FAR_STALE_MS) far.delete(id);
   }, 1000);
 
+  // listen to the 9 areas around you; change subscriptions only when you cross into a new area
+  let subscribedAreas = new Set<string>();
+  let lastArea = "";
+  function follow(x: number, z: number) {
+    const a = areaOf(x, z);
+    if (a === lastArea || !client?.connected) return;
+    lastArea = a;
+    const want = new Set(areasAround(x, z));
+    const drop = [...subscribedAreas].filter((k) => !want.has(k)).map((k) => `${ROOT}/pos/${k}/+`);
+    const add = [...want].filter((k) => !subscribedAreas.has(k)).map((k) => `${ROOT}/pos/${k}/+`);
+    if (drop.length) client.unsubscribe(drop);
+    if (add.length) client.subscribe(add);
+    subscribedAreas = want;
+  }
+
+  let lastBeacon = 0;
   function flush() {
     if (!pending || !client?.connected) return;
     const { x, z, yaw, light, nick, held } = pending;
-    client.publish(`${ROOT}/pos/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0 }));
+    follow(x, z);
+    client.publish(`${ROOT}/pos/${areaOf(x, z)}/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0 }));
+    if (Date.now() - lastBeacon > BEACON_MS) {
+      lastBeacon = Date.now();
+      client.publish(`${ROOT}/where/${me}`, JSON.stringify({ x: Math.round(x), z: Math.round(z), n: nick }));
+    }
     pending = null;
   }
 
@@ -206,7 +255,9 @@ export function createPresence(myId?: string): Presence {
     onSignal(fn) {
       signalFns.push(fn);
     },
-    online: () => peers.size + 1,
+    // everyone who sent a beacon recently (+ you), not only the people near you
+    online: () => new Set([...far.keys(), ...peers.keys()]).size + 1,
+    far,
     strike(target) {
       client?.publish(`${ROOT}/hit/${target}`, JSON.stringify({ from: me }));
     },

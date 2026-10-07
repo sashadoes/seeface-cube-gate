@@ -40,7 +40,10 @@ export default function LabMap({ source, nick, onClose, onMeet, target }: { sour
       g.clearRect(0, 0, W, H);
 
       const me = source.getPos();
-      const peersAll = source.presence ? [...source.presence.peers.values()] : [];
+      // people near you (exact) + everyone else in the labyrinth (their 5-second beacon)
+      const near = source.presence ? [...source.presence.peers.values()] : [];
+      const farOnes = source.presence ? [...source.presence.far.values()].filter((f) => !source.presence!.peers.has(f.id)) : [];
+      const peersAll: { id: string; nick: string; x: number; z: number }[] = [...near, ...farOnes];
       let scale = Math.min(W, H) / (RADIUS * 2 + 1) / CELL; // px per metre
       if (wideRef.current && peersAll.length) {
         // zoom out until everyone (on this level) fits

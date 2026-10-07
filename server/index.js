@@ -8,10 +8,12 @@
 //   POST /api/logout                   (auth)
 //   POST /api/account/delete { password } (auth) → deletes the account and its sessions
 //   GET  /api/health
+//   GET  /api/stats  (header x-admin-key: ADMIN_KEY) → active players, retention, sources
 //
 // MONGODB_URI   MongoDB Atlas (or any Mongo) connection string. If it's missing,
 //               sign-ups go to ./data/players.jsonl so the game can be tested locally.
 // ALLOWED_ORIGINS comma-separated list of sites allowed to call the API.
+// ADMIN_KEY     secret for GET /api/stats (no key set = stats disabled)
 // PORT          default 8787
 import express from "express";
 import cors from "cors";
@@ -322,6 +324,7 @@ app.post("/api/login", async (req, res) => {
 app.get("/api/me", async (req, res) => {
   const a = await auth(req);
   if (!a) return res.status(401).json({ ok: false });
+  store.updateAccount(a.acc.nickLower, { lastSeen: new Date() }).catch(() => {}); // counts as active today
   res.json({ ok: true, account: publicAccount(a.acc) });
 });
 
@@ -357,6 +360,68 @@ app.post("/api/forget", async (req, res) => {
   if (!EMAIL.test(email)) return res.status(400).json({ ok: false });
   const n = await forget(email);
   res.json({ ok: true, deleted: n });
+});
+
+
+// ------------------------------------------------------------------ stats (owner only)
+// Who is actually coming back. Accounts: created → lastSeen. Sign-ups: firstSeen → lastSeen + ref.
+const DAY = 86_400_000;
+async function allDocs(kind) {
+  if (kind === "accounts") {
+    if (accounts) return accounts.find({}, { projection: { created: 1, lastSeen: 1 } }).toArray();
+    return Object.values((await db()).accounts);
+  }
+  if (players) return players.find({}, { projection: { firstSeen: 1, lastSeen: 1, ref: 1, consent: 1 } }).toArray();
+  try {
+    return (await readFile("data/players.jsonl", "utf8")).split("\n").filter(Boolean).map((l) => {
+      const d = JSON.parse(l);
+      return { firstSeen: d.at, lastSeen: d.at, ref: d.ref, consent: d.consent };
+    });
+  } catch {
+    return [];
+  }
+}
+function summarise(docs, startKey) {
+  const now = Date.now();
+  const t = (v) => (v ? new Date(v).getTime() : 0);
+  const active = (days) => docs.filter((d) => now - t(d.lastSeen) < days * DAY).length;
+  // cohort retention: of those who started ≥N days ago, how many were seen N+ days after starting
+  const kept = (n) => {
+    const cohort = docs.filter((d) => now - t(d[startKey]) >= n * DAY);
+    const back = cohort.filter((d) => t(d.lastSeen) - t(d[startKey]) >= n * DAY).length;
+    return { cohort: cohort.length, back, pct: cohort.length ? Math.round((back / cohort.length) * 1000) / 10 : null };
+  };
+  return {
+    total: docs.length,
+    new_today: docs.filter((d) => now - t(d[startKey]) < DAY).length,
+    new_7d: docs.filter((d) => now - t(d[startKey]) < 7 * DAY).length,
+    active_1d: active(1),
+    active_7d: active(7),
+    active_30d: active(30),
+    retained_d1: kept(1),
+    retained_d7: kept(7),
+    retained_d30: kept(30),
+  };
+}
+app.get("/api/stats", async (req, res) => {
+  const key = process.env.ADMIN_KEY;
+  const given = req.get("x-admin-key") || "";
+  if (!key || given.length !== key.length || !timingSafeEqual(Buffer.from(given), Buffer.from(key))) return res.status(404).end();
+  try {
+    const acc = await allDocs("accounts");
+    const ply = await allDocs("players");
+    const sources = {};
+    for (const p of ply) sources[p.ref || "direct"] = (sources[p.ref || "direct"] || 0) + 1;
+    res.json({
+      ok: true,
+      at: new Date(),
+      accounts: summarise(acc, "created"),
+      signups: { ...summarise(ply, "firstSeen"), with_email_consent: ply.filter((p) => p.consent).length, sources },
+    });
+  } catch (e) {
+    console.error("stats failed", e.message);
+    res.status(500).json({ ok: false });
+  }
 });
 
 app.listen(PORT, () => console.log(`seeface1 api on :${PORT}`));

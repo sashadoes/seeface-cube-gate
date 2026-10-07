@@ -18,3 +18,5 @@ services:
         value: https://seeface1.world
       - key: IP_SALT
         generateValue: true
+      - key: ADMIN_KEY
+        generateValue: true # copy it from Render → Environment to read /api/stats

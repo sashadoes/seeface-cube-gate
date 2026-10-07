@@ -61,6 +61,15 @@ const listeners = new Set<(s: Settings) => void>();
 
 export const settings = () => current;
 
+/** has the player ever saved settings? (if not, we pick a quality for their device) */
+export function hasSavedSettings() {
+  try {
+    return localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function setSettings(patch: Partial<Settings>) {
   current = { ...current, ...patch };
   try {

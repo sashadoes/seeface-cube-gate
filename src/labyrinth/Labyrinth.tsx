@@ -55,7 +55,8 @@ import { STATIONS, createStations } from "./stations";
 import { createAfterlife, ORDER_COST } from "./afterlife";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
-import { DEFAULTS, onSettings, setSettings, settings, type Settings } from "./settings";
+import { DEFAULTS, hasSavedSettings, onSettings, setSettings, settings, type Settings } from "./settings";
+import { createPerf, detectTier } from "./perf";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
@@ -548,6 +549,9 @@ function Game({ nick }: { nick: string }) {
     const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 80);
     const world = createWorld();
     const fx = createFx(renderer, world.scene, camera);
+    const perf = createPerf(renderer, world.scene, (pr) => fx.setPixelRatio(pr));
+    // first visit: pick a quality that suits this device
+    if (!hasSavedSettings()) setSettings({ quality: detectTier(renderer) });
     const hunter = createHunter();
     const residents = createResidents();
     const keepers = createKeepers();
@@ -711,7 +715,8 @@ function Game({ nick }: { nick: string }) {
       track("invite-opened");
       const until = Date.now() + 15000;
       const look = setInterval(() => {
-        const f = presence.peers.get(withId);
+        // close by: their exact position; far away: their beacon (where they roughly are)
+        const f = presence.peers.get(withId) ?? presence.far.get(withId);
         if (f) {
           clearInterval(look);
           for (const [ox, oz] of [[1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2], [0, 0]]) {
@@ -951,6 +956,7 @@ function Game({ nick }: { nick: string }) {
         flood,
         gramos: () => gramos,
         ai: () => ai,
+        perf,
       };
 
     const resize = () => {
@@ -971,7 +977,7 @@ function Game({ nick }: { nick: string }) {
 
     // direction + distance to the person you're walking to (a = angle on screen, 0 = straight ahead)
     const meetInfo = () => {
-      const p = meetRef.current ? presence.peers.get(meetRef.current) : treasure ? { nick: "◈ treasure", x: treasure.x, z: treasure.z } : null;
+      const p = meetRef.current ? presence.peers.get(meetRef.current) ?? presence.far.get(meetRef.current) : treasure ? { nick: "◈ treasure", x: treasure.x, z: treasure.z } : null;
       if (!p) return null;
       const a = -(Math.atan2(-(p.x - pos.x), -(p.z - pos.z)) - input.yaw);
       return { nick: p.nick, d: Math.round(Math.hypot(p.x - pos.x, p.z - pos.z)), a: Math.atan2(Math.sin(a), Math.cos(a)) };
@@ -1056,7 +1062,7 @@ function Game({ nick }: { nick: string }) {
       sound.setVolumes(st);
       radio.setVolume(st.radio * st.master);
       sfx.forEach(([h, base]) => h.volume(base * st.effects * st.master));
-      renderer.setPixelRatio(pixelRatio(st.quality));
+      perf.setQuality(pixelRatio(st.quality), st.quality);
       world.setFlashes(st.flashes);
       others.setShow(st.showNames, st.showChat);
       el.dataset.calm = st.flashes ? "" : "1";
@@ -1373,7 +1379,7 @@ function Game({ nick }: { nick: string }) {
       if (meet.nearest > 10) metSomeone = false;
 
       // walking to someone you picked on the map
-      const mt = meetRef.current ? presence.peers.get(meetRef.current) : null;
+      const mt = meetRef.current ? presence.peers.get(meetRef.current) ?? presence.far.get(meetRef.current) : null;
       if (meetRef.current && !mt) {
         meetRef.current = null;
         setMeetId(null);
@@ -1871,6 +1877,7 @@ function Game({ nick }: { nick: string }) {
         camera.updateProjectionMatrix();
       }
       fx.update(dt, t, { x: pos.x, z: pos.z, moving: Math.hypot(vel.x, vel.z) > 0.6, sky, zoneTint: world.zone().panel });
+      perf.frame(dt, camera);
       fx.render();
       clipper.frame(renderer.domElement); // share video (only while recording)
 

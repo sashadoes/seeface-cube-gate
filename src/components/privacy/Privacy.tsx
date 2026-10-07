@@ -19,7 +19,7 @@ export default function Privacy() {
         <h2 style={{ fontWeight: "normal" }}>keepers</h2>
         <p>Masked figures marked ✶ (the cartographer, the collector, the jester, the mourner) are characters of the game, not people.</p>
         <h2 style={{ fontWeight: "normal" }}>analytics</h2>
-        <p>We count visits with GoatCounter: no cookies, no personal data.</p>
+        <p>We count visits with GoatCounter: no cookies, no personal data. Your browser keeps a small note of the day you first came, the day you last came and which link brought you, so we can count how many people come back. It stays on your device and holds nothing about who you are.</p>
         <h2 style={{ fontWeight: "normal" }}>deleting your data</h2>
         <p>Email us and we'll delete everything we hold about you. Every news email has an unsubscribe link.</p>
         <p style={{ marginTop: 40 }}>
