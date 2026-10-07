@@ -311,7 +311,10 @@ function Game({ nick }: { nick: string }) {
   const [meetId, setMeetId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const noticeTimer = useRef(0);
-  const say = (text: string) => {
+  // on-screen text only for what really matters (owner: keep the screen quiet).
+  // Everything else is shown by the world itself (sound, light, the arrow…).
+  const say = (text: string, important = false) => {
+    if (!important) return;
     setNotice(text);
     clearTimeout(noticeTimer.current);
     noticeTimer.current = window.setTimeout(() => setNotice(""), 5000);
@@ -404,7 +407,7 @@ function Game({ nick }: { nick: string }) {
       setDraft("");
       setChatOpen(false);
       track("chat-said");
-    } else say("that can't be said here (or slow down)");
+    } else say("that can't be said here (or slow down)", true);
   };
   const emote = (k: Emote) => {
     presenceRef.current?.emote(k);
@@ -480,13 +483,13 @@ function Game({ nick }: { nick: string }) {
     let tvHinted = false;
     const order = () => {
       if (blood < ORDER_COST) {
-        sayRef.current("insufficient ◈. the after life isn't free (yet)");
+        sayRef.current("insufficient ◈. the after life isn't free (yet)", true);
         return;
       }
       blood = addBlood(-ORDER_COST);
       const it = addItem(randomItem(1));
       sound.chime();
-      sayRef.current(`order confirmed: ${it.name} · your After Life™ ships never`);
+      sayRef.current(`order confirmed: ${it.name} · your After Life™ ships never`, true);
       track("afterlife-order");
     };
     const found = (luck = 0) => {
@@ -896,7 +899,7 @@ function Game({ nick }: { nick: string }) {
     };
     // someone picked you on their map
     presence.onCalled((from) => {
-      sayRef.current(`${from.nick} is coming to find you`);
+      sayRef.current(`${from.nick} is coming to find you`, true);
       sound.chime();
       if (!meetRef.current) {
         meetRef.current = from.id; // meet them halfway
@@ -950,7 +953,7 @@ function Game({ nick }: { nick: string }) {
         setClipState("ready");
       } catch {
         setClipState("");
-        sayRef.current("couldn't record a video on this device · send the link instead");
+        sayRef.current("couldn't record a video on this device · send the link instead", true);
       }
     };
 
@@ -1508,7 +1511,7 @@ function Game({ nick }: { nick: string }) {
       if (fl.changed) {
         floodFx.dataset.phase = fl.changed;
         if (fl.changed === "warn") {
-          sayRef.current("⚠ the flood is coming · get into a room");
+          sayRef.current("⚠ the flood is coming · get into a room", true);
           track("flood-warn");
         }
         if (fl.changed === "flood") {
@@ -2104,7 +2107,7 @@ function Game({ nick }: { nick: string }) {
               if (l.mine) return;
               muted.current.add(l.id);
               setChat((c) => c.filter((x) => x.id !== l.id));
-              say(`${l.nick} muted`);
+              say(`${l.nick} muted`, true);
               track("chat-mute");
             }}
           >
