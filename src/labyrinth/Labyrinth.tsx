@@ -42,6 +42,7 @@ import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES } from "./places";
 import { createAfterlife, ORDER_COST } from "./afterlife";
+import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
@@ -331,6 +332,12 @@ function Game({ nick }: { nick: string }) {
     setSoulAsk(false);
     track("soul-saved");
   };
+
+  // invite: a link, or a 6-second video of your game with your invite on it
+  const [inviteMenu, setInviteMenu] = useState(false);
+  const [clipState, setClipState] = useState<"" | "rec" | "ready">("");
+  const clipRef = useRef<() => void>(() => {});
+  const clipBlob = useRef<{ blob: Blob; url: string } | null>(null);
 
   // the inventory: afterlife objects you've collected
   const [bag, setBag] = useState(() => readBag());
@@ -866,6 +873,32 @@ function Game({ nick }: { nick: string }) {
       }
       if (d < 20) sayRef.current(`${from.nick} ${kind === "stare" ? "stares at you" : kind === "spin" ? "spins" : kind === "melt" ? "melts into the floor" : kind === "float" ? "floats" : "screams"}`);
     });
+
+    const howler = (window as unknown as { Howler?: { ctx?: AudioContext; masterGain?: GainNode } }).Howler;
+    const howlerTap = () => {
+      if (!howler?.ctx || !howler.masterGain) return new MediaStream();
+      const d = howler.ctx.createMediaStreamDestination();
+      howler.masterGain.connect(d);
+      return d.stream;
+    };
+    const clipper = createClipper([sound.tap(), radio.tap(), howlerTap()]);
+    clipRef.current = async () => {
+      if (clipper.busy()) return;
+      setClipState("rec");
+      track("clip-record");
+      const lvl = levelAtX(pos.x);
+      const place = lvl > 0 ? LEVELS[lvl].name : inPlace ? PLACE_TITLES[inPlace.kind] : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
+      const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}`;
+      try {
+        const { blob } = await clipper.record({ nick, place, inviteUrl });
+        clipBlob.current = { blob, url: inviteUrl };
+        if (import.meta.env.DEV) (window as unknown as { __lastClip: Blob }).__lastClip = blob; // for testing
+        setClipState("ready");
+      } catch {
+        setClipState("");
+        sayRef.current("couldn't record a video on this device · send the link instead");
+      }
+    };
 
     // deaths: rare when the labyrinth is quiet. With 6+ people inside it's deadly;
     // with fewer, only now and then (1 in 5), otherwise it hurts but you live.
@@ -1481,6 +1514,7 @@ function Game({ nick }: { nick: string }) {
       if (heldObj) heldObj.rotation.y += dt * 1.5;
 
       renderer.render(world.scene, camera);
+      clipper.frame(renderer.domElement); // share video (only while recording)
 
       // snapshot: grab the frame right after it's drawn
       if (snapRequested) {
@@ -1572,6 +1606,45 @@ function Game({ nick }: { nick: string }) {
       {/* danger: the edges close in, colder and redder */}
       <div className="lab-vignette" style={{ opacity: hud.danger }} />
 
+      {inviteMenu && (
+        <div className="lab-invite" onPointerDown={stop} onPointerUp={stop}>
+          <button
+            onClick={() => {
+              setInviteMenu(false);
+              void invite();
+            }}
+          >
+            send my link
+          </button>
+          <button
+            onClick={() => {
+              setInviteMenu(false);
+              clipRef.current();
+            }}
+          >
+            record a {CLIP_SECONDS}-second video invite
+          </button>
+        </div>
+      )}
+      {clipState === "rec" && <div className="lab-clip rec">● recording {CLIP_SECONDS} s · keep playing, make it good</div>}
+      {clipState === "ready" && (
+        <div className="lab-clip" onPointerDown={stop} onPointerUp={stop}>
+          <button
+            onClick={async () => {
+              const c = clipBlob.current;
+              if (!c) return;
+              const how = await shareClip(c.blob, c.url);
+              track(`clip-${how}`);
+              if (how !== "cancelled") setClipState("");
+            }}
+          >
+            share your video ➝
+          </button>
+          <button className="x" onClick={() => setClipState("")} aria-label="discard">
+            ×
+          </button>
+        </div>
+      )}
       {isPhone && moveHint && <div className="lab-hint">left thumb: walk + turn · push far to run · right side: look around</div>}
       {stick.active && (
         <div className="lab-stick" style={{ left: stick.ox, top: stick.oy }}>
@@ -1615,7 +1688,7 @@ function Game({ nick }: { nick: string }) {
 
       {/* thumb controls (phones) + signal / invite (everyone) */}
       <div className="lab-actions" onPointerDown={stop} onPointerUp={stop}>
-        <button className="lab-btn invite" onClick={invite} aria-label="invite a friend">
+        <button className="lab-btn invite" onClick={() => (clipSupported() ? setInviteMenu((m) => !m) : void invite())} aria-label="invite a friend">
           {invited ? "✓" : "⊕"}
         </button>
         {hud.knife && (
