@@ -1649,3 +1649,52 @@
     color: #a9a293;
   }
 }
+
+// ---------------------------------------------------------------- notes
+.lab-inbox {
+  display: grid;
+  gap: 10px;
+
+  > div {
+    display: grid;
+    gap: 2px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font: italic 15px "Times New Roman", serif;
+
+    b {
+      font-weight: normal;
+      color: #fff6e2;
+    }
+
+    i {
+      font-size: 12px;
+      color: #6f6a5c;
+    }
+
+    span {
+      color: #cfc6b8;
+    }
+
+    button {
+      all: unset;
+      cursor: pointer;
+      justify-self: start;
+      font-size: 13px;
+      color: #8f897c;
+    }
+  }
+}
+
+.lab-note-from {
+  font: italic 15px "Times New Roman", serif;
+  font-weight: normal;
+  color: #8f897c;
+}
+
+.lab-note-text {
+  margin: 0;
+  font: italic 22px "Times New Roman", serif;
+  color: #fff6e2;
+  line-height: 1.35;
+}

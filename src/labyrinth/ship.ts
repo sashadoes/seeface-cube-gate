@@ -299,7 +299,7 @@ export function createShip() {
       lights[0].intensity = 60;
       lights[1].intensity = 120;
       lights[2].intensity = 6;
-      lights[3].intensity = 45;
+      lights[3].intensity = 16;
       church?.userData.tick(t);
       dock?.userData.tick(t);
     },

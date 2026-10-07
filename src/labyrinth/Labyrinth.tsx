@@ -44,6 +44,8 @@ import { createHazards } from "./hazards";
 import { createAi, type AiResidents } from "./ai";
 import { createPosts, shrink, wallAhead, type Post } from "./posts";
 import { createShip } from "./ship";
+import { createNotes, type Note } from "./notes";
+import { createFx } from "./fx";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions } from "./places";
 import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
@@ -414,6 +416,24 @@ function Game({ nick }: { nick: string }) {
   addLineRef.current = addLine;
   const lastHeard = useRef("");
   const aiRef = useRef<AiResidents | null>(null);
+  // notes between players
+  const notesRef = useRef<ReturnType<typeof createNotes> | null>(null);
+  const [notesOpen, setNotesOpen] = useState<null | "write" | "inbox">(null);
+  const [noteTo, setNoteTo] = useState("");
+  const [noteText, setNoteText] = useState("");
+  const [noteView, setNoteView] = useState<Note | null>(null);
+  const sendNote = () => {
+    const n = notesRef.current;
+    if (!n) return;
+    const to = noteTo.replace(/^@/, "").trim() || null;
+    if (!n.leave(noteText, to, posRef.current.x, posRef.current.z)) return say("that can't be written here", true);
+    setNoteText("");
+    setNoteTo("");
+    setNotesOpen(null);
+    say(to ? `note sent to @${to}` : "note left here", true);
+    track(to ? "note-to" : "note-here");
+  };
+
   // posts on the walls
   const postsRef = useRef<ReturnType<typeof createPosts> | null>(null);
   const yawRef = useRef(0);
@@ -516,6 +536,7 @@ function Game({ nick }: { nick: string }) {
 
     const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 80);
     const world = createWorld();
+    const fx = createFx(renderer, world.scene, camera);
     const hunter = createHunter();
     const residents = createResidents();
     const keepers = createKeepers();
@@ -924,6 +945,7 @@ function Game({ nick }: { nick: string }) {
     const resize = () => {
       const w = window.innerWidth, h = window.innerHeight;
       renderer.setSize(w, h);
+      fx.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     };
@@ -1027,12 +1049,23 @@ function Game({ nick }: { nick: string }) {
       world.setFlashes(st.flashes);
       others.setShow(st.showNames, st.showChat);
       el.dataset.calm = st.flashes ? "" : "1";
+      fx.setEnabled(st.glow && st.quality !== "low");
     });
 
     const hazards = createHazards(sound.ctx, sound.ambienceOut);
     const ship = createShip();
     world.scene.add(ship.group);
     let beamT = 0;
+    const notes = createNotes(presence, () => nick);
+    notesRef.current = notes;
+    let unreadSeen = 0;
+    notes.onChange(() => {
+      bumpPosts((n) => n + 1);
+      const u = notes.unread();
+      if (u > unreadSeen && notes.inbox()[0]) sayRef.current(`✉ a note from @${notes.inbox()[0].from}`, true);
+      unreadSeen = u;
+    });
+    world.scene.add(notes.group);
     const posts = createPosts(presence, () => nick);
     postsRef.current = posts;
     posts.onChange(() => bumpPosts((n) => n + 1));
@@ -1507,6 +1540,7 @@ function Game({ nick }: { nick: string }) {
       gramos.update(pos.x, pos.z, t);
       ai.update(dt, pos.x, pos.z);
       posts.update(pos.x, pos.z);
+      notes.update(pos.x, pos.z, t);
       ship.update(pos.x, pos.z, t);
       world.setSpace(inShip(pos.x, pos.z));
       // the beams: stand in one for 2.5 s to go up to the ship / back down to the open
@@ -1545,6 +1579,7 @@ function Game({ nick }: { nick: string }) {
       if (tapNow && al.nearTV && alive) order();
       else if (tapNow && gn && alive) setGramoKey(gn.key);
       else if (tapNow && posts.lookingAt(pos.x, pos.z, input.yaw)) setViewing(posts.lookingAt(pos.x, pos.z, input.yaw));
+      else if (tapNow && notes.lookingAt(pos.x, pos.z, input.yaw)) setNoteView(notes.lookingAt(pos.x, pos.z, input.yaw));
       else if (tapNow && c && isNear) {
         world.spinCube(c.mesh);
         spinSfx.play();
@@ -1790,7 +1825,15 @@ function Game({ nick }: { nick: string }) {
       }
       if (heldObj) heldObj.rotation.y += dt * 1.5;
 
-      renderer.render(world.scene, camera);
+      // light & effects; under open skies (and in the ship) the eye sees much further
+      const sky = inPlace?.kind === "open" || inPlace?.kind === "ritual" || inShip(pos.x, pos.z);
+      const far = sky ? 500 : 80;
+      if (camera.far !== far) {
+        camera.far = far;
+        camera.updateProjectionMatrix();
+      }
+      fx.update(dt, t, { x: pos.x, z: pos.z, moving: Math.hypot(vel.x, vel.z) > 0.6, sky, zoneTint: world.zone().panel });
+      fx.render();
       clipper.frame(renderer.domElement); // share video (only while recording)
 
       // snapshot: grab the frame right after it's drawn
@@ -2004,6 +2047,16 @@ function Game({ nick }: { nick: string }) {
             ⤓
           </button>
         )}
+        <button
+          className="lab-btn bag"
+          onClick={() => {
+            setNotesOpen(notesRef.current?.inbox().length ? "inbox" : "write");
+            notesRef.current?.markRead();
+          }}
+          aria-label="notes"
+        >
+          ✉{(notesRef.current?.unread() ?? 0) > 0 && <small>{notesRef.current?.unread()}</small>}
+        </button>
         <button className="lab-btn post" onClick={() => setComposer({ mode: "photo", img: null })} aria-label="post a photo or drawing on the wall">
           ⊞
         </button>
@@ -2070,6 +2123,79 @@ function Game({ nick }: { nick: string }) {
           <button onClick={() => startMeet(null)} aria-label="stop">
             ×
           </button>
+        </div>
+      )}
+      {notesOpen && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-tabs">
+              <button className={notesOpen === "write" ? "on" : ""} onClick={() => setNotesOpen("write")}>
+                write
+              </button>
+              <button className={notesOpen === "inbox" ? "on" : ""} onClick={() => setNotesOpen("inbox")}>
+                inbox {notesRef.current?.inbox().length ? `· ${notesRef.current.inbox().length}` : ""}
+              </button>
+            </div>
+            <div className="lab-settings-body">
+              {notesOpen === "write" ? (
+                <>
+                  <input className="lab-post-cap" value={noteTo} maxLength={17} onChange={(e) => setNoteTo(e.target.value)} placeholder="to @nickname (or empty: leave it right here)" />
+                  <input className="lab-post-cap" value={noteText} maxLength={120} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendNote()} placeholder="your note" autoFocus />
+                  <p className="note">notes are like postcards: not private. no links, no phone numbers.</p>
+                </>
+              ) : (
+                <div className="lab-inbox">
+                  {(notesRef.current?.inbox() ?? []).map((n) => (
+                    <div key={n.id}>
+                      <b>@{n.from}</b> <i>{Math.max(1, Math.round((Date.now() - n.t) / 60000))} min ago</i>
+                      <span>{n.text}</span>
+                      <button
+                        onClick={() => {
+                          setNoteTo(n.from);
+                          setNotesOpen("write");
+                        }}
+                      >
+                        reply
+                      </button>
+                    </div>
+                  ))}
+                  {!notesRef.current?.inbox().length && <p className="note">no notes yet. leave one for someone.</p>}
+                </div>
+              )}
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setNotesOpen(null)}>close</button>
+              {notesOpen === "write" && (
+                <button className="done" onClick={sendNote}>
+                  {noteTo.trim() ? "send" : "leave it here"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {noteView && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop} onClick={() => setNoteView(null)}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-body">
+              <b className="lab-note-from">a note from @{noteView.from}</b>
+              <p className="lab-note-text">{noteView.text}</p>
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setNoteView(null)}>close</button>
+              <button
+                className="done"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setNoteTo(noteView.from);
+                  setNoteView(null);
+                  setNotesOpen("write");
+                }}
+              >
+                reply
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {composer && (
@@ -2361,6 +2487,7 @@ function Game({ nick }: { nick: string }) {
                   </label>
                   {(
                     [
+                      ["glow", "glow & light effects"],
                       ["cameraBob", "camera bob when walking"],
                       ["shake", "screen shake"],
                       ["flashes", "lightning & bright flashes"],

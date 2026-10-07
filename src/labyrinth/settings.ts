@@ -21,6 +21,7 @@ export type Settings = {
   // graphics
   quality: "low" | "medium" | "high";
   fov: number; // 60–90
+  glow: boolean; // glow, film look, light shafts, motes, trails, aurora
   cameraBob: boolean;
   shake: boolean;
   flashes: boolean; // lightning / rift flashes (off = calmer, safer for photosensitivity)
@@ -42,6 +43,7 @@ export const DEFAULTS: Settings = {
   stickSide: "left",
   quality: "medium",
   fov: 72,
+  glow: true,
   cameraBob: true,
   shake: true,
   flashes: true,
