@@ -4,6 +4,7 @@ import Cube from "./components/cube/Cube";
 import MusicToggle from "./components/music/MusicToggle";
 import OnlineCounter from "./components/online/OnlineCounter";
 import { lazy, Suspense } from "react";
+import { hasEntered } from "./labyrinth/resume";
 
 // the marks mode (and its 3D engine) is only downloaded on /marks
 const MarksMode = lazy(() => import("./marks/MarksMode"));
@@ -12,6 +13,12 @@ const Privacy = lazy(() => import("./components/privacy/Privacy"));
 const Watch = lazy(() => import("./watch/Watch"));
 
 const path = location.pathname.replace(/\/+$/, "");
+
+// people who've already been inside skip the cube and go straight back in
+// (seeface1.world/?cube still shows the cube)
+if ((path === "" || path === "/") && hasEntered() && !new URLSearchParams(location.search).has("cube")) {
+  location.replace("/labyrinth/?from=return");
+}
 const isMarks = path === "/marks";
 const isLabyrinth = path === "/labyrinth";
 

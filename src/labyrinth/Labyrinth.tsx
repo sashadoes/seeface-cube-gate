@@ -43,6 +43,7 @@ import { createFlood } from "./flood";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES } from "./places";
 import { createAfterlife, ORDER_COST } from "./afterlife";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
+import { clearResume, markEntered, readResume, saveResume } from "./resume";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
@@ -83,6 +84,8 @@ export default function Labyrinth() {
 }
 
 function NickGate({ onDone }: { onDone: (n: string) => void }) {
+  // coming back? say so, and say where they'll continue
+  const [back] = useState(() => (new URLSearchParams(location.search).get("with") ? null : readResume()));
   // default for newcomers: face_ + 4 random digits (e.g. face_2492)
   const [v, setV] = useState(() => savedNick() ?? `face_${Math.floor(1000 + Math.random() * 9000)}`);
   const [bad, setBad] = useState(false);
@@ -167,6 +170,11 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
   return (
     <div className="lab-gate">
       <img src="/imgs/seeface-logo-transparent.png" alt="seeface1" />
+      {back && savedNick() && (
+        <div className="lab-gate-back">
+          welcome back. you were in {back.place}, {back.metres} m in.
+        </div>
+      )}
       <form onSubmit={enter} className={bad ? "bad" : ""}>
         <input
           autoFocus
@@ -642,8 +650,38 @@ function Game({ nick }: { nick: string }) {
     };
     newRun();
     enterStartLevel();
+    markEntered();
+    // coming back: continue where you were (unless a friend's invite or a level link says otherwise)
+    const back = !withId && !startLevel ? readResume() : null;
+    if (back && free(back.x, back.z)) {
+      pos.x = back.x;
+      pos.z = back.z;
+      input.yaw = back.yaw;
+      light = Math.max(40, back.light);
+      shards = back.shards;
+      depth = back.depth;
+      metres = back.metres;
+      nextBloodAt = Math.floor(metres / 100) * 100 + 100;
+      world.setDepth(depth);
+      hunter.reset(pos.x, pos.z);
+      runTime = GRACE; // a few seconds to settle back in before anything hunts
+      track("resumed");
+      setTimeout(() => sayRef.current(`welcome back to the after life™ · ${back.place}`), 1700);
+    }
+    // remember where you are, every few seconds and when you leave
+    const remember = () => {
+      if (!alive) return;
+      const lvl = levelAtX(pos.x);
+      const place = lvl > 0 ? LEVELS[lvl].name : inPlace ? PLACE_TITLES[inPlace.kind] : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
+      saveResume({ x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), yaw: +input.yaw.toFixed(3), light: Math.round(light), shards, depth, metres: Math.round(metres), place });
+    };
+    const rememberTimer = setInterval(remember, 5000);
+    const rememberHidden = () => document.hidden && remember();
+    window.addEventListener("pagehide", remember);
+    document.addEventListener("visibilitychange", rememberHidden);
 
     function die() {
+      clearResume();
       alive = false;
       caughtSfx.play();
       radio.set(0);
@@ -1549,6 +1587,9 @@ function Game({ nick }: { nick: string }) {
     raf = requestAnimationFrame(frame);
 
     return () => {
+      clearInterval(rememberTimer);
+      window.removeEventListener("pagehide", remember);
+      document.removeEventListener("visibilitychange", rememberHidden);
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointerdown", wake);
