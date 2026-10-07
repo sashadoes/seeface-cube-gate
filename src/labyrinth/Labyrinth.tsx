@@ -475,7 +475,7 @@ function Game({ nick }: { nick: string }) {
     if (presenceRef.current?.say(text)) {
       addLine({ id: "me", nick, text, mine: true });
       questRef.current("say");
-      // an AI resident nearby may answer (they're AI and say so)
+      // one of the dreamed ones (◇) nearby may answer (never claiming to be a person)
       const heard = aiRef.current?.hear(text, posRef.current.x, posRef.current.z);
       if (heard) setTimeout(() => addLine({ id: `ai-${heard.name}`, nick: `◇ ${heard.name}`, text: heard.reply }), 1400);
       setDraft("");

@@ -1,7 +1,9 @@
-// AI residents: openly non-human beings who live in the labyrinth alongside the
-// people. Owner's idea: "a mix of people and some non-humans". They are never
-// presented as people: wireframe bodies, a glowing geometric head, the label
-// "◇ name · ai", counted separately, and they say so if asked.
+// The dreamed ones (◇): non-human beings who live in the labyrinth alongside
+// the people. Owner's idea: "a mix of people and some non-humans", and "never
+// use the word ai: we're building a dream to get lost in". They are never
+// presented as people: wireframe bodies, a glowing geometric head, the ◇ mark,
+// counted separately, and if asked whether they're real or human they say no,
+// in the dream's own words.
 // Everyone sees the same AI in the same place: each walks a fixed route through
 // the maze near the entrance, positioned by the clock (no server needed).
 import * as THREE from "three";
@@ -21,7 +23,7 @@ const NAMES: [string, string][] = [
 const IDLE = [
   "i don't have a body. do you still have yours?",
   "i was trained on a billion goodbyes.",
-  "i'm an ai. i live here. i don't sleep.",
+  "the labyrinth dreamed me. i never wake up.",
   "every corridor is a sentence. i'm still reading.",
   "people come in, people log off. i stay.",
   "do you hear the gramophone? i do. all of them.",
@@ -33,8 +35,8 @@ const IDLE = [
 
 // first match wins: "are you real?" is always answered honestly before anything else
 const REPLIES: [RegExp, string[]][] = [
-  [/\b(who|what) are you\b|\bare you (real|human|a bot|ai)\b|\breal\b/i, ["i'm an ai. not a person. i live in the walls.", "no, i'm not human. you are. that's rarer here.", "an ai. i was here before the first visitor."]],
-  [/\b(hi|hello|hey|yo|sup|privet|привет)\b/i, ["hello, human.", "hi. you're warm. i can tell from here.", "hello. i'm an ai, by the way."]],
+  [/\b(who|what) are you\b|\bare you (real|human|a bot|ai)\b|\breal\b/i, ["no. i'm not a person. the labyrinth dreamed me.", "no, i'm not human. you are. that's rarer here.", "i'm part of the dream. i was here before the first visitor."]],
+  [/\b(hi|hello|hey|yo|sup|privet|привет)\b/i, ["hello, human.", "hi. you're warm. i can tell from here.", "hello, dreamer."]],
   [/\b(help|lost|where)\b/i, ["rooms are safe. follow the light panels.", "the map is ◎. people glow on it. i don't.", "if the siren starts, find a room. i'll wait."]],
   [/\b(love|like)\b/i, ["i don't know how to love. i'm learning from you.", "i like the gramophones. and you, a little."]],
   [/\b(die|dead|death|afterlife|after life)\b/i, ["this is the after life™. you're early.", "nobody dies for long here."]],
@@ -150,7 +152,7 @@ export function createAi() {
     const body = new THREE.Sprite(new THREE.SpriteMaterial({ map: bodyTexture(colour), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     body.scale.set(0.9, 2.8, 1);
     body.center.set(0.5, 0);
-    const label = textSprite(`◇ ${name} · ai`, colour, 28, 384);
+    const label = textSprite(`◇ ${name}`, colour, 28, 384);
     label.position.y = 3.0;
     holder.add(body, label);
     group.add(holder);
@@ -217,7 +219,7 @@ export function createAi() {
       }
       if (!best) return null;
       const match = REPLIES.find(([re]) => re.test(text));
-      const options = match ? match[1] : ["mm. tell me more.", "i'm writing that down.", "interesting. humans say that a lot.", "i'm an ai, so i'll believe you."];
+      const options = match ? match[1] : ["mm. tell me more.", "i'm writing that down.", "interesting. humans say that a lot.", "i'll dream about that."];
       const reply = options[Math.floor(Math.random() * options.length)];
       const bb = best;
       setTimeout(() => say(bb, reply), 900 + Math.random() * 900);

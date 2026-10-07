@@ -102,7 +102,7 @@ export default function LabMap({ source, nick, onClose, onMeet, target }: { sour
         g.setLineDash([]);
       }
 
-      // AI residents: small diamonds (not people)
+      // the dreamed ones (◇): small diamonds (not people)
       for (const a of source.ai?.() ?? []) {
         const x = sx(a.x), y = sy(a.z);
         if (x < 0 || x > W || y < 0 || y > H) continue;
@@ -115,7 +115,7 @@ export default function LabMap({ source, nick, onClose, onMeet, target }: { sour
         g.fillStyle = "rgba(159,232,255,0.7)";
         g.font = "italic 11px 'Times New Roman', serif";
         g.textAlign = "center";
-        g.fillText(`${a.name} · ai`, x, y - 10);
+        g.fillText(`◇ ${a.name}`, x, y - 10);
       }
 
       // wishes
