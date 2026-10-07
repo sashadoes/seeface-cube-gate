@@ -18,6 +18,8 @@ export type Sound = {
   chime: () => void;
   /** the Pop Queen's music-box tune: 0 = off, 1 = she's right here */
   showtune: (level: number) => void;
+  /** settings: 0–1 for everything, effects, ambience (weather) and voices (siren, songs) */
+  setVolumes: (v: { master: number; effects: number; ambience: number; voices: number }) => void;
   /** a MediaStream of everything the game plays (for recording trailers) */
   tap: () => MediaStream;
 };
@@ -28,6 +30,13 @@ export function createSound(): Sound {
   const master = ctx.createGain();
   master.gain.value = 0.9;
   master.connect(ctx.destination);
+  // groups the player can turn up/down in the settings
+  const bus = () => {
+    const g = ctx.createGain();
+    g.connect(master);
+    return g;
+  };
+  const effectsBus = bus(), ambienceBus = bus(), voicesBus = bus();
   document.addEventListener("visibilitychange", () => (document.hidden ? ctx.suspend() : ctx.resume()));
 
   // shared noise buffer
@@ -50,7 +59,7 @@ export function createSound(): Sound {
     f.Q.value = q;
     const gain = ctx.createGain();
     gain.gain.value = 0;
-    src.connect(f).connect(gain).connect(master);
+    src.connect(f).connect(gain).connect(ambienceBus);
     src.start();
     return { f, gain };
   };
@@ -94,7 +103,7 @@ export function createSound(): Sound {
     g.gain.setValueAtTime(0, now);
     g.gain.linearRampToValueAtTime(vol, now + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, now + (zone === "pools" ? 0.16 : 0.09));
-    src.connect(f).connect(g).connect(master);
+    src.connect(f).connect(g).connect(effectsBus);
     src.start(now, Math.random() * 1.5, 0.2);
     // a low heel thump under it
     const o = ctx.createOscillator();
@@ -103,7 +112,7 @@ export function createSound(): Sound {
     o.frequency.exponentialRampToValueAtTime(45, now + 0.08);
     og.gain.setValueAtTime(vol * 0.8, now);
     og.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
-    o.connect(og).connect(master);
+    o.connect(og).connect(effectsBus);
     o.start(now);
     o.stop(now + 0.12);
   }
@@ -122,7 +131,7 @@ export function createSound(): Sound {
     g.gain.setValueAtTime(0, now);
     g.gain.linearRampToValueAtTime(vol, now + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
-    src.connect(f).connect(g).connect(master);
+    src.connect(f).connect(g).connect(effectsBus);
     src.start(now, Math.random() * 1.5, 0.3);
     // the drip: a tiny falling "plip"
     const o = ctx.createOscillator();
@@ -133,7 +142,7 @@ export function createSound(): Sound {
     og.gain.setValueAtTime(0, now + 0.04);
     og.gain.linearRampToValueAtTime(vol * 0.35, now + 0.05);
     og.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-    o.connect(og).connect(master);
+    o.connect(og).connect(effectsBus);
     o.start(now + 0.04);
     o.stop(now + 0.2);
   }
@@ -144,7 +153,7 @@ export function createSound(): Sound {
   const sirenLp = ctx.createBiquadFilter();
   sirenLp.type = "lowpass";
   sirenLp.frequency.value = 2200;
-  sirenLp.connect(sirenGain).connect(master);
+  sirenLp.connect(sirenGain).connect(voicesBus);
   const sirenOsc = [0, 7].map((det) => {
     const o = ctx.createOscillator();
     o.type = "sawtooth";
@@ -179,7 +188,7 @@ export function createSound(): Sound {
     g.gain.linearRampToValueAtTime(0.7 * vol, now + 0.05);
     g.gain.setTargetAtTime(0.25 * vol, now + 0.3, 0.6);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 3.4);
-    src.connect(f).connect(g).connect(master);
+    src.connect(f).connect(g).connect(effectsBus);
     src.start(now);
     src.stop(now + 3.5);
   }
@@ -195,7 +204,7 @@ export function createSound(): Sound {
     g.gain.setValueAtTime(0, now);
     g.gain.linearRampToValueAtTime(0.9, now + 0.08 + Math.random() * 0.3);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 4.5);
-    src.connect(f).connect(g).connect(master);
+    src.connect(f).connect(g).connect(ambienceBus);
     src.start(now);
     src.stop(now + 4.6);
   }
@@ -217,7 +226,7 @@ export function createSound(): Sound {
           const g = ctx.createGain();
           g.gain.setValueAtTime(0, now);
           g.gain.linearRampToValueAtTime(0.018, now + 4);
-          o.connect(f).connect(g).connect(master);
+          o.connect(f).connect(g).connect(voicesBus);
           o.start(now);
           choirNodes.push({ o, g });
         }
@@ -242,7 +251,7 @@ export function createSound(): Sound {
       g.gain.setValueAtTime(0, now + k * 0.08);
       g.gain.linearRampToValueAtTime(0.12, now + k * 0.08 + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, now + k * 0.08 + 1.2);
-      o.connect(g).connect(master);
+      o.connect(g).connect(effectsBus);
       o.start(now + k * 0.08);
       o.stop(now + k * 0.08 + 1.3);
     });
@@ -251,7 +260,7 @@ export function createSound(): Sound {
   // the Pop Queen's tune: a slightly detuned music box, minor and sweet
   const showGain = ctx.createGain();
   showGain.gain.value = 0;
-  showGain.connect(master);
+  showGain.connect(voicesBus);
   const TUNE = [659.3, 784, 987.8, 784, 880, 698.5, 587.3, 698.5, 659.3, 523.3, 587.3, 493.9];
   let note = 0, showLevel = 0;
   setInterval(() => {
@@ -294,6 +303,13 @@ export function createSound(): Sound {
     thunder,
     choir,
     chime,
+    setVolumes(v) {
+      const now = ctx.currentTime;
+      master.gain.setTargetAtTime(0.9 * v.master, now, 0.05);
+      effectsBus.gain.setTargetAtTime(v.effects, now, 0.05);
+      ambienceBus.gain.setTargetAtTime(v.ambience, now, 0.05);
+      voicesBus.gain.setTargetAtTime(v.voices, now, 0.05);
+    },
     tap() {
       const d = ctx.createMediaStreamDestination();
       master.connect(d);

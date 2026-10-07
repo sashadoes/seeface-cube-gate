@@ -77,6 +77,8 @@ function nameSprite(nick: string) {
 export type Others = {
   group: THREE.Group;
   say: (id: string, text: string) => void;
+  /** settings: show nicknames / speech bubbles above people */
+  setShow: (names: boolean, chat: boolean) => void;
   emote: (id: string, kind: Emote) => void;
   update: (dt: number, t: number, px: number, pz: number) => { nearest: number; count: number };
 };
@@ -85,6 +87,7 @@ export function createOthers(presence: Presence): Others {
   const group = new THREE.Group();
   const glowTex = glowTexture();
   const views = new Map<string, View>();
+  let showNames = true, showChat = true;
 
   function viewFor(p: Peer): View {
     let v = views.get(p.id);
@@ -151,12 +154,12 @@ export function createOthers(presence: Presence): Others {
       }
       // names only readable up close, like in fog
       const d = Math.hypot(v.x - px, v.z - pz);
-      (v.label.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, (14 - d) / 6));
+      (v.label.material as THREE.SpriteMaterial).opacity = showNames ? Math.max(0, Math.min(1, (14 - d) / 6)) : 0;
       v.glow.scale.setScalar(0.9 + v.flare * 2.4);
       // speech
       if (v.bubble) {
         v.bubbleLife -= dt;
-        (v.bubble.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, v.bubbleLife)) * Math.max(0, Math.min(1, (24 - d) / 8));
+        (v.bubble.material as THREE.SpriteMaterial).opacity = showChat ? Math.max(0, Math.min(1, v.bubbleLife)) * Math.max(0, Math.min(1, (24 - d) / 8)) : 0;
         if (v.bubbleLife <= 0) {
           v.group.remove(v.bubble);
           v.bubble = null;
@@ -198,6 +201,10 @@ export function createOthers(presence: Presence): Others {
   return {
     group,
     update,
+    setShow(names, chat) {
+      showNames = names;
+      showChat = chat;
+    },
     say(id, text) {
       const v = views.get(id);
       if (!v) return;

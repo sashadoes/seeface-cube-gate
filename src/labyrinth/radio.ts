@@ -6,6 +6,8 @@ export type Radio = {
   /** 0 = silent, 1 = it's right behind you */
   set: (danger: number) => void;
   resume: () => void;
+  /** settings: 0–1 */
+  setVolume: (v: number) => void;
   /** a MediaStream of the static (for recording trailers) */
   tap: () => MediaStream;
 };
@@ -34,7 +36,8 @@ export function createRadio(): Radio {
   const master = ctx.createGain();
   master.gain.value = 0;
 
-  noise.connect(band).connect(crackle).connect(master).connect(ctx.destination);
+  const volume = ctx.createGain();
+  noise.connect(band).connect(crackle).connect(master).connect(volume).connect(ctx.destination);
   noise.start();
 
   let danger = 0;
@@ -59,6 +62,9 @@ export function createRadio(): Radio {
     },
     resume() {
       if (ctx.state !== "running") ctx.resume();
+    },
+    setVolume(v: number) {
+      volume.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
     },
     tap() {
       const d = ctx.createMediaStreamDestination();

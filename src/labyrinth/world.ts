@@ -23,6 +23,8 @@ export type World = {
   setWeather: (w: Weather) => void;
   nearestCube: (px: number, pz: number) => { mesh: THREE.Object3D; dist: number } | null;
   spinCube: (cube: THREE.Object3D) => void;
+  /** settings: lightning flashes on/off */
+  setFlashes: (on: boolean) => void;
   /** hide the ceiling (under the open sky) */
   setCeiling: (on: boolean) => void;
   /** 0–1: how wet the floor is (shiny, reflective) */
@@ -57,6 +59,7 @@ export function createWorld(): World {
   scene.background = new THREE.Color(0x0c0c0b);
   let edgeFog = 0;
   let wet = 0;
+  let flashesOn = true;
   let openSky = false; // under the open sky: night instead of the corridor fog
   scene.fog = new THREE.FogExp2(0x0c0c0b, 0.06);
 
@@ -336,7 +339,7 @@ export function createWorld(): World {
       nextBolt = t * 1000 + 4000 + Math.random() * 8000;
     }
     flash = Math.max(0, flash - dt * 2.5);
-    flashLight.intensity = flash * 2.5 * (Math.random() < 0.3 ? 0.4 : 1);
+    flashLight.intensity = flashesOn ? flash * 2.5 * (Math.random() < 0.3 ? 0.4 : 1) : 0;
   }
 
   function nearestCube(px: number, pz: number) {
@@ -364,7 +367,7 @@ export function createWorld(): World {
     depthLevel = depth;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => (wet = w), setCeiling: (on: boolean) => {
+  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => (wet = w), setFlashes: (on: boolean) => (flashesOn = on), setCeiling: (on: boolean) => {
     ceil.visible = on;
     panels.visible = on;
     openSky = !on;

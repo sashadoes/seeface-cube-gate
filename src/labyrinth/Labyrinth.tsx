@@ -45,6 +45,7 @@ import { createChampions, playerId } from "./champions";
 import { createAfterlife, ORDER_COST } from "./afterlife";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
+import { DEFAULTS, onSettings, setSettings, settings, type Settings } from "./settings";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
@@ -342,6 +343,19 @@ function Game({ nick }: { nick: string }) {
     track("soul-saved");
   };
 
+  // settings (⚙ / Esc)
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tab, setTab] = useState<"sound" | "game" | "controls" | "graphics">("sound");
+  const [st, setSt] = useState<Settings>(() => settings());
+  useEffect(() => onSettings(setSt), []);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && (e.target as HTMLElement)?.tagName !== "INPUT") setSettingsOpen((o) => !o);
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
+
   // invite: a link, or a 6-second video of your game with your invite on it
   const [inviteMenu, setInviteMenu] = useState(false);
   const [clipState, setClipState] = useState<"" | "rec" | "ready">("");
@@ -447,7 +461,8 @@ function Game({ nick }: { nick: string }) {
     const el = host.current!;
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     // phones: lighter rendering so it stays smooth
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isPhone ? 1.25 : 1.5));
+    const pixelRatio = (q: Settings["quality"]) => (q === "low" ? 0.75 : q === "high" ? Math.min(window.devicePixelRatio, 2) : Math.min(window.devicePixelRatio, isPhone ? 1.25 : 1.5));
+    renderer.setPixelRatio(pixelRatio(settings().quality));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
@@ -908,7 +923,7 @@ function Game({ nick }: { nick: string }) {
         sound.thunder();
         el.classList.remove("scream");
         void el.offsetWidth;
-        el.classList.add("scream");
+        if (settings().shake) el.classList.add("scream");
       }
       if (d < 20) sayRef.current(`${from.nick} ${kind === "stare" ? "stares at you" : kind === "spin" ? "spins" : kind === "melt" ? "melts into the floor" : kind === "float" ? "floats" : "screams"}`);
     });
@@ -952,6 +967,18 @@ function Game({ nick }: { nick: string }) {
     });
     setTimeout(() => champions.report(nick, readBest()), 4000);
     let ritualT = 0;
+
+    // settings: volumes, graphics, what's shown
+    const sfx: [Howl, number][] = [[spinSfx, 0.5], [shardSfx, 0.6], [shiftSfx, 0.7], [caughtSfx, 0.8], [signalSfx, 0.35], [meetSfx, 0.5]];
+    const offSettings = onSettings((st) => {
+      sound.setVolumes(st);
+      radio.setVolume(st.radio * st.master);
+      sfx.forEach(([h, base]) => h.volume(base * st.effects * st.master));
+      renderer.setPixelRatio(pixelRatio(st.quality));
+      world.setFlashes(st.flashes);
+      others.setShow(st.showNames, st.showChat);
+      el.dataset.calm = st.flashes ? "" : "1";
+    });
 
     // deaths: rare when the labyrinth is quiet. With 6+ people inside it's deadly;
     // with fewer, only now and then (1 in 5), otherwise it hurts but you live.
@@ -1118,10 +1145,10 @@ function Game({ nick }: { nick: string }) {
       }
 
       const speedNow = Math.hypot(vel.x, vel.z);
-      const bobAmp = 0.025 + (speedNow / RUN) * 0.045;
+      const bobAmp = settings().cameraBob ? 0.025 + (speedNow / RUN) * 0.045 : 0;
       camera.position.set(
         pos.x,
-        EYE + jumpY - landDip + Math.sin(bob) * bobAmp + (lastDanger > 0.6 ? (Math.random() - 0.5) * 0.02 * lastDanger : 0),
+        EYE + jumpY - landDip + Math.sin(bob) * bobAmp + (lastDanger > 0.6 && settings().shake ? (Math.random() - 0.5) * 0.02 * lastDanger : 0),
         pos.z
       );
       // lean into turns and strafes
@@ -1131,7 +1158,7 @@ function Game({ nick }: { nick: string }) {
       lean += (-strafe * 0.012 - Math.max(-2, Math.min(2, turn)) * 0.015 - lean) * Math.min(1, dt * 6);
       camera.rotation.set(input.pitch, input.yaw, lean, "YXZ");
       // field of view opens up when you sprint
-      const fovTarget = FOV + (speedNow / RUN) * 10;
+      const fovTarget = settings().fov + (speedNow / RUN) * 10;
       if (Math.abs(camera.fov - fovTarget) > 0.05) {
         camera.fov += (fovTarget - camera.fov) * Math.min(1, dt * 5);
         camera.updateProjectionMatrix();
@@ -1627,6 +1654,7 @@ function Game({ nick }: { nick: string }) {
     raf = requestAnimationFrame(frame);
 
     return () => {
+      offSettings();
       clearInterval(rememberTimer);
       window.removeEventListener("pagehide", remember);
       document.removeEventListener("visibilitychange", rememberHidden);
@@ -1726,7 +1754,7 @@ function Game({ nick }: { nick: string }) {
           </button>
         </div>
       )}
-      {isPhone && moveHint && <div className="lab-hint">left thumb: walk + turn · push far to run · right side: look around</div>}
+      {isPhone && moveHint && st.showHints && <div className="lab-hint">left thumb: walk + turn · push far to run · right side: look around</div>}
       {stick.active && (
         <div className="lab-stick" style={{ left: stick.ox, top: stick.oy }}>
           <span style={{ transform: `translate(${stick.x * 34}px, ${stick.y * 34}px)` }} />
@@ -1915,6 +1943,130 @@ function Game({ nick }: { nick: string }) {
         </div>
       )}
 
+      <button className="lab-gear" onPointerDown={stop} onPointerUp={stop} onClick={() => setSettingsOpen(true)} aria-label="settings">
+        ⚙
+      </button>
+      {settingsOpen && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-tabs">
+              {(["sound", "game", "controls", "graphics"] as const).map((t) => (
+                <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <div className="lab-settings-body">
+              {tab === "sound" && (
+                <>
+                  {(
+                    [
+                      ["master", "master volume"],
+                      ["effects", "effects · steps, splashes, pickups"],
+                      ["ambience", "ambience · rain, wind, thunder"],
+                      ["voices", "voices · sirens, songs, choirs"],
+                      ["radio", "the radio · the Hollow's static"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <label key={k} className="slider">
+                      <span>{label}</span>
+                      <input type="range" min={0} max={1} step={0.05} value={st[k]} onChange={(e) => setSettings({ [k]: Number(e.target.value) })} />
+                      <i>{Math.round(st[k] * 100)}</i>
+                    </label>
+                  ))}
+                  <p className="note">the background music has its own switch, top left (♪ on / off).</p>
+                </>
+              )}
+              {tab === "game" && (
+                <>
+                  {(
+                    [
+                      ["showNames", "show names above people"],
+                      ["showChat", "show chat"],
+                      ["showHints", "show hints"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <label key={k} className="toggle">
+                      <span>{label}</span>
+                      <input type="checkbox" checked={st[k]} onChange={(e) => setSettings({ [k]: e.target.checked })} />
+                    </label>
+                  ))}
+                </>
+              )}
+              {tab === "controls" && (
+                <>
+                  <label className="slider">
+                    <span>look speed</span>
+                    <input type="range" min={0.3} max={2} step={0.05} value={st.lookSpeed} onChange={(e) => setSettings({ lookSpeed: Number(e.target.value) })} />
+                    <i>{st.lookSpeed.toFixed(2)}</i>
+                  </label>
+                  <label className="toggle">
+                    <span>invert look up/down</span>
+                    <input type="checkbox" checked={st.invertY} onChange={(e) => setSettings({ invertY: e.target.checked })} />
+                  </label>
+                  <label className="toggle">
+                    <span>phone stick turns you (off = side-steps)</span>
+                    <input type="checkbox" checked={st.stickSteers} onChange={(e) => setSettings({ stickSteers: e.target.checked })} />
+                  </label>
+                  <label className="toggle">
+                    <span>stick on the right side</span>
+                    <input type="checkbox" checked={st.stickSide === "right"} onChange={(e) => setSettings({ stickSide: e.target.checked ? "right" : "left" })} />
+                  </label>
+                  <div className="keys">
+                    <b>keyboard</b>
+                    <span>W A S D · move</span>
+                    <span>mouse drag / ← → · look</span>
+                    <span>shift · run</span>
+                    <span>space · jump</span>
+                    <span>E · spin a cube / order from a TV</span>
+                    <span>F · strike (with a knife)</span>
+                    <span>G · drop a relic</span>
+                    <span>P · snapshot</span>
+                    <span>T / enter · talk</span>
+                    <span>esc · settings</span>
+                  </div>
+                </>
+              )}
+              {tab === "graphics" && (
+                <>
+                  <label className="toggle">
+                    <span>quality</span>
+                    <select value={st.quality} onChange={(e) => setSettings({ quality: e.target.value as Settings["quality"] })}>
+                      <option value="low">low (fastest)</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high (sharpest)</option>
+                    </select>
+                  </label>
+                  <label className="slider">
+                    <span>field of view</span>
+                    <input type="range" min={60} max={90} step={1} value={st.fov} onChange={(e) => setSettings({ fov: Number(e.target.value) })} />
+                    <i>{st.fov}°</i>
+                  </label>
+                  {(
+                    [
+                      ["cameraBob", "camera bob when walking"],
+                      ["shake", "screen shake"],
+                      ["flashes", "lightning & bright flashes"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <label key={k} className="toggle">
+                      <span>{label}</span>
+                      <input type="checkbox" checked={st[k]} onChange={(e) => setSettings({ [k]: e.target.checked })} />
+                    </label>
+                  ))}
+                </>
+              )}
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setSettings(DEFAULTS)}>reset</button>
+              <button className="done" onClick={() => setSettingsOpen(false)}>
+                done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* today's quests */}
       <div className={"lab-quests" + (questsOpen ? " open" : "")} onPointerDown={stop} onPointerUp={stop}>
         <button className="lab-quests-chip" onClick={() => setQuestsOpen((o) => !o)}>
@@ -1942,7 +2094,7 @@ function Game({ nick }: { nick: string }) {
       )}
 
       {/* chat with strangers: what people near you said */}
-      <div className="lab-chat" onPointerDown={stop} onPointerUp={stop}>
+      <div className="lab-chat" style={st.showChat ? undefined : { display: "none" }} onPointerDown={stop} onPointerUp={stop}>
         {chat.map((l) => (
           <button
             key={l.key}

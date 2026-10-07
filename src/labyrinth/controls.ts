@@ -5,6 +5,8 @@
 //             half still drags to look. Walking straight-ish along a corridor gently lines
 //             the view up with it. Tap = spin a cube.
 
+import { settings } from "./settings";
+
 export type Input = {
   move: { x: number; z: number }; // x: strafe right, z: forward (-1..1)
   yaw: number;
@@ -61,7 +63,8 @@ export function createInput(target: HTMLElement): Input {
 
   target.addEventListener("pointerdown", (e) => {
     target.setPointerCapture(e.pointerId);
-    const touchStick = e.pointerType === "touch" && e.clientX < window.innerWidth / 2;
+    const left = e.clientX < window.innerWidth / 2;
+    const touchStick = e.pointerType === "touch" && (settings().stickSide === "left" ? left : !left);
     const p: Ptr = { id: e.pointerId, kind: touchStick ? "stick" : "look", sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), moved: false };
     ptrs.set(e.pointerId, p);
     if (touchStick) Object.assign(input.joystick, { active: true, ox: e.clientX, oy: e.clientY, x: 0, y: 0 });
@@ -72,9 +75,9 @@ export function createInput(target: HTMLElement): Input {
     if (!p) return;
     if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 8) p.moved = true;
     if (p.kind === "look") {
-      const k = e.pointerType === "touch" ? LOOK_TOUCH : LOOK;
+      const k = (e.pointerType === "touch" ? LOOK_TOUCH : LOOK) * settings().lookSpeed;
       input.yaw -= (e.clientX - p.lx) * k;
-      input.pitch -= (e.clientY - p.ly) * k;
+      input.pitch -= (e.clientY - p.ly) * k * (settings().invertY ? -1 : 1);
       clampPitch();
     } else {
       const R = 52;
@@ -115,9 +118,11 @@ export function createInput(target: HTMLElement): Input {
       // dead zone, then a smooth curve so small moves are gentle
       const jx = Math.abs(input.joystick.x) < 0.12 ? 0 : input.joystick.x;
       const jy = Math.abs(input.joystick.y) < 0.12 ? 0 : input.joystick.y;
-      // sideways steers (turns you), with only a little side-step
-      input.yaw -= jx * Math.abs(jx) * 2.6 * dt;
-      x += jx * 0.25;
+      // sideways steers (turns you), with only a little side-step; or classic side-step
+      if (settings().stickSteers) {
+        input.yaw -= jx * Math.abs(jx) * 2.6 * dt * settings().lookSpeed;
+        x += jx * 0.25;
+      } else x += jx;
       z -= jy;
       // corridor assist: when walking roughly along a corridor, line up with it
       if (-jy > 0.3 && Math.abs(jx) < 0.25) {
