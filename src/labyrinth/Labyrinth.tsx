@@ -41,6 +41,7 @@ import type { WeatherKind } from "../marks/weather";
 import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
 import { createHazards } from "./hazards";
+import { createAi, type AiResidents } from "./ai";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions } from "./places";
 import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
@@ -307,7 +308,7 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
 function Game({ nick }: { nick: string }) {
   const host = useRef<HTMLDivElement>(null);
   const wishRef = useRef<(k: WishKind | "room") => void>(() => {});
-  const mapRef = useRef<{ getPos: () => { x: number; z: number; yaw: number }; presence: Presence | null; wishList: () => { kind: string; x: number; z: number }[]; edge?: () => { radius: number; centre: { x: number; z: number } } } | null>(null);
+  const mapRef = useRef<{ getPos: () => { x: number; z: number; yaw: number }; presence: Presence | null; wishList: () => { kind: string; x: number; z: number }[]; edge?: () => { radius: number; centre: { x: number; z: number } }; ai?: () => { name: string; x: number; z: number }[] } | null>(null);
   const [wishOpen, setWishOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   // meeting someone from the map: who you're walking to, and messages like "x is coming to find you"
@@ -410,12 +411,17 @@ function Game({ nick }: { nick: string }) {
   const addLineRef = useRef(addLine);
   addLineRef.current = addLine;
   const lastHeard = useRef("");
+  const aiRef = useRef<AiResidents | null>(null);
+  const posRef = useRef({ x: 0, z: 0 });
   const sendChat = () => {
     const text = draft.trim();
     if (!text) return setChatOpen(false);
     if (presenceRef.current?.say(text)) {
       addLine({ id: "me", nick, text, mine: true });
       questRef.current("say");
+      // an AI resident nearby may answer (they're AI and say so)
+      const heard = aiRef.current?.hear(text, posRef.current.x, posRef.current.z);
+      if (heard) setTimeout(() => addLine({ id: `ai-${heard.name}`, nick: `◇ ${heard.name}`, text: heard.reply }), 1400);
       setDraft("");
       setChatOpen(false);
       track("chat-said");
@@ -861,6 +867,7 @@ function Game({ nick }: { nick: string }) {
       presence,
       wishList: () => wishes.list(),
       edge: () => edge.state(pos.x),
+      ai: () => aiRef.current?.list() ?? [],
     };
 
     // dev-only handle for debugging in the browser console
@@ -886,6 +893,7 @@ function Game({ nick }: { nick: string }) {
         queen,
         flood,
         gramos: () => gramos,
+        ai: () => ai,
       };
 
     const resize = () => {
@@ -997,6 +1005,9 @@ function Game({ nick }: { nick: string }) {
     });
 
     const hazards = createHazards(sound.ctx, sound.ambienceOut);
+    const ai = createAi();
+    aiRef.current = ai;
+    world.scene.add(ai.group);
     world.scene.add(hazards.group);
 
     // gramophones (music for everyone nearby) + the radio dial
@@ -1461,6 +1472,9 @@ function Game({ nick }: { nick: string }) {
       }
       if (!al.nearTV) tvHinted = false;
       gramos.update(pos.x, pos.z, t);
+      ai.update(dt, pos.x, pos.z);
+      posRef.current.x = pos.x;
+      posRef.current.z = pos.z;
       setListener();
       const gn = gramos.near(pos.x, pos.z);
       const tapNow = input.consumeTap();
@@ -1887,6 +1901,7 @@ function Game({ nick }: { nick: string }) {
       <div className={"lab-online" + (hud.met ? " met" : "")}>
         <span className="dot" />
         {hud.online}
+        <i className="ai"> · ◇ {aiRef.current?.count() ?? 6}</i>
       </div>
 
       {/* thumb controls (phones) + signal / invite (everyone) */}

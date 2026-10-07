@@ -1554,3 +1554,10 @@
 .labyrinth.plagued canvas {
   filter: sepia(calc(var(--plague) * 0.6)) hue-rotate(calc(var(--plague) * 60deg)) saturate(calc(1 + var(--plague))) blur(calc(var(--plague) * 1.2px));
 }
+
+.lab-online .ai {
+  font-style: normal;
+  font-size: 0.85em;
+  color: #9fe8ff;
+  opacity: 0.8;
+}

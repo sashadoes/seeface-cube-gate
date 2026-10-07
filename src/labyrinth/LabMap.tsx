@@ -13,6 +13,7 @@ type Source = {
   presence: Presence | null;
   wishList: () => { kind: string; x: number; z: number }[];
   edge?: () => { radius: number; centre: { x: number; z: number } };
+  ai?: () => { name: string; x: number; z: number }[];
 };
 
 const RADIUS = 9; // cells shown around you
@@ -99,6 +100,22 @@ export default function LabMap({ source, nick, onClose, onMeet, target }: { sour
         g.arc(sx(e.centre.x), sy(e.centre.z), e.radius * scale, 0, Math.PI * 2);
         g.stroke();
         g.setLineDash([]);
+      }
+
+      // AI residents: small diamonds (not people)
+      for (const a of source.ai?.() ?? []) {
+        const x = sx(a.x), y = sy(a.z);
+        if (x < 0 || x > W || y < 0 || y > H) continue;
+        g.save();
+        g.translate(x, y);
+        g.rotate(Math.PI / 4);
+        g.strokeStyle = "rgba(159,232,255,0.8)";
+        g.strokeRect(-4, -4, 8, 8);
+        g.restore();
+        g.fillStyle = "rgba(159,232,255,0.7)";
+        g.font = "italic 11px 'Times New Roman', serif";
+        g.textAlign = "center";
+        g.fillText(`${a.name} · ai`, x, y - 10);
       }
 
       // wishes
