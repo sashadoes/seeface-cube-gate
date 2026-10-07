@@ -20,7 +20,19 @@ export const PLACE_NAMES: Record<PlaceKind, string> = {
   museum: "the museum",
   market: "the supermarket",
   dark: "the dark room",
+  ritual: "the hall of champions",
 };
+
+// ------------------------------------------------------------------ champions (fed by champions.ts)
+export type ChampionRow = { id: string; nick: string; best: number };
+let champions: ChampionRow[] = [];
+let myId = "";
+const redraws = new Set<() => void>();
+export function setChampions(list: ChampionRow[], me: string) {
+  champions = list;
+  myId = me;
+  redraws.forEach((f) => f());
+}
 
 const L = PLACE * CELL; // 20 m
 const REGION = 7;
@@ -109,7 +121,7 @@ function rand(seed: number) {
 }
 
 type Spot = { x: number; y: number; z: number; color: number; intensity: number };
-type Built = { group: THREE.Group; kind: PlaceKind; I: number; J: number; spots: Spot[]; anim: ((t: number, dt: number) => void)[]; darkCube?: THREE.Object3D };
+type Built = { group: THREE.Group; kind: PlaceKind; I: number; J: number; spots: Spot[]; anim: ((t: number, dt: number) => void)[]; darkCube?: THREE.Object3D; cleanup?: () => void };
 
 // ------------------------------------------------------------------ the places
 function buildOpen(g: THREE.Group, b: Built, r: () => number) {
@@ -433,6 +445,157 @@ function buildDark(g: THREE.Group, b: Built) {
   });
 }
 
+function buildRitual(g: THREE.Group, b: Built) {
+  // dark stone floor with a gold circle around the altar
+  floorOf(g, 0x16141a, 0.6, 0.2);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.6, 2.8, 64), new THREE.MeshBasicMaterial({ color: 0xc9a24a, toneMapped: false }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(10, 0.03, 10);
+  g.add(ring);
+  // the altar and its fire
+  const stone = mat(0x2a2620, 0, 0, 0.8);
+  box(g, 2, 0.9, 2, 10, 0.45, 10, stone);
+  box(g, 2.2, 0.12, 2.2, 10, 0.96, 10, mat(0xc9a24a, 0x3a2a08, 0.6, 0.3));
+  const flames: THREE.Sprite[] = [];
+  for (let k = 0; k < 26; k++) {
+    const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: k % 3 ? 0xff9a3c : 0xffe08a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+    f.userData = { p: Math.random() * 10, r: Math.random() * 0.5 };
+    flames.push(f);
+    g.add(f);
+  }
+  // ten obelisks in a ring: each carries a champion; #1 is gold and tallest
+  const obelisks: { plate: THREE.Mesh; tex: THREE.CanvasTexture; ctx: CanvasRenderingContext2D; top: THREE.Mesh }[] = [];
+  for (let k = 0; k < 10; k++) {
+    const a = ((9 + 36 * k) * Math.PI) / 180;
+    const x = 10 + 6.5 * Math.cos(a), z = 10 + 6.5 * Math.sin(a);
+    const h = k === 0 ? 3.4 : 2.6 - k * 0.08;
+    const o = box(g, 0.6, h, 0.6, x, h / 2, z, k === 0 ? mat(0xc9a24a, 0x3a2a08, 0.5, 0.3) : mat(0x1c1a20, 0, 0, 0.5));
+    const top = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.5, 4), k === 0 ? mat(0xffe08a, 0xc98a20, 1.2, 0.3) : mat(0x3a3640, 0x1a1830, 0.5));
+    top.position.set(x, h + 0.25, z);
+    top.rotation.y = Math.PI / 4;
+    g.add(top);
+    void o;
+    const c = document.createElement("canvas");
+    c.width = 256;
+    c.height = 128;
+    const ctx = c.getContext("2d")!;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.75), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false, side: THREE.DoubleSide }));
+    plate.position.set(x, 1.5, z);
+    plate.lookAt(10, 1.5, 10); // faces the altar
+    plate.translateZ(0.32);
+    g.add(plate);
+    obelisks.push({ plate, tex, ctx, top });
+  }
+  // the billboard: a giant deco marquee rising above the walls, under the open sky
+  const bc = document.createElement("canvas");
+  bc.width = 1024;
+  bc.height = 1024;
+  const bctx = bc.getContext("2d")!;
+  const btex = new THREE.CanvasTexture(bc);
+  btex.colorSpace = THREE.SRGBColorSpace;
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), new THREE.MeshBasicMaterial({ map: btex, toneMapped: false, fog: false }));
+  board.position.set(10, 7.6, 1.2);
+  g.add(board);
+  box(g, 0.3, 12, 0.3, 5.3, 6, 1.1, mat(0x8a6a2a, 0, 0, 0.4));
+  box(g, 0.3, 12, 0.3, 14.7, 6, 1.1, mat(0x8a6a2a, 0, 0, 0.4));
+  const bulbs: THREE.Sprite[] = [];
+  for (let k = 0; k < 40; k++) {
+    const side = k % 4, f = Math.floor(k / 4) / 10;
+    const bx = side < 2 ? 5.7 + f * 8.6 : side === 2 ? 5.6 : 14.4, by = side === 0 ? 12.05 : side === 1 ? 3.15 : 3.2 + f * 8.8;
+    const bulb = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: 0xffe08a, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    bulb.scale.setScalar(0.35);
+    bulb.position.set(bx, by, 1.25);
+    bulbs.push(bulb);
+    g.add(bulb);
+  }
+
+  const draw = () => {
+    const c = bctx, W = 1024;
+    c.fillStyle = "#0b1418";
+    c.fillRect(0, 0, W, W);
+    c.strokeStyle = "#c9a24a";
+    c.lineWidth = 10;
+    c.strokeRect(20, 20, W - 40, W - 40);
+    c.lineWidth = 3;
+    c.strokeRect(44, 44, W - 88, W - 88);
+    // sunburst crown
+    c.save();
+    c.translate(W / 2, 170);
+    for (let k = 0; k < 18; k++) {
+      c.rotate(Math.PI / 18);
+      c.fillStyle = "rgba(201,162,74,0.25)";
+      c.fillRect(0, -4, 130, 8);
+    }
+    c.restore();
+    c.textAlign = "center";
+    c.fillStyle = "#f2c864";
+    c.font = "bold 74px 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif";
+    c.fillText("HALL OF CHAMPIONS", W / 2, 150);
+    c.fillStyle = "#c9a24a";
+    c.font = "italic 34px 'Times New Roman', serif";
+    c.fillText("the longest lives in the after life™", W / 2, 205);
+    for (let k = 0; k < 10; k++) {
+      const row = champions[k];
+      const y = 290 + k * 68;
+      c.fillStyle = k % 2 ? "rgba(255,255,255,0.03)" : "rgba(201,162,74,0.06)";
+      c.fillRect(80, y - 46, W - 160, 62);
+      const mine = row && row.id === myId;
+      c.textAlign = "left";
+      c.font = `${k === 0 ? "bold " : ""}44px 'Arial Narrow', Arial, sans-serif`;
+      c.fillStyle = k === 0 ? "#f2c864" : mine ? "#7affd8" : "#f2e6c8";
+      c.fillText(`${k + 1}.`, 100, y);
+      c.font = `italic ${k === 0 ? 48 : 42}px 'Times New Roman', serif`;
+      c.fillText(row ? row.nick + (mine ? "  ← you" : "") : "· · ·", 180, y, 520);
+      c.textAlign = "right";
+      c.font = "bold 40px 'Arial Narrow', Arial, sans-serif";
+      c.fillText(row ? `${row.best.toLocaleString()} m` : "", W - 100, y);
+    }
+    c.textAlign = "center";
+    c.font = "italic 28px 'Times New Roman', serif";
+    c.fillStyle = "#8f897c";
+    c.fillText("walk further than anyone, in one life, and your name goes up here", W / 2, W - 70, W - 140);
+    btex.needsUpdate = true;
+    // the obelisks
+    obelisks.forEach((o, k) => {
+      const row = champions[k];
+      const x = o.ctx;
+      x.clearRect(0, 0, 256, 128);
+      x.fillStyle = "rgba(0,0,0,0.7)";
+      x.fillRect(0, 0, 256, 128);
+      x.strokeStyle = "#c9a24a";
+      x.lineWidth = 3;
+      x.strokeRect(4, 4, 248, 120);
+      x.textAlign = "center";
+      x.fillStyle = k === 0 ? "#f2c864" : "#f2e6c8";
+      x.font = "bold 26px 'Arial Narrow', Arial, sans-serif";
+      x.fillText(`#${k + 1}`, 128, 36);
+      x.font = "italic 30px 'Times New Roman', serif";
+      x.fillText(row ? row.nick : "· · ·", 128, 74, 236);
+      x.font = "22px 'Arial Narrow', Arial, sans-serif";
+      x.fillStyle = "#c9a24a";
+      x.fillText(row ? `${row.best.toLocaleString()} m` : "", 128, 106);
+      o.tex.needsUpdate = true;
+    });
+  };
+  draw();
+  redraws.add(draw);
+  b.cleanup = () => redraws.delete(draw);
+
+  b.anim.push((t) => {
+    for (const f of flames) {
+      const u = f.userData, k = (t * 0.9 + u.p) % 1;
+      f.position.set(10 + Math.sin(u.p * 7) * u.r * (1 - k), 1.05 + k * 1.6, 10 + Math.cos(u.p * 5) * u.r * (1 - k));
+      f.scale.setScalar(0.5 * (1 - k) + 0.1);
+      (f.material as THREE.SpriteMaterial).opacity = 1 - k;
+    }
+    bulbs.forEach((bl, k) => ((bl.material as THREE.SpriteMaterial).opacity = Math.sin(t * 6 - k * 0.6) > -0.2 ? 1 : 0.25));
+    obelisks[0].top.rotation.y = t * 0.6;
+  });
+  b.spots.push({ x: 10, y: 2.4, z: 10, color: 0xffa040, intensity: 10 }, { x: 10, y: 3.2, z: 3, color: 0xffe08a, intensity: 6 });
+}
+
 const BUILD: Record<PlaceKind, (g: THREE.Group, b: Built, r: () => number) => void> = {
   open: buildOpen,
   theater: buildTheater,
@@ -440,6 +603,7 @@ const BUILD: Record<PlaceKind, (g: THREE.Group, b: Built, r: () => number) => vo
   museum: buildMuseum,
   market: buildMarket,
   dark: (g, b) => buildDark(g, b),
+  ritual: (g, b) => buildRitual(g, b),
 };
 
 // ------------------------------------------------------------------ the layer
@@ -476,6 +640,7 @@ export function createPlaces() {
     for (const [key, b] of built)
       if (!want.has(key)) {
         group.remove(b.group);
+        b.cleanup?.();
         b.group.traverse((o) => {
           const m = o as THREE.Mesh;
           m.geometry?.dispose();
@@ -523,7 +688,14 @@ export function createPlaces() {
           darkCubeNear = Math.hypot(wp.x - px, wp.z - pz) < 1.6;
         }
       }
-      return { inside: now, entered, darkCubeNear };
+      // the ritual: standing in the gold circle around the altar
+      let atAltar = false;
+      if (now?.kind === "ritual") {
+        const cx = (now.I * REGION + 1) * CELL + 10, cz = (now.J * REGION + 1) * CELL + 10;
+        const d = Math.hypot(cx - px, cz - pz);
+        atAltar = d < 2.9;
+      }
+      return { inside: now, entered, darkCubeNear, atAltar };
     },
   };
 }

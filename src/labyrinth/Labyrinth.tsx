@@ -40,7 +40,8 @@ import { free, spawn, roomOf, safeSpot as roomCentreOf, CELL } from "./maze";
 import type { WeatherKind } from "../marks/weather";
 import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
-import { createPlaces, PLACE_NAMES as PLACE_TITLES } from "./places";
+import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions } from "./places";
+import { createChampions, playerId } from "./champions";
 import { createAfterlife, ORDER_COST } from "./afterlife";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
@@ -938,6 +939,20 @@ function Game({ nick }: { nick: string }) {
       }
     };
 
+    // the champions: everyone's best run, shared; the top 10 go on the billboard
+    const champions = createChampions(presence);
+    let lastRank = 0;
+    champions.onChange((top) => {
+      setChampions(top, playerId());
+      const r = champions.rank();
+      if (r && r !== lastRank) {
+        if (lastRank === 0 || r < lastRank) sayRef.current(`your name is on the champions' billboard · #${r}`);
+        lastRank = r;
+      }
+    });
+    setTimeout(() => champions.report(nick, readBest()), 4000);
+    let ritualT = 0;
+
     // deaths: rare when the labyrinth is quiet. With 6+ people inside it's deadly;
     // with fewer, only now and then (1 in 5), otherwise it hurts but you live.
     const lethal = () => presence.online() >= 6 || Math.random() < 0.2;
@@ -1056,6 +1071,7 @@ function Game({ nick }: { nick: string }) {
         if (moved > 0) {
           metres += moved;
           quest("walk", moved);
+          if (Math.floor(metres / 10) !== Math.floor((metres - moved) / 10)) champions.report(nick, metres);
           if (metres > nextBloodAt) {
             nextBloodAt += 100;
             earn(1, "walk");
@@ -1509,7 +1525,31 @@ function Game({ nick }: { nick: string }) {
       // places: the open, the theater, the mall, the museum, the supermarket, the dark room
       const pl = places.update(pos.x, pos.z, t, dt);
       inPlace = pl.inside;
-      world.setCeiling(pl.inside?.kind !== "open");
+      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual");
+      // the ritual: stand in the gold circle by the altar for 5 seconds
+      if (pl.atAltar && alive) {
+        if (ritualT === 0) sayRef.current("stand still… the ritual has begun");
+        ritualT += dt;
+        if (ritualT > 5 && ritualT < 100) {
+          ritualT = 100; // done for this visit to the circle
+          const key = `seeface-ritual-${Math.floor(Date.now() / 86_400_000)}`;
+          let done = true;
+          try {
+            done = localStorage.getItem(key) === "1";
+            if (!done) localStorage.setItem(key, "1");
+          } catch {
+            // ignore
+          }
+          light = 100;
+          if (!done) {
+            earn(5, "ritual");
+            sayRef.current("the champions bless you · full light · +5 ◈");
+          } else sayRef.current("the champions bless you · full light");
+          sound.choir(true);
+          setTimeout(() => sound.choir(false), 4000);
+          track("ritual");
+        }
+      } else ritualT = 0;
       if (pl.entered) {
         const k = pl.entered.kind;
         sayRef.current(k === "dark" ? "you found the dark room" : PLACE_TITLES[k]);

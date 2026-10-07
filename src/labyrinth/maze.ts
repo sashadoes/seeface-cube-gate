@@ -28,7 +28,7 @@ export const rnd = hash;
 // around the entrance (so everyone finds them even when the labyrinth is
 // small); more are scattered further out. The dark room is secret: one door
 // only, disguised as a wall you can walk through.
-export type PlaceKind = "open" | "theater" | "mall" | "museum" | "market" | "dark";
+export type PlaceKind = "open" | "theater" | "mall" | "museum" | "market" | "dark" | "ritual";
 export const PLACE = 5; // cells per side (20 m)
 const NEAR_PLACES: Record<string, PlaceKind> = {
   "1,0": "museum",
@@ -37,6 +37,7 @@ const NEAR_PLACES: Record<string, PlaceKind> = {
   "0,-1": "mall",
   "1,1": "open",
   "-1,-1": "dark",
+  "-1,1": "ritual", // the hall of champions (there is only one)
 };
 const FAR_PLACES: PlaceKind[] = ["open", "theater", "mall", "museum", "market"];
 
@@ -164,6 +165,8 @@ const SOLID: Partial<Record<PlaceKind, [number, number, number, number][]>> = {
   ],
   // mall fountain
   mall: [[8.3, 8.3, 11.7, 11.7]],
+  // the hall of champions: the altar + a ring of 10 obelisks
+  ritual: [[9, 9, 11, 11], [16.12, 10.72, 16.72, 11.32], [14.30, 14.30, 14.90, 14.90], [10.72, 16.12, 11.32, 16.72], [6.75, 15.49, 7.35, 16.09], [3.91, 12.65, 4.51, 13.25], [3.28, 8.68, 3.88, 9.28], [5.10, 5.10, 5.70, 5.70], [8.68, 3.28, 9.28, 3.88], [12.65, 3.91, 13.25, 4.51], [15.49, 6.75, 16.09, 7.35]],
   // standing stones in the open
   open: [[5, 5, 6, 6], [14, 6, 15, 7], [9.5, 14, 10.5, 15]],
 };
