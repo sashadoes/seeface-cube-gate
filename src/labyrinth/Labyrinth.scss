@@ -2274,3 +2274,28 @@
     height: 76px;
   }
 }
+
+// ---------------------------------------------------------------- a character's shop (◇, npcs.ts): same look as the bag
+.lab-npc-item {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+
+  em {
+    font: italic 12px "Times New Roman", serif;
+    color: #8f897c;
+  }
+
+  > i {
+    font: italic 16px "Times New Roman", serif;
+    color: #fff6e2;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}

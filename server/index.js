@@ -24,6 +24,7 @@ import { MongoClient } from "mongodb";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import { npcReady, talk } from "./npc/talk.mjs";
 
 const scrypt = promisify(scryptCb);
 
@@ -248,7 +249,9 @@ app.use((_req, res, next) => {
   });
   next();
 });
-app.use(express.json({ limit: "2kb" }));
+// the characters' route carries a short conversation, so it gets a bigger body limit
+const json2kb = express.json({ limit: "2kb" });
+app.use((req, res, next) => (req.path === "/api/npc/talk" ? next() : json2kb(req, res, next)));
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -258,7 +261,20 @@ app.use(
   })
 );
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, storage: players ? "mongodb" : "file", instagram: igReady() }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, storage: players ? "mongodb" : "file", instagram: igReady(), npc: npcReady() }));
+
+// ------------------------------------------------------------------ the labyrinth's characters (◇, written by Claude)
+// 12 lines / minute per IP; NPC_DAILY_CAP caps the whole day (see npc/talk.mjs)
+const npcLimited = limiter(12, 60_000);
+app.post("/api/npc/talk", express.json({ limit: "8kb" }), async (req, res, next) => {
+  if (npcLimited(req.ip)) return res.status(429).json({ ok: false, error: "slow down" });
+  try {
+    const { status, data } = await talk(req.body);
+    res.status(status).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.post("/api/players", async (req, res) => {
   if (limited(req.ip)) return res.status(429).json({ ok: false, error: "slow down" });

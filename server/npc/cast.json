@@ -1,0 +1,109 @@
+{
+  "_": "The labyrinth's characters (◇). Shared by the API (server/npc/talk.mjs builds Claude prompts from it) and the game (src/labyrinth/npcs.ts places them and uses the sample lines when no API is configured). Prices are in ◈ (in-game only, never real money). 'does' is what an item REALLY does in the game: the prompts quote it, so never promise more than this.",
+  "characters": {
+    "watcher": {
+      "name": "the watcher",
+      "colour": "#b8c4cc",
+      "items": [],
+      "gifts": [],
+      "samples": [
+        "You took the left path again, {{username}}.",
+        "The wall behind you wasn't there yesterday.",
+        "Count the doors on your way back. Tell me if the number changes.",
+        "Someone in the Deep was asking about you.",
+        "I'll be here. I'm always here."
+      ]
+    },
+    "velvet": {
+      "name": "velvet",
+      "colour": "#ff5a7a",
+      "items": [
+        { "id": "vip_pass", "label": "VIP pass", "price": 50, "does": "a velvet VIP card that stays in the player's bag: a keepsake, proof Velvet noticed them" },
+        { "id": "private_booth", "label": "private booth pass", "price": 30, "does": "a booth token keepsake for the bag (there are no private rooms yet)" },
+        { "id": "midnight_invite", "label": "midnight invite", "price": 100, "does": "a black invitation card keepsake for the bag; the midnight party hasn't been announced yet" }
+      ],
+      "gifts": [],
+      "samples": [
+        "You look like trouble, {{username}}. Sit.",
+        "The good people don't come this far in. I like you already.",
+        "VIP isn't about money, darling. It's about who notices you. 50 ◈, though.",
+        "Midnight party. Black clothes. Don't tell the watcher."
+      ]
+    },
+    "nyx": {
+      "name": "nyx",
+      "colour": "#b98cff",
+      "items": [
+        { "id": "rumour", "label": "a rumour", "price": 10, "does": "Nyx whispers one rumour about the labyrinth right after the sale" },
+        { "id": "room_key_hint", "label": "a hidden-room hint", "price": 40, "does": "Nyx gives a true clue to the secret dark room right after the sale" },
+        { "id": "floor4_whisper", "label": "the fourth-level whisper", "price": 200, "does": "Nyx tells one fragment of the fourth-level mystery right after the sale" }
+      ],
+      "gifts": [],
+      "samples": [
+        "Secrets cost more than money. But I'll take money.",
+        "Come closer. No, closer. Walls have ears here. Literally.",
+        "I know which door is open tonight. Do you?",
+        "Velvet thinks she runs this place. Cute."
+      ]
+    },
+    "vend": {
+      "name": "vend-0",
+      "colour": "#7affd8",
+      "items": [
+        { "id": "energy_can", "label": "energy can", "price": 5, "does": "instantly refills the player's lantern and stamina" },
+        { "id": "mystery_capsule", "label": "mystery capsule", "price": 20, "does": "a random afterlife object goes into the player's bag" },
+        { "id": "rusty_key", "label": "rusty key", "price": 35, "does": "becomes one teleport card ⟡ (open the map to use it)" },
+        { "id": "neon_skin_pack", "label": "neon pack", "price": 60, "does": "a glowing neon sticker pack keepsake for the bag (outfits don't exist yet)" }
+      ],
+      "gifts": ["mystery_capsule"],
+      "samples": [
+        "INSERT COIN. OR SOUL. COIN PREFERRED.",
+        "MYSTERY CAPSULE: 20 ◈. CONTENTS: YES.",
+        "OUT OF STOCK. FOREVER. JUST KIDDING. 35 ◈.",
+        "THANK YOU FOR YOUR PURCHASE, {{username}}. I WILL REMEMBER THIS."
+      ]
+    },
+    "architect": {
+      "name": "the architect",
+      "colour": "#ffe6b8",
+      "items": [],
+      "gifts": ["lore_1", "lore_2", "lore_3", "lore_4", "lore_5", "lore_6", "lore_7", "lore_8", "lore_9", "lore_10"],
+      "samples": [
+        "Every wall here was built for a reason. Most of them were to keep something in.",
+        "Ask me about the first room. Nobody asks about the first room.",
+        "◈? You earn them walking, finding, surviving. You spend them. They disappear. Like everything here.",
+        "Lost? The light panels lead to rooms. Rooms are safe. ◎ is your map."
+      ]
+    },
+    "static": {
+      "name": "dr. static",
+      "colour": "#9fe8ff",
+      "items": [
+        { "id": "float_wav", "label": "FLOAT.wav", "price": 0, "does": "free first dose: a calm-ambient tape keepsake for the bag" },
+        { "id": "three_am", "label": "3AM.flac", "price": 15, "does": "a late-night tape keepsake for the bag" },
+        { "id": "panic_mp3", "label": "PANIC.mp3", "price": 25, "does": "a distorted dark tape keepsake for the bag" },
+        { "id": "ghost_vocal", "label": "GHOST_VOCAL", "price": 50, "does": "a sealed tape keepsake for the bag; the real unreleased vocal isn't loaded yet" },
+        { "id": "signal_pack", "label": "SIGNAL_PACK", "price": 120, "does": "a bundle-of-tapes keepsake for the bag" }
+      ],
+      "gifts": ["float_wav"],
+      "samples": [
+        "First tape's free. Second one... you'll come back. They always come back.",
+        "This one makes the walls breathe. Don't play it in the Deep.",
+        "New batch. Straight from the source. Keep it quiet.",
+        "You hear that hum? That's the labyrinth asking for more bass."
+      ]
+    }
+  },
+  "lore": [
+    "He was hired to build a place where the internet could hide its secrets.",
+    "The first room was built for one person who never came back.",
+    "The walls move because the labyrinth copies the minds of the people inside it.",
+    "The watcher was the first visitor. He never left.",
+    "Velvet arrived with the first party and turned a storage room into a lounge.",
+    "The vending machines were meant to be guards. Something went wrong.",
+    "Music keeps the walls calm. That is why the gramophones play.",
+    "The Deep was never finished. The plans were stolen.",
+    "A fourth level exists. He did not build it.",
+    "Maybe nobody built any of it. Maybe it built me."
+  ]
+}

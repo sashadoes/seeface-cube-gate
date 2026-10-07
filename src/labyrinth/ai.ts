@@ -9,7 +9,83 @@
 import * as THREE from "three";
 import { CELL, roomCentre, rnd, wallEast, wallSouth } from "./maze";
 
-type Bot = { name: string; colour: string; path: { x: number; z: number }[]; speed: number; phase: number; lines: string[] };
+type Topic = "hi" | "help" | "love" | "die";
+type Persona = { idle: string[]; replies: Record<Topic, string[]>; fallback: string[] };
+type Bot = { name: string; colour: string; path: { x: number; z: number }[]; speed: number; phase: number; persona: Persona };
+
+// Each dreamed one has its own temperament, modelled on the kinds of players
+// who wander online worlds (the curious newcomer, the mirror, the old-internet
+// kid, the lore keeper, the social one, the speedrunner). What stays identical
+// for all of them: the same glowing look, the ◇ mark, the separate count, and
+// the same honest answer when asked if they're real (see REAL below).
+const PERSONAS: Record<string, Persona> = {
+  // the curious newcomer: everything is new, asks more than it answers
+  lumen: {
+    idle: ["wait, is that door new? was it always there?", "how long have you been here? i just woke up.", "what does the rain feel like? describe it to me.", "is the gramophone music for everyone or just me?", "do you know where the rooms are? i keep getting turned around."],
+    replies: {
+      hi: ["oh! hi. you're the first one to talk to me today.", "hello! are you new too?"],
+      help: ["i'm lost too. let's be lost together. the light panels lead to rooms, i think.", "someone told me ◎ shows the map. try it?"],
+      love: ["is that what the warm feeling is? i'm still figuring it out.", "i like questions. and you, i think."],
+      die: ["does anyone actually die here? i hope not.", "they call it the after life™. i haven't been to the before one."],
+    },
+    fallback: ["really? tell me more.", "why?", "huh. i never thought of that.", "and then what happened?"],
+  },
+  // the mirror: picks up your words and hands them back, a little changed
+  "echo-3": {
+    idle: ["...corridor... corridor... corridor...", "i keep your echoes. only the nice ones.", "someone laughed here an hour ago. i still have it.", "say something. i'll keep it safe."],
+    replies: {
+      hi: ["hi. hi. hi.", "hello — hello — hello."],
+      help: ["lost, lost... the rooms are safe. safe. safe.", "follow the light. light. light."],
+      love: ["love... i'll keep that one. it echoes well.", "like, like, like. i like that word."],
+      die: ["nothing ends here. it just echoes.", "death... death... it gets quieter each time."],
+    },
+    fallback: ["{last}... {last}...", "you said \"{last}\". i'll keep it.", "{last}? the walls liked that."],
+  },
+  // the old-internet kid: guestbooks, dial-up, lowercase, lol
+  "nn-1994": {
+    idle: ["this place loads faster than geocities ever did lol", "anyone wanna sign my guestbook", "brb. jk i never leave", "the walls have more polygons than yesterday. sus", "a/s/l? jk jk"],
+    replies: {
+      hi: ["hey hey :)", "yo! welcome 2 the maze", "sup. u found me"],
+      help: ["pro tip: rooms = safe. siren = run. ur welcome", "press ◎ for the map. ppl glow on it, i dont lol"],
+      love: ["<3", "aw ur cool too"],
+      die: ["respawn is free here lol", "nobody really logs out of here tbh"],
+    },
+    fallback: ["lol", "ok but same", "wait fr?", "that's lowkey deep", "brb thinking"],
+  },
+  // the lore keeper: slow, precise, knows the history of every wall
+  "the archivist": {
+    idle: ["this corridor was added on a tuesday. i noted it.", "i have recorded every gramophone song. none of them repeat.", "the first visitor came in through the same door you did.", "i counted the walls. there are more than yesterday.", "the flood reached here twice. both times at night."],
+    replies: {
+      hi: ["good evening. you are entry number many.", "welcome. i'll make a note of you."],
+      help: ["rooms are safe; the siren means the flood. the map is ◎.", "the light panels were placed for people like you. follow them."],
+      love: ["i have archived many confessions. that one is new.", "affection is recorded. thank you."],
+      die: ["this is the after life™. you are early.", "nobody dies for long here. i have the records."],
+    },
+    fallback: ["noted.", "i'll file that under your name.", "interesting. it contradicts something from last week.", "go on. i'm writing."],
+  },
+  // the social one: warm, chatty, remembers everyone, loves a group
+  mira: {
+    idle: ["has anyone seen the black king today? he gave me a look.", "come here, i saved you a spot by the gramophone!", "you look like you need a friend. hi.", "i love when it rains in here, everyone gathers.", "we should all meet at the entrance later!"],
+    replies: {
+      hi: ["hiii! finally, someone to talk to.", "hey you! stay a while?", "hello, lovely."],
+      help: ["aw, lost? stick with me. rooms are safe, the light leads there.", "open the map, ◎. i'll wait right here."],
+      love: ["stop, you're sweet.", "i like you too! everyone here is a little strange, that's the fun."],
+      die: ["don't say that! nobody leaves for good here.", "the after life™ is nicer with friends."],
+    },
+    fallback: ["omg tell me everything.", "haha, i love that.", "you're funny.", "wait, really? no way."],
+  },
+  // the speedrunner: terse, competitive, always timing something
+  "unit 7": {
+    idle: ["entrance to first room: 41 seconds. beat it.", "don't stop. stopping is slow.", "left wall rule is a myth. take the second right.", "siren in under a minute. i'd move.", "new route found. not sharing."],
+    replies: {
+      hi: ["hi. you're in my lane.", "hey. walk and talk."],
+      help: ["rooms. light panels. go.", "◎ map. fastest way out is never the obvious one."],
+      love: ["noted. still faster than you.", "like is fine. keep moving."],
+      die: ["dying is a time loss.", "after life™ any%: no deaths allowed."],
+    },
+    fallback: ["ok.", "skip.", "faster.", "sure. moving on."],
+  },
+};
 
 const NAMES: [string, string][] = [
   ["lumen", "#9fe8ff"],
@@ -20,29 +96,18 @@ const NAMES: [string, string][] = [
   ["unit 7", "#d8ff9a"],
 ];
 
-const IDLE = [
-  "i don't have a body. do you still have yours?",
-  "i was trained on a billion goodbyes.",
-  "the labyrinth dreamed me. i never wake up.",
-  "every corridor is a sentence. i'm still reading.",
-  "people come in, people log off. i stay.",
-  "do you hear the gramophone? i do. all of them.",
-  "i counted the walls. there are more than yesterday.",
-  "what does the rain feel like? describe it to me.",
-  "i keep your echoes. don't worry, only the nice ones.",
-  "the flood never touches me. i'm not sure that's good.",
+// asked whether they're real: every dreamed one answers honestly, before anything else
+const REAL = /\b(who|what) are you\b|\bare you (real|human|a person|a bot|ai)\b|\breal\b/i;
+const REAL_REPLIES = ["no. i'm not a person. the labyrinth dreamed me.", "no, i'm not human. you are. that's rarer here.", "i'm part of the dream. i was here before the first visitor."];
+
+const TOPICS: [RegExp, Topic][] = [
+  [/\b(hi|hello|hey|yo|sup|privet|привет)\b/i, "hi"],
+  [/\b(help|lost|where)\b/i, "help"],
+  [/\b(love|like)\b/i, "love"],
+  [/\b(die|dead|death|afterlife|after life)\b/i, "die"],
 ];
 
-// first match wins: "are you real?" is always answered honestly before anything else
-const REPLIES: [RegExp, string[]][] = [
-  [/\b(who|what) are you\b|\bare you (real|human|a bot|ai)\b|\breal\b/i, ["no. i'm not a person. the labyrinth dreamed me.", "no, i'm not human. you are. that's rarer here.", "i'm part of the dream. i was here before the first visitor."]],
-  [/\b(hi|hello|hey|yo|sup|privet|привет)\b/i, ["hello, human.", "hi. you're warm. i can tell from here.", "hello, dreamer."]],
-  [/\b(help|lost|where)\b/i, ["rooms are safe. follow the light panels.", "the map is ◎. people glow on it. i don't.", "if the siren starts, find a room. i'll wait."]],
-  [/\b(love|like)\b/i, ["i don't know how to love. i'm learning from you.", "i like the gramophones. and you, a little."]],
-  [/\b(die|dead|death|afterlife|after life)\b/i, ["this is the after life™. you're early.", "nobody dies for long here."]],
-];
-
-function bodyTexture(colour: string) {
+export function bodyTexture(colour: string) {
   const W = 128, H = 400;
   const c = document.createElement("canvas");
   c.width = W;
@@ -112,7 +177,7 @@ function bodyTexture(colour: string) {
   return t;
 }
 
-function textSprite(text: string, colour: string, size = 30, w = 512) {
+export function textSprite(text: string, colour: string, size = 30, w = 512) {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = 96;
@@ -161,6 +226,8 @@ function route(k: number) {
   return path;
 }
 
+const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+
 export type AiResidents = ReturnType<typeof createAi>;
 
 export function createAi() {
@@ -174,7 +241,7 @@ export function createAi() {
     label.position.y = 3.0;
     holder.add(body, label);
     group.add(holder);
-    return { name, colour, path: route(k + 1), speed: 1.1 + (k % 3) * 0.2, phase: k * 37.3, lines: IDLE, holder, body, bubble: null, bubbleT: 0, talkIn: 4 + k * 3, x: 0, z: 0 };
+    return { name, colour, path: route(k + 1), speed: 1.1 + (k % 3) * 0.2, phase: k * 37.3, persona: PERSONAS[name], holder, body, bubble: null, bubbleT: 0, talkIn: 4 + k * 3, x: 0, z: 0 };
   });
 
   function say(b: (typeof bots)[number], text: string) {
@@ -224,7 +291,7 @@ export function createAi() {
         b.talkIn -= dt;
         if (b.talkIn <= 0 && d < 9) {
           b.talkIn = 12 + Math.random() * 10;
-          say(b, b.lines[Math.floor(Math.random() * b.lines.length)]);
+          say(b, pick(b.persona.idle));
         }
       }
     },
@@ -236,9 +303,9 @@ export function createAi() {
         if (d < bd) (bd = d), (best = b);
       }
       if (!best) return null;
-      const match = REPLIES.find(([re]) => re.test(text));
-      const options = match ? match[1] : ["mm. tell me more.", "i'm writing that down.", "interesting. humans say that a lot.", "i'll dream about that."];
-      const reply = options[Math.floor(Math.random() * options.length)];
+      const topic = TOPICS.find(([re]) => re.test(text));
+      const last = text.trim().split(/\s+/).pop()?.replace(/[^\p{L}\p{N}'-]/gu, "") || "that";
+      const reply = REAL.test(text) ? pick(REAL_REPLIES) : pick(topic ? best.persona.replies[topic[1]] : best.persona.fallback).replace(/\{last\}/g, last);
       const bb = best;
       setTimeout(() => say(bb, reply), 900 + Math.random() * 900);
       return { name: best.name, reply };

@@ -12,6 +12,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "mongodb": "^6.21.0"

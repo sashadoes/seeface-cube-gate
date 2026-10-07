@@ -45,6 +45,7 @@ import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
 import { createHazards } from "./hazards";
 import { createAi, type AiResidents } from "./ai";
+import { NPC_ITEMS, brokeLine, createNpcs, keepsakes, lorePages, LORE, npcName, own, shopOf, type NpcId, type NpcReply, type Npcs } from "./npcs";
 import { createPosts, shrink, wallAhead, type Post } from "./posts";
 import { createShip } from "./ship";
 import { createNotes, type Note } from "./notes";
@@ -442,6 +443,9 @@ function Game({ nick }: { nick: string }) {
     };
   }, []);
   const bagCount = Object.values(bag).reduce((a, b) => a + (b ?? 0), 0);
+  // keepsakes and lore pages from the characters (◇)
+  const [kept, setKept] = useState(() => ({ items: keepsakes(), pages: lorePages() }));
+  const refreshKept = () => setKept({ items: keepsakes(), pages: lorePages() });
 
   // daily quests (same three for everyone today)
   const questsRef = useRef<ReturnType<typeof createQuests> | null>(null);
@@ -501,6 +505,21 @@ function Game({ nick }: { nick: string }) {
   addLineRef.current = addLine;
   const lastHeard = useRef("");
   const aiRef = useRef<AiResidents | null>(null);
+  // the characters (◇ the watcher, velvet, nyx, vend-0, the architect, dr. static)
+  const npcRef = useRef<Npcs | null>(null);
+  const [shop, setShop] = useState<NpcId | null>(null);
+  const npcBuyRef = useRef<(id: NpcId, item: string) => void>(() => {});
+  const npcGiveRef = useRef<(item: string) => void>(() => {});
+  const npcCtx = () => ({ username: nick, place: whereName(posRef.current.x, posRef.current.z), coins: readBlood() });
+  const npcReply = (r: NpcReply | null) => {
+    if (!r) return;
+    addLineRef.current({ id: `npc-${r.npc}`, nick: `◇ ${r.name}`, text: r.say });
+    if (r.action === "open_shop") setShop(r.npc);
+    if (r.action === "give_item" && r.item) npcGiveRef.current(r.item);
+    track(`npc-${r.npc}-${r.action}`);
+  };
+  const npcReplyRef = useRef(npcReply);
+  npcReplyRef.current = npcReply;
   // the open market
   const marketRef = useRef<ReturnType<typeof createMarket> | null>(null);
   const [atMarket, setAtMarket] = useState(false);
@@ -559,9 +578,15 @@ function Game({ nick }: { nick: string }) {
     if (presenceRef.current?.say(text)) {
       addLine({ id: "me", nick, text, mine: true });
       questRef.current("say");
-      // one of the dreamed ones (◇) nearby may answer (never claiming to be a person)
-      const heard = aiRef.current?.hear(text, posRef.current.x, posRef.current.z);
-      if (heard) setTimeout(() => addLine({ id: `ai-${heard.name}`, nick: `◇ ${heard.name}`, text: heard.reply }), 1400);
+      // a character (◇) within 7 m answers; otherwise one of the dreamed ones nearby may
+      // (neither ever claims to be a person)
+      const here = posRef.current;
+      const who = npcRef.current?.near(here.x, here.z);
+      if (who) void npcRef.current!.talk(who, text, npcCtx(), here.x, here.z).then((r) => npcReplyRef.current(r));
+      else {
+        const heard = aiRef.current?.hear(text, here.x, here.z);
+        if (heard) setTimeout(() => addLine({ id: `ai-${heard.name}`, nick: `◇ ${heard.name}`, text: heard.reply }), 1400);
+      }
       if (said === undefined) setDraft("");
       chatInput.current?.focus(); // stay in the conversation
       track("chat-said");
@@ -1059,7 +1084,7 @@ function Game({ nick }: { nick: string }) {
       presence,
       wishList: () => wishes.list(),
       edge: () => edge.state(pos.x),
-      ai: () => aiRef.current?.list() ?? [],
+      ai: () => [...(aiRef.current?.list() ?? []), ...(npcRef.current?.list() ?? [])],
     };
 
     // dev-only handle for debugging in the browser console
@@ -1086,6 +1111,7 @@ function Game({ nick }: { nick: string }) {
         flood,
         gramos: () => gramos,
         ai: () => ai,
+        npcs: () => npcs,
         perf,
       };
 
@@ -1246,6 +1272,36 @@ function Game({ nick }: { nick: string }) {
     const ai = createAi();
     aiRef.current = ai;
     world.scene.add(ai.group);
+    const npcs = createNpcs();
+    npcRef.current = npcs;
+    world.scene.add(npcs.group);
+    // what the characters give: lore pages, a free tape, an "accidental" capsule
+    npcGiveRef.current = (item) => {
+      if (item === "mystery_capsule") addItem(randomItem(1));
+      else if (!item.startsWith("lore_")) own(item);
+      sound.chime();
+      refreshKept();
+      track(`npc-gift-${item}`);
+    };
+    // buying from a character's shop (◈ only, never real money)
+    npcBuyRef.current = (id, item) => {
+      const it = shopOf(id).find((i) => i.id === item);
+      if (!it || (keepsakes().includes(item) && !["energy_can", "mystery_capsule", "rusty_key"].includes(item))) return;
+      if (blood < it.price) {
+        npcs.say(id, brokeLine(id), pos.x, pos.z);
+        addLineRef.current({ id: `npc-${id}`, nick: `◇ ${npcName(id)}`, text: brokeLine(id) });
+        return;
+      }
+      blood = addBlood(-it.price);
+      if (item === "energy_can") (light = 100), (stamina = 100);
+      else if (item === "mystery_capsule") addItem(randomItem(1));
+      else if (item === "rusty_key") addCards(1);
+      else own(item);
+      sound.chime();
+      refreshKept();
+      track(`npc-buy-${item}`);
+      void npcs.bought(id, item, { username: nick, place: whereName(pos.x, pos.z), coins: blood }, pos.x, pos.z).then((r) => npcReplyRef.current(r));
+    };
     world.scene.add(hazards.group);
 
     // gramophones (music for everyone nearby) + the radio dial
@@ -1804,6 +1860,7 @@ function Game({ nick }: { nick: string }) {
       bignord.update(pos.x, pos.z);
       gramos.update(pos.x, pos.z, t);
       ai.update(dt, pos.x, pos.z);
+      npcs.update(dt, pos.x, pos.z);
       posts.update(pos.x, pos.z);
       notes.update(pos.x, pos.z, t);
       ship.update(pos.x, pos.z, t);
@@ -2281,7 +2338,7 @@ function Game({ nick }: { nick: string }) {
       <div className={"lab-online" + (hud.met ? " met" : "")}>
         <span className="dot" />
         {hud.online}
-        <i className="ai"> · ◇ {aiRef.current?.count() ?? 6}</i>
+        <i className="ai"> · ◇ {(aiRef.current?.count() ?? 6) + (npcRef.current?.count() ?? 0)}</i>
       </div>
 
       {/* thumb controls (phones) + signal / invite (everyone) */}
@@ -2694,10 +2751,30 @@ function Game({ nick }: { nick: string }) {
         </div>
       )}
 
+      {shop && (
+        <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-bag-title">◇ {npcName(shop)}</div>
+          <div className="lab-bag-grid">
+            {shopOf(shop).map((it) => {
+              const got = kept.items.includes(it.id) && !["energy_can", "mystery_capsule", "rusty_key"].includes(it.id);
+              return (
+                <button key={it.id} className="lab-bag-item lab-npc-item" disabled={got} aria-label={`${it.label} · ${it.price ? `◈ ${it.price}` : "free"}`} onClick={() => npcBuyRef.current(shop, it.id)}>
+                  <b>{it.label}</b>
+                  <em>{it.does}</em>
+                  <i>{got ? "✓" : it.price ? `◈ ${it.price}` : "free"}</i>
+                </button>
+              );
+            })}
+          </div>
+          <button className="lab-wish-close" onClick={() => setShop(null)} aria-label={tr("close")}>
+            ×
+          </button>
+        </div>
+      )}
       {bagOpen && (
         <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
           <div className="lab-bag-title">{tr("your afterlife objects")} · {bagCount}</div>
-          {bagCount === 0 && <div className="lab-bag-empty">{tr("nothing yet. pick up relics, find treasures, or order from an After Life™ TV.")}</div>}
+          {bagCount === 0 && !kept.items.length && !kept.pages && <div className="lab-bag-empty">{tr("nothing yet. pick up relics, find treasures, or order from an After Life™ TV.")}</div>}
           <div className="lab-bag-grid">
             {(Object.keys(ITEMS) as ItemId[])
               .filter((id) => bag[id])
@@ -2716,6 +2793,28 @@ function Game({ nick }: { nick: string }) {
                     {tr(ITEMS[id].name)} {bag[id]! > 1 && <i>×{bag[id]}</i>}
                   </b>
                   <em>{tr(ITEMS[id].blurb)}</em>
+                </div>
+              ))}
+            {kept.pages > 0 && (
+              <div className="lab-bag-item r2" title={LORE.slice(0, kept.pages).join("\n")}>
+                <div className="pic">
+                  <span>✎</span>
+                </div>
+                <b>
+                  the architect's pages <i>{kept.pages}/{LORE.length}</i>
+                </b>
+                <em>{LORE[kept.pages - 1]}</em>
+              </div>
+            )}
+            {kept.items
+              .filter((id) => NPC_ITEMS[id])
+              .map((id) => (
+                <div key={id} className="lab-bag-item r1">
+                  <div className="pic">
+                    <span>◇</span>
+                  </div>
+                  <b>{NPC_ITEMS[id].label}</b>
+                  <em>from {npcName(NPC_ITEMS[id].from)}</em>
                 </div>
               ))}
           </div>
