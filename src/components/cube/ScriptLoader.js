@@ -1,28 +1,5 @@
-const scripts = [
-//  "https://cdnjs.cloudflare.com/ajax/libs/p5.js/2.0.5/p5.min.js",
-  "https://cdn.jsdelivr.net/npm/unmute@0.1.3/build/unmute.min.js",
-];
-
-scripts.forEach((el) => {
-  const script = document.createElement("script");
-  // use local file
-  // script.src = 'script.js';
-  script.src = el;
-  script.async = true;
-  script.crossorigin = "anonymous";
-  script.referrerpolicy = "no-referrer";
-  // make code in script to be treated as JavaScript module
-  // script.type = 'module';
-  script.onload = () => {
-    console.log("Script loaded successfuly" + el);
-  };
-  script.onerror = (e) => {
-    console.log("Error occurred while loading script ");
-  };
-  document.body.appendChild(script);
-});
-
-
+// iOS audio unlock. A pinned copy of unmute@0.1.3 is inlined below; it used to be
+// fetched from a CDN at runtime too, which let a third party run code on the page.
 
 // unmute 
 

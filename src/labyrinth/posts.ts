@@ -219,6 +219,8 @@ export function createPosts(presence: Presence, myNick: () => string) {
         }
       }
     },
+    /** approved posts only (never someone's pending one), oldest first: shown around the world too */
+    approvedArt: () => [...posts.values()].filter((p) => approved.has(p.id)).sort((a, b) => a.t - b.t),
     /** for the owner's moderation page */
     all: () => [...posts.values()],
   };

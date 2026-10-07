@@ -72,8 +72,14 @@ export type Presence = {
   /** weird interactions: stare, spin, melt, float, scream */
   emote: (kind: Emote) => void;
   onEmote: (fn: (from: Peer, kind: Emote) => void) => void;
+  /** tell everyone you teleported (not sent when travelling incognito) */
+  teleported: (from: { x: number; z: number }, to: { x: number; z: number }, nick: string) => void;
+  onTeleport: (fn: (t: Teleport) => void) => void;
   close: () => void;
 };
+
+/** someone used a teleport card: where they left from and where they arrived */
+export type Teleport = { id: string; nick: string; fx: number; fz: number; tx: number; tz: number };
 
 const finite = (n: unknown, lim = 1e7) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) < lim;
 
@@ -88,6 +94,8 @@ export function createPresence(myId?: string): Presence {
   const callFns: ((from: Peer) => void)[] = [];
   const sayFns: ((from: Peer, text: string) => void)[] = [];
   const emoteFns: ((from: Peer, kind: Emote) => void)[] = [];
+  const tpFns: ((t: Teleport) => void)[] = [];
+  let lastTp = 0;
   let lastSay = 0, lastEmote = 0;
   let lastCall = 0;
   let client: MqttClient | null = null;
@@ -107,7 +115,7 @@ export function createPresence(myId?: string): Presence {
     client.on("connect", () => {
       subscribedAreas = new Set();
       lastArea = "";
-      client!.subscribe([`${ROOT}/where/+`, `${ROOT}/sig/+`, `${ROOT}/bye/+`, `${ROOT}/world/#`, `${ROOT}/hit/${me}`, `${ROOT}/kill/${me}`, `${ROOT}/call/${me}`, `${ROOT}/say/+`, `${ROOT}/emo/+`]);
+      client!.subscribe([`${ROOT}/where/+`, `${ROOT}/sig/+`, `${ROOT}/bye/+`, `${ROOT}/world/#`, `${ROOT}/hit/${me}`, `${ROOT}/kill/${me}`, `${ROOT}/call/${me}`, `${ROOT}/say/+`, `${ROOT}/emo/+`, `${ROOT}/tp/+`]);
     });
     client.on("error", () => {
       // try the next relay
@@ -137,6 +145,20 @@ export function createPresence(myId?: string): Presence {
             if (text) sayFns.forEach((f) => f(from, text));
           }
           if (parts[3] === "emo" && (EMOTES as readonly string[]).includes(d.k)) emoteFns.forEach((f) => f(from, d.k));
+        } catch {
+          // ignore garbage
+        }
+        return;
+      }
+      if (parts[3] === "tp") {
+        const id = parts[4];
+        if (!id || id === me || id.length > 16 || payload.length > 200) return;
+        try {
+          const d = JSON.parse(payload.toString());
+          if (![d.fx, d.fz, d.tx, d.tz].every((n) => finite(n))) return;
+          // the nickname is checked again here: never trust what another client sends
+          const nick = cleanNick(d.n) ?? "wanderer";
+          tpFns.forEach((f) => f({ id, nick, fx: d.fx, fz: d.fz, tx: d.tx, tz: d.tz }));
         } catch {
           // ignore garbage
         }
@@ -296,6 +318,15 @@ export function createPresence(myId?: string): Presence {
     },
     onEmote(fn) {
       emoteFns.push(fn);
+    },
+    teleported(from, to, nick) {
+      // at most one announcement every 3 s
+      if (Date.now() - lastTp < 3000) return;
+      lastTp = Date.now();
+      client?.publish(`${ROOT}/tp/${me}`, JSON.stringify({ fx: Math.round(from.x), fz: Math.round(from.z), tx: Math.round(to.x), tz: Math.round(to.z), n: nick }));
+    },
+    onTeleport(fn) {
+      tpFns.push(fn);
     },
     publishWorld(path, data) {
       client?.publish(`${ROOT}/world/${path}`, JSON.stringify(data), { retain: true, qos: 1 });

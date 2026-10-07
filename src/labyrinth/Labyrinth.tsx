@@ -22,7 +22,8 @@ import { cleanNick, savedNick, saveNick } from "./nick";
 import { apiReady, registerPlayer } from "../api";
 import { noteLevel, noteRun, readProgress } from "../progress";
 import { accountsReady, currentAccount, deleteAccount, finishInstagram, instagramReady, instagramUrl, login, logout, refresh, register, type Account, type AuthError } from "../account";
-import LabMap from "./LabMap";
+import LabMap, { type MapSource, type Trail } from "./LabMap";
+import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, TELEPORT_COST } from "./cards";
 import { onOnline } from "../online";
 import { createProps } from "./props";
 import { createRifts } from "./rifts";
@@ -47,6 +48,8 @@ import { createShip } from "./ship";
 import { createNotes, type Note } from "./notes";
 import { createFx } from "./fx";
 import { myVibe, trackVibe } from "./vibes";
+import { createImmersive } from "./immersive";
+import { LANGS, lang, setLang, t as tr, useLang } from "../i18n";
 import { createMarket, type Listing } from "./market";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions, setStalls } from "./places";
 import { createChampions, playerId } from "./champions";
@@ -92,12 +95,27 @@ function readBest() {
 /** Every player picks a nickname before entering. */
 /** A nickname is mandatory on every entry (pre-filled with the last one). */
 export default function Labyrinth() {
+  useLang();
   const [nick, setNick] = useState<string | null>(null);
   if (!nick) return <NickGate onDone={setNick} />;
   return <Game nick={nick} />;
 }
 
+/** the interface language (the world itself stays as it is) */
+function LangPicker() {
+  return (
+    <select className="lab-lang" value={lang()} onChange={(e) => void setLang(e.target.value)} aria-label="language">
+      {LANGS.map((l) => (
+        <option key={l.code} value={l.code}>
+          {l.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function NickGate({ onDone }: { onDone: (n: string) => void }) {
+  useLang();
   // coming back? say so, and say where they'll continue
   const [back] = useState(() => (new URLSearchParams(location.search).get("with") ? null : readResume()));
   // default for newcomers: face_ + 4 random digits (e.g. face_2492)
@@ -194,7 +212,7 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
       <img src="/imgs/seeface-logo-transparent.png" alt="seeface1" />
       {back && savedNick() && (
         <div className="lab-gate-back">
-          welcome back. you were in {back.place}, {back.metres} m in.
+          {tr("welcome back. you were in {place}, {metres} m in.", { place: tr(back.place), metres: back.metres })}
         </div>
       )}
       <form onSubmit={enter} className={bad ? "bad" : ""}>
@@ -203,25 +221,25 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           value={v}
           onChange={(e) => setV(e.target.value)}
           readOnly={!!account}
-          placeholder="your name in the labyrinth"
+          placeholder={tr("your name in the labyrinth")}
           maxLength={16}
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
           enterKeyHint="go"
         />
-        <button type="submit" disabled={v.trim().length < 2} aria-label="enter">
+        <button type="submit" disabled={v.trim().length < 2} aria-label={tr("enter")}>
           ➝
         </button>
       </form>
       {/* progress, and the optional account that saves it */}
       <div className="lab-gate-progress">
-        ◈ {progress.blood} · best {progress.best} m{progress.levels.length ? ` · levels ${progress.levels.map((l) => ["", "I", "II", "III"][l]).join(" ")}` : ""}
+        ◈ {progress.blood} · {tr("best {m} m", { m: progress.best })}{progress.levels.length ? ` · ${tr("levels")} ${progress.levels.map((l) => ["", "I", "II", "III"][l]).join(" ")}` : ""}
         {accountsReady &&
           (account ? (
             <>
               {" "}
-              · <span className="saved">✓ saved to {account.nick}{account.instagram ? " · instagram" : ""}</span> ·{" "}
+              · <span className="saved">✓ {tr("saved to {nick}", { nick: account.nick })}{account.instagram ? " · instagram" : ""}</span> ·{" "}
               <button
                 type="button"
                 onClick={() => {
@@ -229,7 +247,7 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
                   track("account-logout");
                 }}
               >
-                log out
+                {tr("log out")}
               </button>{" "}
               ·{" "}
               <button type="button" onClick={() => setMode(mode === "delete" ? "" : "delete")}>
@@ -239,9 +257,9 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           ) : (
             <>
               {" "}
-              · only on this device ·{" "}
+              · {tr("only on this device")} ·{" "}
               <button type="button" onClick={() => setMode(mode ? "" : "save")}>
-                {mode ? "close" : "save it / log in"}
+                {mode ? tr("close") : tr("save it / log in")}
               </button>
             </>
           ))}
@@ -251,35 +269,35 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           {igOn && (
             <>
               <a className="lab-ig" href={instagramUrl()}>
-                <span className="glyph">⬚</span> continue with instagram
+                <span className="glyph">⬚</span> {tr("continue with instagram")}
               </a>
-              <div className="lab-or">or a password</div>
+              <div className="lab-or">{tr("or a password")}</div>
             </>
           )}
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="password (6+ characters)"
+            placeholder={tr("password (6+ characters)")}
             autoComplete="current-password"
             maxLength={200}
             onKeyDown={(e) => e.key === "Enter" && void auth("register")}
           />
           <div className="row">
             <button type="button" disabled={busy} onClick={() => void auth("register")}>
-              register “{cleanNick(v) ?? v}”
+              {tr("register “{name}”", { name: cleanNick(v) ?? v })}
             </button>
             <button type="button" disabled={busy} onClick={() => void auth("login")}>
-              log in
+              {tr("log in")}
             </button>
           </div>
-          {authErr && <div className="err">{authErr}</div>}
-          <div className="hint">registering keeps your name and progress on any device. the email below is optional (only to recover your account).</div>
+          {authErr && <div className="err">{tr(authErr)}</div>}
+          <div className="hint">{tr("registering keeps your name and progress on any device. the email below is optional (only to recover your account).")}</div>
         </div>
       )}
       {account && mode === "delete" && (
         <div className="lab-gate-account">
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="your password, to delete everything" autoComplete="current-password" maxLength={200} />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={tr("your password, to delete everything")} autoComplete="current-password" maxLength={200} />
           <div className="row">
             <button
               type="button"
@@ -289,18 +307,18 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
                 const ok = await deleteAccount(password);
                 setBusy(false);
                 setPassword("");
-                if (!ok) return setAuthErr("wrong password");
+                if (!ok) return setAuthErr(tr("wrong password"));
                 setAuthErr("");
                 setMode("");
                 setAccount(null);
                 track("account-deleted");
               }}
             >
-              delete my account forever
+              {tr("delete my account forever")}
             </button>
           </div>
-          {authErr && <div className="err">{authErr}</div>}
-          <div className="hint">your name becomes free again. progress stays only on this device.</div>
+          {authErr && <div className="err">{tr(authErr)}</div>}
+          <div className="hint">{tr("your name becomes free again. progress stays only on this device.")}</div>
         </div>
       )}
       {apiReady && !account && (
@@ -310,28 +328,38 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
             inputMode="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="email (optional) · news, account recovery"
+            placeholder={tr("email (optional) · news, account recovery")}
             autoComplete="email"
             maxLength={120}
           />
           {email.trim() && (
             <label>
-              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> send me news from seeface1
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> {tr("send me news from seeface1")}
             </label>
           )}
         </div>
       )}
       <p>
-        2–16 letters or numbers. not your real name. · <a href="/privacy">privacy</a>
+        {tr("2–16 letters or numbers. not your real name.")} · <a href="/privacy">{tr("privacy")}</a>
       </p>
+      <LangPicker />
     </div>
   );
 }
 
 function Game({ nick }: { nick: string }) {
+  useLang();
   const host = useRef<HTMLDivElement>(null);
   const wishRef = useRef<(k: WishKind | "room") => void>(() => {});
-  const mapRef = useRef<{ getPos: () => { x: number; z: number; yaw: number }; presence: Presence | null; wishList: () => { kind: string; x: number; z: number }[]; edge?: () => { radius: number; centre: { x: number; z: number } }; ai?: () => { name: string; x: number; z: number }[] } | null>(null);
+  const mapRef = useRef<MapSource | null>(null);
+  // teleport cards (⟡): one trip each, recharging while you play
+  const [cards, setCards] = useState(readCards);
+  useEffect(() => {
+    const off = onCards(setCards);
+    return () => {
+      off();
+    };
+  }, []);
   const [wishOpen, setWishOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   // meeting someone from the map: who you're walking to, and messages like "x is coming to find you"
@@ -457,7 +485,7 @@ function Game({ nick }: { nick: string }) {
     setChat((c) => c.filter((x) => x.id !== l.id));
     setLog((c) => c.filter((x) => x.id !== l.id));
     setLineMenu(null);
-    say(`${l.nick} muted`, true);
+    say(tr("{nick} muted", { nick: l.nick }), true);
     track("chat-mute");
   };
   /** real people close enough to hear you clearly (30 m) and at all (80 m) */
@@ -488,7 +516,7 @@ function Game({ nick }: { nick: string }) {
     const n = notesRef.current;
     if (!n) return;
     const to = noteTo.replace(/^@/, "").trim() || null;
-    if (!n.leave(noteText, to, posRef.current.x, posRef.current.z)) return say("that can't be written here", true);
+    if (!n.leave(noteText, to, posRef.current.x, posRef.current.z)) return say(tr("that can't be written here"), true);
     setNoteText("");
     setNoteTo("");
     setNotesOpen(null);
@@ -511,14 +539,14 @@ function Game({ nick }: { nick: string }) {
     if (!posts || !composer) return;
     let img = composer.img;
     if (composer.mode === "draw" && pad.current) img = await shrink(pad.current);
-    if (!img) return say("choose a photo first", true);
-    if (!agreed) return say("tick the box: it's your own work", true);
+    if (!img) return say(tr("choose a photo first"), true);
+    if (!agreed) return say(tr("tick the box: it's your own work"), true);
     const at = wallAhead(posRef.current.x, posRef.current.z, yawRef.current);
-    if (!at) return say("face a wall to hang it", true);
+    if (!at) return say(tr("face a wall to hang it"), true);
     posts.publish(img, caption, at);
     setComposer(null);
     setCaption("");
-    say("posted · others see it once it's approved", true);
+    say(tr("posted · others see it once it's approved"), true);
     track(`post-${composer.mode}`);
   };
   const posRef = useRef({ x: 0, z: 0 });
@@ -534,12 +562,12 @@ function Game({ nick }: { nick: string }) {
       if (said === undefined) setDraft("");
       chatInput.current?.focus(); // stay in the conversation
       track("chat-said");
-    } else say("that can't be said here (or slow down)", true);
+    } else say(tr("that can't be said here (or slow down)"), true);
   };
   const emote = (k: Emote) => {
     presenceRef.current?.emote(k);
     questRef.current("emote");
-    say(`you ${k}`);
+    say(tr("you {k}", { k: tr(k) }));
     track(`emote-${k}`);
   };
   const sayRef = useRef(say);
@@ -550,7 +578,7 @@ function Game({ nick }: { nick: string }) {
     if (id) {
       presenceRef.current?.call(id);
       const p = presenceRef.current?.peers.get(id);
-      if (p) say(`going to find ${p.nick}`);
+      if (p) say(tr("going to find {nick}", { nick: p.nick }));
       track("meet-start");
     }
   };
@@ -615,18 +643,18 @@ function Game({ nick }: { nick: string }) {
     let tvHinted = false;
     const order = () => {
       if (blood < ORDER_COST) {
-        sayRef.current("insufficient ◈. the after life isn't free (yet)", true);
+        sayRef.current(tr("insufficient ◈. the after life isn't free (yet)"), true);
         return;
       }
       blood = addBlood(-ORDER_COST);
       const it = addItem(randomItem(1));
       sound.chime();
-      sayRef.current(`order confirmed: ${it.name} · your After Life™ ships never`, true);
+      sayRef.current(tr("order confirmed: {name} · your After Life™ ships never", { name: tr(it.name) }), true);
       track("afterlife-order");
     };
     const found = (luck = 0) => {
       const it = addItem(randomItem(luck));
-      setTimeout(() => sayRef.current(`you found: ${it.name}`), 1200);
+      setTimeout(() => sayRef.current(tr("you found: {name}", { name: tr(it.name) })), 1200);
       track(`item-${it.id}`);
     };
     let inPlace: ReturnType<typeof places.update>["inside"] = null;
@@ -655,6 +683,8 @@ function Game({ nick }: { nick: string }) {
     lantern.position.set(0.18, -0.15, 0);
     lantern.target.position.set(0, -0.2, -3);
     camera.add(lantern, lantern.target);
+    // shadows, 3D sound, a heartbeat: only when the device can carry it
+    const immersive = createImmersive(renderer, world.scene, lantern, { ctx: sound.ctx, out: sound.effectsOut });
 
     const spinSfx = new Howl({ src: ["/sounds/ShuffleCube.mp3"], volume: 0.5, preload: true });
     const shardSfx = new Howl({ src: ["/sounds/MagicClick1.mp3"], volume: 0.6, preload: true });
@@ -702,7 +732,7 @@ function Game({ nick }: { nick: string }) {
       track(`weather-${w.kind}`);
     };
     applySky(false);
-    setTimeout(() => sayRef.current("welcome to the after life™"), 1500);
+    setTimeout(() => sayRef.current(tr("welcome to the after life™")), 1500);
 
     // ---------------------------------------------------------------- run state
     const start = spawn();
@@ -754,9 +784,9 @@ function Game({ nick }: { nick: string }) {
         setTimeout(() => sound.choir(false), 3500);
         track(first ? "king-welcome" : "king-gift");
         if (first) {
-          sayRef.current(`the dark king bows to you · +${gift} ◈`, true);
-          setTimeout(() => sayRef.current("keep it. soon, something in this world will be yours.", true), 5200);
-        } else sayRef.current(`the dark king remembers you · +${gift} ◈`, true);
+          sayRef.current(tr("the dark king bows to you · +{gift} ◈", { gift }), true);
+          setTimeout(() => sayRef.current(tr("keep it. soon, something in this world will be yours."), true), 5200);
+        } else sayRef.current(tr("the dark king remembers you · +{gift} ◈", { gift }), true);
       }
       hunter.reset(pos.x + 40, pos.z + 40);
     };
@@ -855,7 +885,7 @@ function Game({ nick }: { nick: string }) {
       hunter.reset(pos.x, pos.z);
       runTime = GRACE; // a few seconds to settle back in before anything hunts
       track("resumed");
-      setTimeout(() => sayRef.current(`welcome back to the after life™ · ${back.place}`), 1700);
+      setTimeout(() => sayRef.current(tr("welcome back to the after life™ · {place}", { place: back.place })), 1700);
     }
     // remember where you are, every few seconds and when you leave
     const remember = () => {
@@ -1067,14 +1097,14 @@ function Game({ nick }: { nick: string }) {
 
     // direction + distance to the person you're walking to (a = angle on screen, 0 = straight ahead)
     const meetInfo = () => {
-      const p = meetRef.current ? presence.peers.get(meetRef.current) ?? presence.far.get(meetRef.current) : treasure ? { nick: "◈ treasure", x: treasure.x, z: treasure.z } : null;
+      const p = meetRef.current ? presence.peers.get(meetRef.current) ?? presence.far.get(meetRef.current) : treasure ? { nick: "◈ treasure", x: treasure.x, z: treasure.z } : waypoint;
       if (!p) return null;
       const a = -(Math.atan2(-(p.x - pos.x), -(p.z - pos.z)) - input.yaw);
       return { nick: p.nick, d: Math.round(Math.hypot(p.x - pos.x, p.z - pos.z)), a: Math.atan2(Math.sin(a), Math.cos(a)) };
     };
     // someone picked you on their map
     presence.onCalled((from) => {
-      sayRef.current(`${from.nick} is coming to find you`, true);
+      sayRef.current(tr("{nick} is coming to find you", { nick: from.nick }), true);
       sound.chime();
       if (!meetRef.current) {
         meetRef.current = from.id; // meet them halfway
@@ -1103,7 +1133,7 @@ function Game({ nick }: { nick: string }) {
         void el.offsetWidth;
         if (settings().shake) el.classList.add("scream");
       }
-      if (d < 20) sayRef.current(`${from.nick} ${kind === "stare" ? "stares at you" : kind === "spin" ? "spins" : kind === "melt" ? "melts into the floor" : kind === "float" ? "floats" : "screams"}`);
+      if (d < 20) sayRef.current(tr("{nick} {screams}", { nick: from.nick, screams: tr(kind === "stare" ? "stares at you" : kind === "spin" ? "spins" : kind === "melt" ? "melts into the floor" : kind === "float" ? "floats" : "screams") }));
     });
 
     const howler = (window as unknown as { Howler?: { ctx?: AudioContext; masterGain?: GainNode } }).Howler;
@@ -1128,7 +1158,7 @@ function Game({ nick }: { nick: string }) {
         setClipState("ready");
       } catch {
         setClipState("");
-        sayRef.current("couldn't record a video on this device · send the link instead", true);
+        sayRef.current(tr("couldn't record a video on this device · send the link instead"), true);
       }
     };
 
@@ -1139,7 +1169,7 @@ function Game({ nick }: { nick: string }) {
       setChampions(top, playerId());
       const r = champions.rank();
       if (r && r !== lastRank) {
-        if (lastRank === 0 || r < lastRank) sayRef.current(`your name is on the champions' billboard · #${r}`);
+        if (lastRank === 0 || r < lastRank) sayRef.current(tr("your name is on the champions' billboard · #{r}", { r }));
         lastRank = r;
       }
     });
@@ -1157,6 +1187,7 @@ function Game({ nick }: { nick: string }) {
       others.setShow(st.showNames, st.showChat);
       el.dataset.calm = st.flashes ? "" : "1";
       fx.setEnabled(st.glow && st.quality !== "low");
+      immersive.setAllowed(st.quality === "high");
     });
 
     const hazards = createHazards(sound.ctx, sound.ambienceOut);
@@ -1167,7 +1198,7 @@ function Game({ nick }: { nick: string }) {
       sold: (l: Listing) => {
         blood = readBlood();
         sound.chime();
-        sayRef.current(`you sold ${ITEMS[l.item].name} for ${l.price} ◈ to @${l.soldTo}`, true);
+        sayRef.current(tr("you sold {name} for {price} ◈ to @{soldTo}", { name: tr(ITEMS[l.item].name), price: l.price, soldTo: l.soldTo }), true);
         track("market-sold");
       },
       changed: () => {
@@ -1176,7 +1207,7 @@ function Game({ nick }: { nick: string }) {
         const bySeller = new Map<string, { seller: string; items: { glyph: string; name: string; price: number }[] }>();
         for (const l of market.open()) {
           const row = bySeller.get(l.sellerId) ?? { seller: l.seller, items: [] };
-          row.items.push({ glyph: ITEMS[l.item].glyph, name: ITEMS[l.item].name, price: l.price });
+          row.items.push({ glyph: ITEMS[l.item].glyph, name: tr(ITEMS[l.item].name), price: l.price });
           bySeller.set(l.sellerId, row);
         }
         setStalls([...bySeller.values()].slice(0, 12));
@@ -1191,13 +1222,16 @@ function Game({ nick }: { nick: string }) {
     notes.onChange(() => {
       bumpPosts((n) => n + 1);
       const u = notes.unread();
-      if (u > unreadSeen && notes.inbox()[0]) sayRef.current(`✉ a note from @${notes.inbox()[0].from}`, true);
+      if (u > unreadSeen && notes.inbox()[0]) sayRef.current(tr("✉ a note from @{from}", { from: notes.inbox()[0].from }), true);
       unreadSeen = u;
     });
     world.scene.add(notes.group);
     const posts = createPosts(presence, () => nick);
     postsRef.current = posts;
-    posts.onChange(() => bumpPosts((n) => n + 1));
+    posts.onChange(() => {
+      bumpPosts((n) => n + 1);
+      artLayer.setGallery(posts.approvedArt());
+    });
     world.scene.add(posts.group);
     const ai = createAi();
     aiRef.current = ai;
@@ -1242,14 +1276,14 @@ function Game({ nick }: { nick: string }) {
       const r = questsRef.current!.bump(k, n);
       if (r.quest) {
         earn(r.quest.reward, "quest");
-        sayRef.current(`quest done: ${r.quest.text} · +${r.quest.reward} ◈`);
+        sayRef.current(tr("quest done: {text} · +{reward} ◈", { text: tr(r.quest.text), reward: r.quest.reward }));
         sound.chime();
         track(`quest-${r.quest.kind}`);
         setQuestList(questsRef.current!.list());
       }
       if (r.allDone) {
         earn(ALL_DONE_BONUS, "quests-all");
-        setTimeout(() => sayRef.current(`all of today's quests done · +${ALL_DONE_BONUS} ◈ · new ones tomorrow`), 3000);
+        setTimeout(() => sayRef.current(tr("all of today's quests done · +{ALL_DONE_BONUS} ◈ · new ones tomorrow", { ALL_DONE_BONUS })), 3000);
         track("quests-all-done");
       }
     };
@@ -1259,11 +1293,104 @@ function Game({ nick }: { nick: string }) {
     // twist state
     let lowGravT = 0, fogT = 0, colourT = 0, glimpseT = 0;
     let treasure: { x: number; z: number; until: number } | null = null;
+    // a spot picked on the map ("walk there"): the arrow guides you until you arrive
+    let waypoint: { x: number; z: number; nick: string } | null = null;
     let floodOn = false;
 
     // the edge: the labyrinth is as big as the crowd inside
     const edge = createEdge();
     let edgeFog = 0, edgeWarned = false;
+
+    // ---------------------------------------------------------------- teleport cards
+    const trails: Trail[] = [];
+    // a column of violet light where someone leaves or arrives (seen by anyone near)
+    const pillarMat = new THREE.MeshBasicMaterial({ color: 0xc8b8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const pillarGeo = new THREE.CylinderGeometry(0.7, 0.7, 4, 20, 1, true);
+    const pillars: { mesh: THREE.Mesh; life: number }[] = [];
+    const pillar = (x: number, z: number) => {
+      if (Math.hypot(x - pos.x, z - pos.z) > 60) return;
+      const mesh = new THREE.Mesh(pillarGeo, pillarMat.clone());
+      mesh.position.set(x, 2, z);
+      world.scene.add(mesh);
+      pillars.push({ mesh, life: 1.6 });
+    };
+    const updatePillars = (dt: number) => {
+      for (let k = pillars.length - 1; k >= 0; k--) {
+        const p = pillars[k];
+        p.life -= dt;
+        (p.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, Math.min(0.9, p.life));
+        p.mesh.scale.set(1 + (1.6 - p.life) * 0.6, 1, 1 + (1.6 - p.life) * 0.6);
+        if (p.life <= 0) {
+          world.scene.remove(p.mesh);
+          (p.mesh.material as THREE.Material).dispose();
+          pillars.splice(k, 1);
+        }
+      }
+    };
+    const teleport = (x: number, z: number, incognito: boolean): string | null => {
+      const cost = incognito ? INCOGNITO_COST : TELEPORT_COST;
+      if (!alive) return tr("not now");
+      if (readCards() < cost) return tr("you need {n} ⟡ · cards recharge while you play", { n: cost });
+      if (inShip(pos.x, pos.z) || levelAtX(x) !== levelAtX(pos.x)) return tr("teleports don't work here");
+      const e = edge.state(pos.x);
+      if (Math.hypot(x - e.centre.x, z - e.centre.z) > e.radius - 6) return tr("you can't travel past the edge");
+      const spot = landingSpot(x, z);
+      if (!spot) return tr("nowhere to land there");
+      addCards(-cost);
+      const from = { x: pos.x, z: pos.z };
+      pillar(from.x, from.z);
+      pos.x = spot.x;
+      pos.z = spot.z;
+      vel.x = vel.z = 0;
+      hunter.reset(pos.x, pos.z);
+      pillar(pos.x, pos.z);
+      el.classList.remove("rift");
+      void el.offsetWidth;
+      el.classList.add("rift");
+      el.style.setProperty("--rift", "#c8b8ff");
+      shiftSfx.play();
+      sound.chime();
+      try {
+        navigator.vibrate?.([30, 40, 90]);
+      } catch {
+        // unsupported
+      }
+      if (waypoint && Math.hypot(waypoint.x - pos.x, waypoint.z - pos.z) < 30) waypoint = null;
+      if (!incognito) {
+        presence.teleported(from, spot, nick);
+        trails.push({ nick, fx: from.x, fz: from.z, tx: spot.x, tz: spot.z, at: performance.now(), mine: true });
+      }
+      track(incognito ? "teleport-incognito" : "teleport");
+      sayRef.current(incognito ? tr("you arrived unseen") : tr("you arrived · everyone saw where"), true);
+      return null;
+    };
+    // someone else teleported: everyone on the same level is told, and sees it on the map
+    let lastTpNotice = 0;
+    presence.onTeleport((tp) => {
+      if (muted.current.has(tp.id) || levelAtX(tp.tx) !== levelAtX(pos.x)) return;
+      trails.push({ nick: tp.nick, fx: tp.fx, fz: tp.fz, tx: tp.tx, tz: tp.tz, at: performance.now() });
+      if (trails.length > 30) trails.shift();
+      pillar(tp.fx, tp.fz);
+      pillar(tp.tx, tp.tz);
+      const d = Math.hypot(tp.tx - pos.x, tp.tz - pos.z);
+      if (d < 40) sound.chime();
+      // the screen stays quiet: at most one teleport notice every 6 s (the map keeps them all)
+      if (Date.now() - lastTpNotice < 6000 && d >= 40) return;
+      lastTpNotice = Date.now();
+      sayRef.current(d < 40 ? tr("{nick} appeared out of thin air near you", { nick: tp.nick }) : tr("{nick} teleported to {place}", { nick: tp.nick, place: tr(whereName(tp.tx, tp.tz)) }), true);
+    });
+    Object.assign(mapRef.current!, {
+      teleport,
+      guide: (x: number, z: number, name: string) => {
+        meetRef.current = null;
+        setMeetId(null);
+        treasure = null;
+        waypoint = { x, z, nick: `⌖ ${tr(name)}` };
+        track("map-guide");
+      },
+      trails: () => trails,
+    } satisfies Partial<MapSource>);
+    if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails });
     // twists: unpredictable things that happen to you
     const twists = createTwists();
     const doppel = new THREE.Sprite(new THREE.SpriteMaterial({ map: demonTexture(demonOf(presence.me)), transparent: true, depthWrite: false, opacity: 0 }));
@@ -1282,6 +1409,7 @@ function Game({ nick }: { nick: string }) {
         runTime += dt;
 
         // ---------------- move (slide along walls)
+        input.assist(pos.x, pos.z, free, dt);
         const wantsRun = input.run && (input.move.x !== 0 || input.move.z !== 0);
         if (stamina < 3) exhausted = true;
         if (exhausted && stamina > 30) exhausted = false;
@@ -1299,9 +1427,15 @@ function Game({ nick }: { nick: string }) {
         const dx = vel.x * dt, dz = vel.z * dt;
         const ox = pos.x, oz = pos.z;
         if (free(pos.x + dx, pos.z)) pos.x += dx;
-        else vel.x *= -0.2; // bump off walls
+        else {
+          if (Math.abs(vel.x) > 2) input.buzz();
+          vel.x *= -0.2; // bump off walls
+        }
         if (free(pos.x, pos.z + dz)) pos.z += dz;
-        else vel.z *= -0.2;
+        else {
+          if (Math.abs(vel.z) > 2) input.buzz();
+          vel.z *= -0.2;
+        }
         const moved = Math.hypot(pos.x - ox, pos.z - oz);
 
         // jump
@@ -1472,12 +1606,12 @@ function Game({ nick }: { nick: string }) {
       if (meetRef.current && !mt) {
         meetRef.current = null;
         setMeetId(null);
-        sayRef.current("they left the labyrinth");
+        sayRef.current(tr("they left the labyrinth"));
       }
       if (mt && Math.hypot(mt.x - pos.x, mt.z - pos.z) < 3) {
         meetRef.current = null;
         setMeetId(null);
-        sayRef.current(`you found ${mt.nick}`);
+        sayRef.current(tr("you found {nick}", { nick: mt.nick }));
         sound.chime();
         track("meet-found");
       }
@@ -1487,10 +1621,10 @@ function Game({ nick }: { nick: string }) {
       const eg = inShip(pos.x, pos.z) ? { fog: 0, grew: false, throwBack: null, nearEdge: false } : edge.update(pos.x, pos.z, presence.online(), dt);
       edgeFog = eg.fog;
       world.setEdgeFog(Math.max(eg.fog, fogT > 0 ? 0.7 : 0));
-      if (eg.grew) sayRef.current(`the labyrinth grew · ${presence.online()} inside`);
+      if (eg.grew) sayRef.current(tr("the labyrinth grew · {online} inside", { online: presence.online() }));
       if (eg.nearEdge && !edgeWarned) {
         edgeWarned = true;
-        sayRef.current("the labyrinth ends here for now · it grows when more people come in");
+        sayRef.current(tr("the labyrinth ends here for now · it grows when more people come in"));
         track("edge-reached");
       }
       if (!eg.nearEdge && edgeFog === 0) edgeWarned = false;
@@ -1503,7 +1637,7 @@ function Game({ nick }: { nick: string }) {
         void el.offsetWidth;
         el.classList.add("rift");
         el.style.setProperty("--rift", "#ffffff");
-        sayRef.current("the static threw you back");
+        sayRef.current(tr("the static threw you back"));
         track("edge-thrown");
       }
 
@@ -1511,7 +1645,7 @@ function Game({ nick }: { nick: string }) {
       const tw = twists.update(dt, alive && runTime > 30);
       if (tw === "blackout") {
         light = Math.min(light, 15);
-        sayRef.current("the lights died");
+        sayRef.current(tr("the lights died"));
       }
       if (tw === "doppel") {
         doppelT = 0;
@@ -1528,24 +1662,24 @@ function Game({ nick }: { nick: string }) {
         void el.offsetWidth;
         el.classList.add("rift");
         el.style.setProperty("--rift", "#c8b8ff");
-        sayRef.current("the labyrinth moved you");
+        sayRef.current(tr("the labyrinth moved you"));
       }
       if (tw === "mirror") {
         mirrorT = 7;
         renderer.domElement.style.transform = "scaleX(-1)";
-        sayRef.current("everything is backwards");
+        sayRef.current(tr("everything is backwards"));
       }
       if (tw === "money") {
         for (let k = 0; k < 3; k++) {
           const gx = pos.x - Math.sin(input.yaw) * (1.5 + k), gz = pos.z - Math.cos(input.yaw) * (1.5 + k);
           if (free(gx, gz)) props.spawnMoney(gx, gz);
         }
-        sayRef.current("someone's lost ◈ fell at your feet");
+        sayRef.current(tr("someone's lost ◈ fell at your feet"));
       }
       if (tw === "echo") sayRef.current(lastHeard.current ? `an echo: "${garble(lastHeard.current, 0.3)}"` : "someone whispered your name");
       if (tw === "gravity") {
         lowGravT = 12;
-        sayRef.current("gravity forgot you · jump");
+        sayRef.current(tr("gravity forgot you · jump"));
       }
       if (tw === "whisper") {
         // only real people: a whisper about someone who is actually in here
@@ -1554,9 +1688,9 @@ function Game({ nick }: { nick: string }) {
         if (p) {
           const a = -(Math.atan2(-(p.x - pos.x), -(p.z - pos.z)) - input.yaw);
           const r = Math.atan2(Math.sin(a), Math.cos(a));
-          const dir = Math.abs(r) < Math.PI / 4 ? "ahead" : Math.abs(r) > (3 * Math.PI) / 4 ? "behind you" : r < 0 ? "to your left" : "to your right";
-          sayRef.current(`a whisper: "${p.nick} is ${Math.round(Math.hypot(p.x - pos.x, p.z - pos.z))} m ${dir}"`);
-        } else sayRef.current("a whisper: \"bring someone. it's lonely down here\"");
+          const dir = Math.abs(r) < Math.PI / 4 ? tr("ahead") : Math.abs(r) > (3 * Math.PI) / 4 ? tr("behind you") : r < 0 ? tr("to your left") : tr("to your right");
+          sayRef.current(tr("a whisper: “{nick} is {z} m {dir}”", { nick: p.nick, z: Math.round(Math.hypot(p.x - pos.x, p.z - pos.z)), dir }));
+        } else sayRef.current(tr("a whisper: “bring someone. it's lonely down here”"));
       }
       if (tw === "glimpse" && runTime > GRACE && light > 30) {
         // the Hollow, right there, for a blink
@@ -1571,23 +1705,23 @@ function Game({ nick }: { nick: string }) {
           if (!free(c.x, c.z)) continue;
           for (let m = 0; m < 4; m++) props.spawnMoney(c.x + (m % 2 ? 0.6 : -0.6), c.z + (m < 2 ? 0.6 : -0.6));
           treasure = { x: c.x, z: c.z, until: t + 90 };
-          sayRef.current("something was hidden near you · follow the arrow");
+          sayRef.current(tr("something was hidden near you · follow the arrow"));
           break;
         }
       }
       if (tw === "waterfall") {
         const sp = Math.hypot(vel.x, vel.z);
         flood.surprise(pos.x, pos.z, sp > 0.5 ? vel.x / sp : -Math.sin(input.yaw), sp > 0.5 ? vel.z / sp : -Math.cos(input.yaw));
-        sayRef.current("drip… drip… move!");
+        sayRef.current(tr("drip… drip… move!"));
       }
       if (tw === "fogwall") {
         fogT = 7;
-        sayRef.current("a wall of fog rolled in");
+        sayRef.current(tr("a wall of fog rolled in"));
       }
       if (tw === "colours") {
         colourT = 9;
         renderer.domElement.style.filter = "hue-rotate(150deg) saturate(1.7)";
-        sayRef.current("the colours went wrong");
+        sayRef.current(tr("the colours went wrong"));
       }
       lowGravT = Math.max(0, lowGravT - dt);
       fogT = Math.max(0, fogT - dt);
@@ -1599,10 +1733,14 @@ function Game({ nick }: { nick: string }) {
         glimpseT -= dt;
         if (glimpseT <= 0) hunter.reset(pos.x, pos.z);
       }
+      updatePillars(dt);
+      // teleport cards charge only while you're in the game
+      if (chargeCards(dt) && firstCard()) sayRef.current(tr("a teleport card ⟡ · open the map and tap where you want to be"), true);
+      if (waypoint && Math.hypot(waypoint.x - pos.x, waypoint.z - pos.z) < 3) waypoint = null;
       if (treasure) {
         if (Math.hypot(treasure.x - pos.x, treasure.z - pos.z) < 2.5) {
           treasure = null;
-          sayRef.current("you found the treasure");
+          sayRef.current(tr("you found the treasure"));
           found(2);
           quest("treasure");
         } else if (t > treasure.until) treasure = null;
@@ -1628,7 +1766,7 @@ function Game({ nick }: { nick: string }) {
         doppel.position.z += (dz / dd) * dt * 1.2;
         (doppel.material as THREE.SpriteMaterial).opacity = Math.min(0.8, doppelT) * (dd < 3 || doppelT > 6 ? 0 : 1);
         if (dd < 3 || doppelT > 6) {
-          if (doppelT > 0.5) sayRef.current("you saw yourself");
+          if (doppelT > 0.5) sayRef.current(tr("you saw yourself"));
           doppel.visible = false;
           doppelT = -1;
         }
@@ -1662,7 +1800,7 @@ function Game({ nick }: { nick: string }) {
       const al = afterlife.update(pos.x, pos.z, t);
       if (al.nearTV && !tvHinted) {
         tvHinted = true;
-        sayRef.current(`tap the screen to order AFTER LIFE™ · ${ORDER_COST} ◈`);
+        sayRef.current(tr("tap the screen to order AFTER LIFE™ · {ORDER_COST} ◈", { ORDER_COST }));
       }
       if (!al.nearTV) tvHinted = false;
       gramos.update(pos.x, pos.z, t);
@@ -1804,7 +1942,7 @@ function Game({ nick }: { nick: string }) {
         floodFx.dataset.kind = fl.kind;
         if (fl.changed === "warn") {
           const WARN = { flood: "⚠ the flood is coming", tornado: "⚠ a tornado is coming", fire: "⚠ fire", plague: "⚠ the plague is coming" } as const;
-          sayRef.current(`${WARN[fl.kind]} · get into a room`, true);
+          sayRef.current(tr("{kind} · get into a room", { kind: tr(WARN[fl.kind]) }), true);
           track(`${fl.kind}-warn`);
         }
         if (fl.changed === "flood" && fl.kind === "tornado") {
@@ -1816,7 +1954,7 @@ function Game({ nick }: { nick: string }) {
           world.setWeather({ kind: "storm", intensity: 1, wind: 40, isDay: false, temp: 10 });
           sound.setWeather("storm", 1, 40);
           skyKind = null;
-          sayRef.current("the flood");
+          sayRef.current(tr("the flood"));
         }
         if (fl.changed === "none") {
           floodOn = false;
@@ -1879,7 +2017,7 @@ function Game({ nick }: { nick: string }) {
           void el.offsetWidth;
           el.classList.add("rift");
           el.style.setProperty("--rift", "#9fdcff");
-          sayRef.current("the water took you and spat you out");
+          sayRef.current(tr("the water took you and spat you out"));
           track("flood-thrown");
         }
       }
@@ -1895,7 +2033,7 @@ function Game({ nick }: { nick: string }) {
       world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && pl.inside?.kind !== "bazaar" && !inShip(pos.x, pos.z));
       // the ritual: stand in the gold circle by the altar for 5 seconds
       if (pl.atAltar && alive) {
-        if (ritualT === 0) sayRef.current("stand still… the ritual has begun");
+        if (ritualT === 0) sayRef.current(tr("stand still… the ritual has begun"));
         ritualT += dt;
         if (ritualT > 5 && ritualT < 100) {
           ritualT = 100; // done for this visit to the circle
@@ -1910,8 +2048,8 @@ function Game({ nick }: { nick: string }) {
           light = 100;
           if (!done) {
             earn(5, "ritual");
-            sayRef.current("the champions bless you · full light · +5 ◈");
-          } else sayRef.current("the champions bless you · full light");
+            sayRef.current(tr("the champions bless you · full light · +5 ◈"));
+          } else sayRef.current(tr("the champions bless you · full light"));
           sound.choir(true);
           setTimeout(() => sound.choir(false), 4000);
           track("ritual");
@@ -1940,7 +2078,7 @@ function Game({ nick }: { nick: string }) {
         if (!paid) {
           earn(20, "dark-cube");
           sound.chime();
-          sayRef.current("the cube remembers you · +20 ◈");
+          sayRef.current(tr("the cube remembers you · +20 ◈"));
           track("dark-cube");
         }
       }
@@ -1968,6 +2106,7 @@ function Game({ nick }: { nick: string }) {
       fx.setDanger(alive ? lastDanger : 0);
       fx.update(dt, t, { x: pos.x, z: pos.z, moving: Math.hypot(vel.x, vel.z) > 0.6, sky, zoneTint: world.zone().panel });
       perf.frame(dt, camera);
+      immersive.update(dt, perf.info().scale, alive ? lastDanger : 0);
       fx.render();
       clipper.frame(renderer.domElement); // share video (only while recording)
 
@@ -1978,7 +2117,7 @@ function Game({ nick }: { nick: string }) {
         const fq = queen.flash(pos.x, pos.z, input.yaw);
         if (fq?.flashed) {
           earn(fq.flashed, "popqueen-photo");
-          sayRef.current(`she hates cameras · +${fq.flashed} ◈`);
+          sayRef.current(tr("she hates cameras · +{flashed} ◈", { flashed: fq.flashed }));
           track("popqueen-photo");
         }
         const lvl = levelAtX(pos.x);
@@ -2037,7 +2176,7 @@ function Game({ nick }: { nick: string }) {
     track("invite-sent");
     try {
       if (navigator.share) {
-        await navigator.share({ title: "seeface1", text: "meet me in the labyrinth", url });
+        await navigator.share({ title: "seeface1", text: tr("meet me in the labyrinth"), url });
         setInvited(true);
         return;
       }
@@ -2075,7 +2214,7 @@ function Game({ nick }: { nick: string }) {
               void invite();
             }}
           >
-            send my link
+            {tr("send my link")}
           </button>
           <button
             onClick={() => {
@@ -2083,11 +2222,11 @@ function Game({ nick }: { nick: string }) {
               clipRef.current();
             }}
           >
-            record a {CLIP_SECONDS}-second video invite
+            {tr("record a {n}-second video invite", { n: CLIP_SECONDS })}
           </button>
         </div>
       )}
-      {clipState === "rec" && <div className="lab-clip rec">● recording {CLIP_SECONDS} s · keep playing, make it good</div>}
+      {clipState === "rec" && <div className="lab-clip rec">● {tr("recording {n} s · keep playing, make it good", { n: CLIP_SECONDS })}</div>}
       {clipState === "ready" && (
         <div className="lab-clip" onPointerDown={stop} onPointerUp={stop}>
           <button
@@ -2099,14 +2238,14 @@ function Game({ nick }: { nick: string }) {
               if (how !== "cancelled") setClipState("");
             }}
           >
-            share your video ➝
+            {tr("share your video ➝")}
           </button>
-          <button className="x" onClick={() => setClipState("")} aria-label="discard">
+          <button className="x" onClick={() => setClipState("")} aria-label={tr("discard")}>
             ×
           </button>
         </div>
       )}
-      {isPhone && moveHint && st.showHints && <div className="lab-hint">left thumb: walk + turn · push far to run · right side: look around</div>}
+      {isPhone && moveHint && st.showHints && <div className="lab-hint">{tr("thumb anywhere: walk + turn · push far to run · 2nd finger: look")}</div>}
       {stick.active && (
         <div className="lab-stick" style={{ left: stick.ox, top: stick.oy }}>
           <span style={{ transform: `translate(${stick.x * 34}px, ${stick.y * 34}px)` }} />
@@ -2116,7 +2255,7 @@ function Game({ nick }: { nick: string }) {
 
       {/* HUD: glyphs only. Light ring, shards, depth marks */}
       <div className="lab-hud">
-        <svg className={"lab-light" + (hud.light < 25 ? " low" : "")} viewBox="0 0 54 54" aria-label="light">
+        <svg className={"lab-light" + (hud.light < 25 ? " low" : "")} viewBox="0 0 54 54" aria-label={tr("light")}>
           <circle cx="27" cy="27" r="22" className="track" />
           <circle cx="27" cy="27" r="22" className="fill" strokeDasharray={`${(hud.light / 100) * ring} ${ring}`} />
           <text x="27" y="31">✶</text>
@@ -2137,7 +2276,7 @@ function Game({ nick }: { nick: string }) {
 
       {hud.event && (
         <div className="lab-event">
-          <span className="g">{EVENTS[hud.event].glyph}</span> {EVENTS[hud.event].name}
+          <span className="g">{EVENTS[hud.event].glyph}</span> {tr(EVENTS[hud.event].name)}
         </div>
       )}
 
@@ -2150,11 +2289,11 @@ function Game({ nick }: { nick: string }) {
 
       {/* thumb controls (phones) + signal / invite (everyone) */}
       <div className="lab-actions" onPointerDown={stop} onPointerUp={stop}>
-        <button className="lab-btn invite" onClick={() => (clipSupported() ? setInviteMenu((m) => !m) : void invite())} aria-label="invite a friend">
+        <button className="lab-btn invite" onClick={() => (clipSupported() ? setInviteMenu((m) => !m) : void invite())} aria-label={tr("invite a friend")}>
           {invited ? "✓" : "⊕"}
         </button>
         {hud.knife && (
-          <button className="lab-btn knife" onClick={() => strikeRef.current()} aria-label="strike">
+          <button className="lab-btn knife" onClick={() => strikeRef.current()} aria-label={tr("strike")}>
             †
           </button>
         )}
@@ -2165,7 +2304,7 @@ function Game({ nick }: { nick: string }) {
               e.stopPropagation();
               if (inputRef.current) inputRef.current.jumpPressed = true;
             }}
-            aria-label="jump"
+            aria-label={tr("jump")}
           >
             ⤒
           </button>
@@ -2173,13 +2312,13 @@ function Game({ nick }: { nick: string }) {
         <button
           className={"lab-btn snap" + (hud.event ? " event" : "")}
           onClick={() => snapRef.current()}
-          aria-label="snapshot"
+          aria-label={tr("snapshot")}
           disabled={snapState === "busy"}
         >
           {snapState === "done" ? "✓" : "⊡"}
         </button>
         {hud.holding && (
-          <button className="lab-btn drop" onClick={() => dropRef.current()} aria-label="drop the relic">
+          <button className="lab-btn drop" onClick={() => dropRef.current()} aria-label={tr("drop the relic")}>
             ⤓
           </button>
         )}
@@ -2189,25 +2328,25 @@ function Game({ nick }: { nick: string }) {
             setNotesOpen(notesRef.current?.inbox().length ? "inbox" : "write");
             notesRef.current?.markRead();
           }}
-          aria-label="notes"
+          aria-label={tr("notes")}
         >
           ✉{(notesRef.current?.unread() ?? 0) > 0 && <small>{notesRef.current?.unread()}</small>}
         </button>
-        <button className="lab-btn post" onClick={() => setComposer({ mode: "photo", img: null })} aria-label="post a photo or drawing on the wall">
+        <button className="lab-btn post" onClick={() => setComposer({ mode: "photo", img: null })} aria-label={tr("post a photo or drawing on the wall")}>
           ⊞
         </button>
-        <button className="lab-btn bag" onClick={() => setBagOpen(true)} aria-label="inventory">
+        <button className="lab-btn bag" onClick={() => setBagOpen(true)} aria-label={tr("inventory")}>
           ◫{bagCount > 0 && <small>{bagCount}</small>}
         </button>
-        <button className="lab-btn map" onClick={() => setMapOpen(true)} aria-label="map">
-          ◎
+        <button className="lab-btn map" onClick={() => setMapOpen(true)} aria-label={tr("map")}>
+          ◎{cards > 0 && <small>⟡{cards}</small>}
         </button>
         {hud.blood >= WISH_COST && (
-          <button className="lab-btn wish" onClick={() => setWishOpen(true)} aria-label="make a wish">
+          <button className="lab-btn wish" onClick={() => setWishOpen(true)} aria-label={tr("make a wish")}>
             ✦
           </button>
         )}
-        <button className="lab-btn signal" onClick={() => signalRef.current()} aria-label="signal">
+        <button className="lab-btn signal" onClick={() => signalRef.current()} aria-label={tr("signal")}>
           ✺
         </button>
         {isPhone && (
@@ -2217,7 +2356,7 @@ function Game({ nick }: { nick: string }) {
             onPointerUp={hold(false)}
             onPointerCancel={hold(false)}
             onPointerLeave={hold(false)}
-            aria-label="run"
+            aria-label={tr("run")}
             style={{ "--stamina": `${hud.stamina}%` } as React.CSSProperties}
           >
             ➶
@@ -2227,7 +2366,7 @@ function Game({ nick }: { nick: string }) {
 
       {wishOpen && (
         <div className="lab-wish" onPointerDown={stop} onPointerUp={stop}>
-          <div className="lab-wish-title">◈ {hud.blood} · a wish costs {WISH_COST}</div>
+          <div className="lab-wish-title">◈ {hud.blood} · {tr("a wish costs {n}", { n: WISH_COST })}</div>
           <div className="lab-wish-grid">
             {WISH_KINDS.map((w) => (
               <button
@@ -2238,11 +2377,11 @@ function Game({ nick }: { nick: string }) {
                 }}
               >
                 <span className="g">{w.glyph}</span>
-                <span className="l">{w.label}</span>
+                <span className="l">{tr(w.label)}</span>
               </button>
             ))}
           </div>
-          <button className="lab-wish-close" onClick={() => setWishOpen(false)} aria-label="close">
+          <button className="lab-wish-close" onClick={() => setWishOpen(false)} aria-label={tr("close")}>
             ×
           </button>
         </div>
@@ -2256,14 +2395,14 @@ function Game({ nick }: { nick: string }) {
           <span className="who">
             {hud.meet.nick} · {hud.meet.d} m
           </span>
-          <button onClick={() => startMeet(null)} aria-label="stop">
+          <button onClick={() => startMeet(null)} aria-label={tr("stop")}>
             ×
           </button>
         </div>
       )}
       {atMarket && !marketTab && (
         <button className="lab-market-btn" onPointerDown={stop} onPointerUp={stop} onClick={() => setMarketTab("buy")}>
-          open the market
+          {tr("open the market")}
         </button>
       )}
       {marketTab && (
@@ -2272,7 +2411,7 @@ function Game({ nick }: { nick: string }) {
             <div className="lab-settings-tabs">
               {(["buy", "sell", "mine"] as const).map((t) => (
                 <button key={t} className={marketTab === t ? "on" : ""} onClick={() => setMarketTab(t)}>
-                  {t === "mine" ? "my stall" : t}
+                  {t === "mine" ? tr("my stall") : tr(t)}
                 </button>
               ))}
               <span className="lab-market-purse">◈ {hud.blood}</span>
@@ -2284,46 +2423,46 @@ function Game({ nick }: { nick: string }) {
                     <div key={l.id}>
                       <span className="g">{ITEMS[l.item].glyph}</span>
                       <span className="n">
-                        {ITEMS[l.item].name}
+                        {tr(ITEMS[l.item].name)}
                         <i>@{l.seller}</i>
                       </span>
                       <button
                         onClick={() => {
                           const r = marketRef.current?.buy(l);
                           if (r === "ok") {
-                            say(`bought: ${ITEMS[l.item].name}`, true);
+                            say(tr("bought: {name}", { name: tr(ITEMS[l.item].name) }), true);
                             track("market-bought");
-                          } else if (r === "poor") say("not enough ◈", true);
-                          else if (r === "gone") say("someone was faster", true);
+                          } else if (r === "poor") say(tr("not enough ◈"), true);
+                          else if (r === "gone") say(tr("someone was faster"), true);
                         }}
                       >
                         {l.price} ◈
                       </button>
                     </div>
                   ))}
-                  {!(marketRef.current?.open() ?? []).filter((l) => !marketRef.current?.isMine(l)).length && <p className="note">nothing for sale yet. be the first: sell something.</p>}
+                  {!(marketRef.current?.open() ?? []).filter((l) => !marketRef.current?.isMine(l)).length && <p className="note">{tr("nothing for sale yet. be the first: sell something.")}</p>}
                 </div>
               )}
               {marketTab === "sell" && (
                 <>
                   <label className="toggle">
-                    <span>object</span>
+                    <span>{tr("object")}</span>
                     <select value={sellItem} onChange={(e) => setSellItem(e.target.value as ItemId)}>
-                      <option value="">choose from your bag…</option>
+                      <option value="">{tr("choose from your bag…")}</option>
                       {(Object.keys(bag) as ItemId[])
                         .filter((id) => bag[id])
                         .map((id) => (
                           <option key={id} value={id}>
-                            {ITEMS[id].name} ×{bag[id]}
+                            {tr(ITEMS[id].name)} ×{bag[id]}
                           </option>
                         ))}
                     </select>
                   </label>
                   <label className="toggle">
-                    <span>price in ◈</span>
+                    <span>{tr("price in ◈")}</span>
                     <input className="lab-post-cap" type="number" min={1} max={999} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
                   </label>
-                  <p className="note">it goes on a stall with your name. you're paid when someone buys it, even if you're away.</p>
+                  <p className="note">{tr("it goes on a stall with your name. you're paid when someone buys it, even if you're away.")}</p>
                 </>
               )}
               {marketTab === "mine" && (
@@ -2332,32 +2471,32 @@ function Game({ nick }: { nick: string }) {
                     <div key={l.id}>
                       <span className="g">{ITEMS[l.item].glyph}</span>
                       <span className="n">
-                        {ITEMS[l.item].name}
+                        {tr(ITEMS[l.item].name)}
                         <i>{l.soldTo ? `sold to @${l.soldTo}` : `${l.price} ◈`}</i>
                       </span>
-                      {!l.soldTo && <button onClick={() => marketRef.current?.cancel(l)}>take back</button>}
+                      {!l.soldTo && <button onClick={() => marketRef.current?.cancel(l)}>{tr("take back")}</button>}
                     </div>
                   ))}
-                  {!(marketRef.current?.mine() ?? []).length && <p className="note">your stall is empty.</p>}
+                  {!(marketRef.current?.mine() ?? []).length && <p className="note">{tr("your stall is empty.")}</p>}
                 </div>
               )}
             </div>
             <div className="lab-settings-foot">
-              <button onClick={() => setMarketTab(null)}>close</button>
+              <button onClick={() => setMarketTab(null)}>{tr("close")}</button>
               {marketTab === "sell" && (
                 <button
                   className="done"
                   onClick={() => {
-                    if (!sellItem) return say("choose an object first", true);
+                    if (!sellItem) return say(tr("choose an object first"), true);
                     if (marketRef.current?.sell(sellItem, Number(sellPrice))) {
-                      say(`on your stall: ${ITEMS[sellItem].name} · ${Math.round(Number(sellPrice))} ◈`, true);
+                      say(tr("on your stall: {name} · {sellPrice} ◈", { name: tr(ITEMS[sellItem].name), sellPrice: Math.round(Number(sellPrice)) }), true);
                       setSellItem("");
                       setMarketTab("mine");
                       track("market-listed");
-                    } else say("price 1–999 ◈", true);
+                    } else say(tr("price 1–999 ◈"), true);
                   }}
                 >
-                  put it on my stall
+                  {tr("put it on my stall")}
                 </button>
               )}
             </div>
@@ -2369,24 +2508,24 @@ function Game({ nick }: { nick: string }) {
           <div className="lab-settings-box">
             <div className="lab-settings-tabs">
               <button className={notesOpen === "write" ? "on" : ""} onClick={() => setNotesOpen("write")}>
-                write
+                {tr("write")}
               </button>
               <button className={notesOpen === "inbox" ? "on" : ""} onClick={() => setNotesOpen("inbox")}>
-                inbox {notesRef.current?.inbox().length ? `· ${notesRef.current.inbox().length}` : ""}
+                {tr("inbox")} {notesRef.current?.inbox().length ? `· ${notesRef.current.inbox().length}` : ""}
               </button>
             </div>
             <div className="lab-settings-body">
               {notesOpen === "write" ? (
                 <>
-                  <input className="lab-post-cap" value={noteTo} maxLength={17} onChange={(e) => setNoteTo(e.target.value)} placeholder="to @nickname (or empty: leave it right here)" />
-                  <input className="lab-post-cap" value={noteText} maxLength={120} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendNote()} placeholder="your note" autoFocus />
-                  <p className="note">notes are like postcards: not private. no links, no phone numbers.</p>
+                  <input className="lab-post-cap" value={noteTo} maxLength={17} onChange={(e) => setNoteTo(e.target.value)} placeholder={tr("to @nickname (or empty: leave it right here)")} />
+                  <input className="lab-post-cap" value={noteText} maxLength={120} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendNote()} placeholder={tr("your note")} autoFocus />
+                  <p className="note">{tr("notes are like postcards: not private. no links, no phone numbers.")}</p>
                 </>
               ) : (
                 <div className="lab-inbox">
                   {(notesRef.current?.inbox() ?? []).map((n) => (
                     <div key={n.id}>
-                      <b>@{n.from}</b> <i>{Math.max(1, Math.round((Date.now() - n.t) / 60000))} min ago</i>
+                      <b>@{n.from}</b> <i>{Math.max(1, Math.round((Date.now() - n.t) / 60000))}{" "}{tr("min ago")}</i>
                       <span>{n.text}</span>
                       <button
                         onClick={() => {
@@ -2398,15 +2537,15 @@ function Game({ nick }: { nick: string }) {
                       </button>
                     </div>
                   ))}
-                  {!notesRef.current?.inbox().length && <p className="note">no notes yet. leave one for someone.</p>}
+                  {!notesRef.current?.inbox().length && <p className="note">{tr("no notes yet. leave one for someone.")}</p>}
                 </div>
               )}
             </div>
             <div className="lab-settings-foot">
-              <button onClick={() => setNotesOpen(null)}>close</button>
+              <button onClick={() => setNotesOpen(null)}>{tr("close")}</button>
               {notesOpen === "write" && (
                 <button className="done" onClick={sendNote}>
-                  {noteTo.trim() ? "send" : "leave it here"}
+                  {noteTo.trim() ? tr("send") : tr("leave it here")}
                 </button>
               )}
             </div>
@@ -2417,11 +2556,11 @@ function Game({ nick }: { nick: string }) {
         <div className="lab-settings" onPointerDown={stop} onPointerUp={stop} onClick={() => setNoteView(null)}>
           <div className="lab-settings-box">
             <div className="lab-settings-body">
-              <b className="lab-note-from">a note from @{noteView.from}</b>
+              <b className="lab-note-from">{tr("a note from @{nick}", { nick: noteView.from })}</b>
               <p className="lab-note-text">{noteView.text}</p>
             </div>
             <div className="lab-settings-foot">
-              <button onClick={() => setNoteView(null)}>close</button>
+              <button onClick={() => setNoteView(null)}>{tr("close")}</button>
               <button
                 className="done"
                 onClick={(e) => {
@@ -2442,16 +2581,16 @@ function Game({ nick }: { nick: string }) {
           <div className="lab-settings-box">
             <div className="lab-settings-tabs">
               <button className={composer.mode === "photo" ? "on" : ""} onClick={() => setComposer({ mode: "photo", img: null })}>
-                photo
+                {tr("photo")}
               </button>
               <button className={composer.mode === "draw" ? "on" : ""} onClick={() => setComposer({ mode: "draw", img: null })}>
-                draw
+                {tr("draw")}
               </button>
             </div>
             <div className="lab-settings-body">
               {composer.mode === "photo" ? (
                 <label className="lab-post-pick">
-                  {composer.img ? <img src={composer.img} alt="" /> : <span>tap to choose a photo</span>}
+                  {composer.img ? <img src={composer.img} alt="" /> : <span>{tr("tap to choose a photo")}</span>}
                   <input
                     type="file"
                     accept="image/*"
@@ -2493,22 +2632,22 @@ function Game({ nick }: { nick: string }) {
                   </div>
                 </div>
               )}
-              <input className="lab-post-cap" value={caption} maxLength={80} onChange={(e) => setCaption(e.target.value)} placeholder="caption (optional)" />
+              <input className="lab-post-cap" value={caption} maxLength={80} onChange={(e) => setCaption(e.target.value)} placeholder={tr("caption (optional)")} />
               <label className="lab-agree">
                 <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
                 <span>
-                  I made this myself. I let seeface1 show it in the labyrinth and in seeface1's promotion, for free, with my name. It stays mine and I can have it removed any time.{" "}
+                  {tr("I made this myself. I let seeface1 show it in the labyrinth and in seeface1's promotion, for free, with my name. It stays mine and I can have it removed any time.")}{" "}
                   <a href="/artists" target="_blank" rel="noreferrer">
-                    the artist agreement
+                    {tr("the artist agreement")}
                   </a>
                 </span>
               </label>
-              <p className="note">it hangs on the wall in front of you. everyone sees it once it's approved.</p>
+              <p className="note">{tr("it hangs on the wall in front of you. everyone sees it once it's approved.")}</p>
             </div>
             <div className="lab-settings-foot">
-              <button onClick={() => setComposer(null)}>cancel</button>
+              <button onClick={() => setComposer(null)}>{tr("cancel")}</button>
               <button className="done" onClick={() => void hangPost()}>
-                hang it here
+                {tr("hang it here")}
               </button>
             </div>
           </div>
@@ -2521,10 +2660,10 @@ function Game({ nick }: { nick: string }) {
             <div className="lab-settings-body">
               <b>@{viewing.nick}</b>
               {viewing.cap && <span>{viewing.cap}</span>}
-              {postsRef.current?.isPending(viewing.id) && <p className="note">only you can see this until it's approved.</p>}
+              {postsRef.current?.isPending(viewing.id) && <p className="note">{tr("only you can see this until it's approved.")}</p>}
             </div>
             <div className="lab-settings-foot">
-              <button onClick={() => setViewing(null)}>close</button>
+              <button onClick={() => setViewing(null)}>{tr("close")}</button>
               <button
                 className="done"
                 onClick={() => {
@@ -2543,15 +2682,15 @@ function Game({ nick }: { nick: string }) {
 
       {soulAsk && (
         <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
-          <div className="lab-bag-title">leaving the after life?</div>
+          <div className="lab-bag-title">{tr("leaving the after life?")}</div>
           <div className="lab-soul">
             <p>
-              save your soul. register <b>{nick}</b> and your ◈ {readProgress().blood}, your best run and your {bagCount} objects will wait for you, on any device.
+              {tr("save your soul. register {nick} and your ◈ {blood}, your best run and your {n} objects will wait for you, on any device.", { nick, blood: readProgress().blood, n: bagCount })}
             </p>
-            <input type="password" value={soulPw} onChange={(e) => setSoulPw(e.target.value)} placeholder="choose a password (6+)" autoComplete="new-password" maxLength={200} />
+            <input type="password" value={soulPw} onChange={(e) => setSoulPw(e.target.value)} placeholder={tr("choose a password (6+)")} autoComplete="new-password" maxLength={200} />
             <div className="row">
-              <button onClick={() => void saveSoul()}>save my soul</button>
-              <button onClick={() => setSoulAsk(false)}>not now</button>
+              <button onClick={() => void saveSoul()}>{tr("save my soul")}</button>
+              <button onClick={() => setSoulAsk(false)}>{tr("not now")}</button>
             </div>
             {soulMsg && <div className="err">{soulMsg}</div>}
           </div>
@@ -2560,8 +2699,8 @@ function Game({ nick }: { nick: string }) {
 
       {bagOpen && (
         <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
-          <div className="lab-bag-title">your afterlife objects · {bagCount}</div>
-          {bagCount === 0 && <div className="lab-bag-empty">nothing yet. pick up relics, find treasures, or order from an After Life™ TV.</div>}
+          <div className="lab-bag-title">{tr("your afterlife objects")} · {bagCount}</div>
+          {bagCount === 0 && <div className="lab-bag-empty">{tr("nothing yet. pick up relics, find treasures, or order from an After Life™ TV.")}</div>}
           <div className="lab-bag-grid">
             {(Object.keys(ITEMS) as ItemId[])
               .filter((id) => bag[id])
@@ -2577,49 +2716,49 @@ function Game({ nick }: { nick: string }) {
                     <span>{ITEMS[id].glyph}</span>
                   </div>
                   <b>
-                    {ITEMS[id].name} {bag[id]! > 1 && <i>×{bag[id]}</i>}
+                    {tr(ITEMS[id].name)} {bag[id]! > 1 && <i>×{bag[id]}</i>}
                   </b>
-                  <em>{ITEMS[id].blurb}</em>
+                  <em>{tr(ITEMS[id].blurb)}</em>
                 </div>
               ))}
           </div>
-          <button className="lab-wish-close" onClick={() => setBagOpen(false)} aria-label="close">
+          <button className="lab-wish-close" onClick={() => setBagOpen(false)} aria-label={tr("close")}>
             ×
           </button>
         </div>
       )}
 
-      <button className="lab-radio" onPointerDown={stop} onPointerUp={stop} onClick={() => radioNextRef.current()} aria-label="radio: next station">
-        ◍ {station.freq} <i>{station.name}</i>
+      <button className="lab-radio" onPointerDown={stop} onPointerUp={stop} onClick={() => radioNextRef.current()} aria-label={tr("radio: next station")}>
+        ◍ {station.freq} <i>{tr(station.name)}</i>
       </button>
       {gramoKey && (
         <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
           <div className="lab-settings-box">
             <div className="lab-settings-body">
               <label className="toggle">
-                <span>record</span>
+                <span>{tr("record")}</span>
                 <select value={pickRec} onChange={(e) => setPickRec(e.target.value as RecordId)}>
                   {(Object.keys(RECORDS) as RecordId[]).map((r) => (
                     <option key={r} value={r}>
-                      {RECORDS[r].name}
+                      {tr(RECORDS[r].name)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="toggle">
-                <span>effect</span>
+                <span>{tr("effect")}</span>
                 <select value={pickFx} onChange={(e) => setPickFx(e.target.value as FxId)}>
                   {(Object.keys(EFFECTS) as FxId[]).map((f) => (
                     <option key={f} value={f}>
-                      {EFFECTS[f].name}
+                      {tr(EFFECTS[f].name)}
                     </option>
                   ))}
                 </select>
               </label>
-              <p className="note">everyone nearby hears it, for 3 minutes.</p>
+              <p className="note">{tr("everyone nearby hears it, for 3 minutes.")}</p>
             </div>
             <div className="lab-settings-foot">
-              <button onClick={() => setGramoKey(null)}>cancel</button>
+              <button onClick={() => setGramoKey(null)}>{tr("cancel")}</button>
               <button
                 className="done"
                 onClick={() => {
@@ -2627,13 +2766,13 @@ function Game({ nick }: { nick: string }) {
                   setGramoKey(null);
                 }}
               >
-                play for everyone
+                {tr("play for everyone")}
               </button>
             </div>
           </div>
         </div>
       )}
-      <button className="lab-gear" onPointerDown={stop} onPointerUp={stop} onClick={() => setSettingsOpen(true)} aria-label="settings">
+      <button className="lab-gear" onPointerDown={stop} onPointerUp={stop} onClick={() => setSettingsOpen(true)} aria-label={tr("settings")}>
         ⚙
       </button>
       {settingsOpen && (
@@ -2642,7 +2781,7 @@ function Game({ nick }: { nick: string }) {
             <div className="lab-settings-tabs">
               {(["sound", "game", "controls", "graphics"] as const).map((t) => (
                 <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-                  {t}
+                  {tr(t)}
                 </button>
               ))}
             </div>
@@ -2660,12 +2799,12 @@ function Game({ nick }: { nick: string }) {
                     ] as const
                   ).map(([k, label]) => (
                     <label key={k} className="slider">
-                      <span>{label}</span>
+                      <span>{tr(label)}</span>
                       <input type="range" min={0} max={1} step={0.05} value={st[k]} onChange={(e) => setSettings({ [k]: Number(e.target.value) })} />
                       <i>{Math.round(st[k] * 100)}</i>
                     </label>
                   ))}
-                  <p className="note">the background music has its own switch, top left (♪ on / off).</p>
+                  <p className="note">{tr("the background music has its own switch, top left (♪ on / off).")}</p>
                 </>
               )}
               {tab === "game" && (
@@ -2678,58 +2817,58 @@ function Game({ nick }: { nick: string }) {
                     ] as const
                   ).map(([k, label]) => (
                     <label key={k} className="toggle">
-                      <span>{label}</span>
+                      <span>{tr(label)}</span>
                       <input type="checkbox" checked={st[k]} onChange={(e) => setSettings({ [k]: e.target.checked })} />
                     </label>
                   ))}
+                  <label className="slider">
+                    <span>{tr("language")}</span>
+                    <LangPicker />
+                  </label>
                 </>
               )}
               {tab === "controls" && (
                 <>
                   <label className="slider">
-                    <span>look speed</span>
+                    <span>{tr("look speed")}</span>
                     <input type="range" min={0.3} max={2} step={0.05} value={st.lookSpeed} onChange={(e) => setSettings({ lookSpeed: Number(e.target.value) })} />
                     <i>{st.lookSpeed.toFixed(2)}</i>
                   </label>
                   <label className="toggle">
-                    <span>invert look up/down</span>
+                    <span>{tr("invert look up/down")}</span>
                     <input type="checkbox" checked={st.invertY} onChange={(e) => setSettings({ invertY: e.target.checked })} />
                   </label>
                   <label className="toggle">
-                    <span>phone stick turns you (off = side-steps)</span>
+                    <span>{tr("phone stick turns you (off = side-steps)")}</span>
                     <input type="checkbox" checked={st.stickSteers} onChange={(e) => setSettings({ stickSteers: e.target.checked })} />
                   </label>
-                  <label className="toggle">
-                    <span>stick on the right side</span>
-                    <input type="checkbox" checked={st.stickSide === "right"} onChange={(e) => setSettings({ stickSide: e.target.checked ? "right" : "left" })} />
-                  </label>
                   <div className="keys">
-                    <b>keyboard</b>
-                    <span>W A S D · move</span>
-                    <span>mouse drag / ← → · look</span>
-                    <span>shift · run</span>
-                    <span>space · jump</span>
-                    <span>E · spin a cube / order from a TV</span>
-                    <span>F · strike (with a knife)</span>
-                    <span>G · drop a relic</span>
-                    <span>P · snapshot</span>
-                    <span>T / enter · talk</span>
-                    <span>esc · settings</span>
+                    <b>{tr("keyboard")}</b>
+                    <span>{tr("W A S D · move")}</span>
+                    <span>{tr("mouse drag / ← → · look")}</span>
+                    <span>{tr("shift · run")}</span>
+                    <span>{tr("space · jump")}</span>
+                    <span>{tr("E · spin a cube / order from a TV")}</span>
+                    <span>{tr("F · strike (with a knife)")}</span>
+                    <span>{tr("G · drop a relic")}</span>
+                    <span>{tr("P · snapshot")}</span>
+                    <span>{tr("T / enter · talk")}</span>
+                    <span>{tr("esc · settings")}</span>
                   </div>
                 </>
               )}
               {tab === "graphics" && (
                 <>
                   <label className="toggle">
-                    <span>quality</span>
+                    <span>{tr("quality")}</span>
                     <select value={st.quality} onChange={(e) => setSettings({ quality: e.target.value as Settings["quality"] })}>
-                      <option value="low">low (fastest)</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high (sharpest)</option>
+                      <option value="low">{tr("low (fastest)")}</option>
+                      <option value="medium">{tr("medium")}</option>
+                      <option value="high">{tr("high (sharpest)")}</option>
                     </select>
                   </label>
                   <label className="slider">
-                    <span>field of view</span>
+                    <span>{tr("field of view")}</span>
                     <input type="range" min={60} max={90} step={1} value={st.fov} onChange={(e) => setSettings({ fov: Number(e.target.value) })} />
                     <i>{st.fov}°</i>
                   </label>
@@ -2742,7 +2881,7 @@ function Game({ nick }: { nick: string }) {
                     ] as const
                   ).map(([k, label]) => (
                     <label key={k} className="toggle">
-                      <span>{label}</span>
+                      <span>{tr(label)}</span>
                       <input type="checkbox" checked={st[k]} onChange={(e) => setSettings({ [k]: e.target.checked })} />
                     </label>
                   ))}
@@ -2750,9 +2889,9 @@ function Game({ nick }: { nick: string }) {
               )}
             </div>
             <div className="lab-settings-foot">
-              <button onClick={() => setSettings(DEFAULTS)}>reset</button>
+              <button onClick={() => setSettings(DEFAULTS)}>{tr("reset")}</button>
               <button className="done" onClick={() => setSettingsOpen(false)}>
-                done
+                {tr("done")}
               </button>
             </div>
           </div>
@@ -2762,19 +2901,19 @@ function Game({ nick }: { nick: string }) {
       {/* today's quests */}
       <div className={"lab-quests" + (questsOpen ? " open" : "")} onPointerDown={stop} onPointerUp={stop}>
         <button className="lab-quests-chip" onClick={() => setQuestsOpen((o) => !o)}>
-          ◇ quests {questList.filter((q) => q.done).length}/{questList.length}
+          ◇ {tr("quests")} {questList.filter((q) => q.done).length}/{questList.length}
         </button>
         {questsOpen && (
           <ul>
             {questList.map((q) => (
-              <li key={q.text} className={q.done ? "done" : ""}>
-                <span>{q.done ? "✓" : "◇"}</span> {q.text}
+              <li key={q.text} className={q.done ? tr("done") : ""}>
+                <span>{q.done ? "✓" : "◇"}</span> {tr(q.text)}
                 <em>
                   {q.done ? "done" : q.kind === "walk" ? `${q.count}/${q.goal} m` : q.kind === "dark" ? `${q.count}/${q.goal} s` : `${q.count}/${q.goal}`} · +{q.reward} ◈
                 </em>
               </li>
             ))}
-            <li className="hint">new quests every day · the same for everyone</li>
+            <li className="hint">{tr("new quests every day · the same for everyone")}</li>
           </ul>
         )}
       </div>
@@ -2795,21 +2934,21 @@ function Game({ nick }: { nick: string }) {
                 const h = hearers();
                 return (
                   <span>
-                    {h.clear ? `${h.clear} ${h.clear === 1 ? "person hears" : "people hear"} you` : "no one is close enough to hear you"}
-                    {h.far ? ` · ${h.far} further away` : ""}
+                    {h.clear ? (h.clear === 1 ? tr("1 person hears you") : tr("{n} people hear you", { n: h.clear })) : tr("no one is close enough to hear you")}
+                    {h.far ? ` · ${tr("{n} further away", { n: h.far })}` : ""}
                   </span>
                 );
               })()}
-              <button className="lab-chat-x" onClick={() => setChatOpen(false)} aria-label="close chat">
+              <button className="lab-chat-x" onClick={() => setChatOpen(false)} aria-label={tr("close chat")}>
                 ×
               </button>
             </div>
             <div className="lab-chat-log">
-              {log.length === 0 && <div className="lab-chat-empty">say hi. anyone within 30 m hears you.</div>}
+              {log.length === 0 && <div className="lab-chat-empty">{tr("say hi. anyone within 30 m hears you.")}</div>}
               {log.map((l) => (
                 <div key={l.key} className={"lab-chat-row" + (l.mine ? " mine" : "")}>
                   <button className="lab-chat-line" onClick={() => !l.mine && setLineMenu(lineMenu === l.key ? null : l.key)}>
-                    <b>{l.mine ? "you" : l.nick}</b> {l.text}
+                    <b>{l.mine ? tr("you") : l.nick}</b> {l.text}
                   </button>
                   {lineMenu === l.key && (
                     <span className="lab-chat-menu">
@@ -2822,7 +2961,7 @@ function Game({ nick }: { nick: string }) {
                       >
                         reply
                       </button>
-                      <button onClick={() => muteLine(l)}>mute</button>
+                      <button onClick={() => muteLine(l)}>{tr("mute")}</button>
                     </span>
                   )}
                 </div>
@@ -2831,8 +2970,8 @@ function Game({ nick }: { nick: string }) {
             </div>
             <div className="lab-quick">
               {["hi", "where are you?", "follow me", "wait for me", "look at this", "nice", "bye"].map((q) => (
-                <button key={q} type="button" onClick={() => sendChat(q)}>
-                  {q}
+                <button key={q} type="button" onClick={() => sendChat(tr(q))}>
+                  {tr(q)}
                 </button>
               ))}
             </div>
@@ -2843,15 +2982,15 @@ function Game({ nick }: { nick: string }) {
                 sendChat();
               }}
             >
-              <input ref={chatInput} autoFocus value={draft} maxLength={80} enterKeyHint="send" onChange={(e) => setDraft(e.target.value)} placeholder="type a message…" />
-              <button type="submit" className="lab-chat-send" disabled={!draft.trim()} aria-label="send">
+              <input ref={chatInput} autoFocus value={draft} maxLength={80} enterKeyHint="send" onChange={(e) => setDraft(e.target.value)} placeholder={tr("type a message…")} />
+              <button type="submit" className="lab-chat-send" disabled={!draft.trim()} aria-label={tr("send")}>
                 ➝
               </button>
             </form>
             <div className="lab-emotes">
               {EMOTES.map((k) => (
                 <button type="button" key={k} onClick={() => emote(k)}>
-                  {k}
+                  {tr(k)}
                 </button>
               ))}
             </div>
@@ -2860,18 +2999,18 @@ function Game({ nick }: { nick: string }) {
           <>
             {chat.map((l) => (
               <button key={l.key} className={"lab-chat-line" + (l.mine ? " mine" : "")} onClick={() => setChatOpen(true)}>
-                <b>{l.mine ? "you" : l.nick}</b> {l.text}
+                <b>{l.mine ? tr("you") : l.nick}</b> {l.text}
               </button>
             ))}
-            <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label="open chat">
-              <span className="lab-chat-icon">❝</span> chat
+            <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label={tr("open chat")}>
+              <span className="lab-chat-icon">❝</span> {tr("chat")}
               {unread > 0 && <span className="lab-chat-badge">{unread > 9 ? "9+" : unread}</span>}
             </button>
           </>
         )}
       </div>
 
-      {mapOpen && mapRef.current && <LabMap source={mapRef.current} nick={nick} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} />}
+      {mapOpen && mapRef.current && <LabMap source={mapRef.current} nick={nick} cards={cards} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} />}
 
       {hud.dead && (
         <div className="lab-dead" onPointerDown={stop} onPointerUp={stop}>
@@ -2886,10 +3025,10 @@ function Game({ nick }: { nick: string }) {
             {hud.dead.best && <span className="lab-best"> ✶</span>}
           </div>
           <div className="lab-dead-actions">
-            <button onClick={() => restartRef.current()} aria-label="again">
+            <button onClick={() => restartRef.current()} aria-label={tr("again")}>
               ↻
             </button>
-            <button onClick={share} aria-label="share" disabled={shareState === "busy"}>
+            <button onClick={share} aria-label={tr("share")} disabled={shareState === "busy"}>
               {shareState === "done" ? "✓" : "⇪"}
             </button>
           </div>

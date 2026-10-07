@@ -17,7 +17,6 @@ export type Settings = {
   lookSpeed: number; // 0.3–2
   invertY: boolean;
   stickSteers: boolean; // phone stick turns you (true) or side-steps (false)
-  stickSide: "left" | "right";
   // graphics
   quality: "low" | "medium" | "high";
   fov: number; // 60–90
@@ -40,7 +39,6 @@ export const DEFAULTS: Settings = {
   lookSpeed: 1,
   invertY: false,
   stickSteers: true,
-  stickSide: "left",
   quality: "medium",
   fov: 72,
   glow: true,

@@ -1,6 +1,6 @@
 // seeface1 API: stores labyrinth sign-ups in MongoDB.
 //   POST /api/players  { nick, email?, consent, ref? }  → { ok: true }
-//   POST /api/forget   { email }                        → deletes that person (GDPR "right to erasure")
+//   POST /api/forget   { email }                        → deletes that person (GDPR "right to erasure"); always { ok: true }
 //   POST /api/register { nick, password, email?, consent?, progress } → { token, account }
 //   POST /api/login    { nick, password }                → { token, account }
 //   GET  /api/me                      (Authorization: Bearer <token>) → { account }
@@ -212,27 +212,47 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
 const REF = /^[\w-]{1,40}$/;
 const CONSENT_TEXT = "send me news from seeface1 (unsubscribe any time)";
 
-// tiny per-IP rate limit: 30 requests / minute (spam and bots)
-const hits = new Map();
-function limited(ip) {
-  const now = Date.now();
-  const recent = (hits.get(ip) || []).filter((t) => now - t < 60_000);
-  recent.push(now);
-  hits.set(ip, recent);
-  return recent.length > 30;
+// tiny in-memory rate limits: `max` hits per `windowMs` per key
+function limiter(max, windowMs) {
+  const hits = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of hits) if (now - v[v.length - 1] > windowMs) hits.delete(k);
+  }, 60_000).unref();
+  return (key) => {
+    const now = Date.now();
+    const recent = (hits.get(key) || []).filter((t) => now - t < windowMs);
+    recent.push(now);
+    hits.set(key, recent);
+    return recent.length > max;
+  };
 }
-setInterval(() => hits.clear(), 10 * 60_000).unref();
+// 30 requests / minute per IP (spam and bots)
+const limited = limiter(30, 60_000);
 
 // ------------------------------------------------------------------ app
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
+// same-Wi-Fi testing (192.168.x.x) only while ALLOWED_ORIGINS isn't set, i.e. never on Render
+const LAN_OK = !process.env.ALLOWED_ORIGINS;
+app.use((_req, res, next) => {
+  // API answers carry session tokens: never cache them, never frame or sniff them
+  res.set({
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  });
+  next();
+});
 app.use(express.json({ limit: "2kb" }));
 app.use(
   cors({
     origin: (origin, cb) => {
-      // allow the live site, localhost and same-Wi-Fi testing (192.168.x.x)
-      const ok = !origin || ORIGINS.includes(origin) || /^http:\/\/192\.168\.\d+\.\d+:5173$/.test(origin);
+      const ok = !origin || ORIGINS.includes(origin) || (LAN_OK && /^http:\/\/192\.168\.\d+\.\d+:5173$/.test(origin));
       cb(null, ok);
     },
   })
@@ -271,15 +291,12 @@ app.post("/api/players", async (req, res) => {
 
 // ------------------------------------------------------------------ accounts
 const PASSWORD_MIN = 6;
-// stricter limit for password guesses: 10 tries per 10 minutes per IP
-const tries = new Map();
-function tooManyTries(ip) {
-  const now = Date.now();
-  const recent = (tries.get(ip) || []).filter((t) => now - t < 10 * 60_000);
-  recent.push(now);
-  tries.set(ip, recent);
-  return recent.length > 10;
-}
+// stricter limits for password guesses: 10 tries / 10 min per IP, and 20 / 10 min per
+// account so a botnet can't spread guesses at one name across many IPs
+const tooManyTries = limiter(10, 10 * 60_000);
+const tooManyTriesOn = limiter(20, 10 * 60_000);
+// unknown names still pay for one scrypt, so the answer time doesn't reveal who exists
+const DUMMY = await hashPassword(randomBytes(16).toString("hex"));
 async function auth(req) {
   const m = /^Bearer ([0-9a-f]{64})$/.exec(req.get("authorization") || "");
   if (!m) return null;
@@ -326,10 +343,12 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   if (tooManyTries(req.ip)) return res.status(429).json({ ok: false, error: "slow down" });
   const { nick, password } = req.body || {};
-  if (typeof nick !== "string" || typeof password !== "string" || password.length > 200) return res.status(400).json({ ok: false, error: "wrong" });
+  if (typeof nick !== "string" || !NICK.test(nick) || typeof password !== "string" || password.length > 200) return res.status(400).json({ ok: false, error: "wrong" });
+  if (tooManyTriesOn(nick.toLowerCase())) return res.status(429).json({ ok: false, error: "slow down" });
   const acc = await store.getAccount(nick.toLowerCase());
-  // same answer for "no such name" and "wrong password"
-  if (!acc || !acc.hash || !(await checkPassword(password, acc))) return res.status(401).json({ ok: false, error: "wrong" });
+  // same answer (and about the same time) for "no such name" and "wrong password"
+  const ok = await checkPassword(password, acc?.hash ? acc : DUMMY);
+  if (!acc || !acc.hash || !ok) return res.status(401).json({ ok: false, error: "wrong" });
   await store.updateAccount(acc.nickLower, { lastSeen: new Date() });
   const token = await store.newSession(acc.nickLower);
   res.json({ ok: true, token, account: publicAccount(acc) });
@@ -367,6 +386,7 @@ app.post("/api/account/delete", async (req, res) => {
   const ok = a.acc.hash ? typeof req.body?.password === "string" && (await checkPassword(req.body.password, a.acc)) : req.body?.password === a.acc.nick;
   if (!ok) return res.status(401).json({ ok: false, error: "wrong" });
   await store.deleteAccount(a.acc.nickLower);
+  if (a.acc.email) await forget(a.acc.email); // their news sign-up goes too
   res.json({ ok: true });
 });
 
@@ -415,11 +435,11 @@ app.get("/api/instagram/callback", async (req, res) => {
   try {
     // 1. the code becomes a token
     const form = new URLSearchParams({ client_id: IG.id, client_secret: IG.secret, grant_type: "authorization_code", redirect_uri: IG.redirect, code: String(code) });
-    const tokRes = await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", body: form });
+    const tokRes = await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", body: form, signal: AbortSignal.timeout(10_000) });
     const tok = await tokRes.json();
     if (!tok.access_token) throw new Error(tok.error_message || "no token");
     // 2. who they are (we keep only their instagram id and username)
-    const meRes = await fetch(`https://graph.instagram.com/v21.0/me?fields=id,username&access_token=${encodeURIComponent(tok.access_token)}`);
+    const meRes = await fetch(`https://graph.instagram.com/v21.0/me?fields=id,username&access_token=${encodeURIComponent(tok.access_token)}`, { signal: AbortSignal.timeout(10_000) });
     const me = await meRes.json();
     if (!me.id) throw new Error("no profile");
     const ig = String(me.id);
@@ -444,8 +464,9 @@ app.post("/api/forget", async (req, res) => {
   if (limited(req.ip)) return res.status(429).json({ ok: false });
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   if (!EMAIL.test(email)) return res.status(400).json({ ok: false });
-  const n = await forget(email);
-  res.json({ ok: true, deleted: n });
+  await forget(email);
+  // same answer whether or not we had it: this endpoint must not tell anyone who signed up
+  res.json({ ok: true });
 });
 
 
@@ -491,8 +512,9 @@ function summarise(docs, startKey) {
 }
 app.get("/api/stats", async (req, res) => {
   const key = process.env.ADMIN_KEY;
-  const given = req.get("x-admin-key") || "";
-  if (!key || given.length !== key.length || !timingSafeEqual(Buffer.from(given), Buffer.from(key))) return res.status(404).end();
+  // compare fixed-length hashes so neither the key nor its length leaks through timing
+  const given = createHash("sha256").update(req.get("x-admin-key") || "").digest();
+  if (!key || !timingSafeEqual(given, createHash("sha256").update(key).digest())) return res.status(404).end();
   try {
     const acc = await allDocs("accounts");
     const ply = await allDocs("players");
@@ -508,6 +530,14 @@ app.get("/api/stats", async (req, res) => {
     console.error("stats failed", e.message);
     res.status(500).json({ ok: false });
   }
+});
+
+// unknown routes and any error (bad JSON, too big, a crash in a handler): short JSON, never a stack trace
+app.use((_req, res) => res.status(404).json({ ok: false }));
+app.use((err, _req, res, _next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error("request failed", err.message);
+  res.status(status < 500 ? status : 500).json({ ok: false });
 });
 
 app.listen(PORT, () => console.log(`seeface1 api on :${PORT}`));

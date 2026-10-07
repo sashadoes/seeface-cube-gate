@@ -3,6 +3,7 @@
 // effect: it plays for EVERYONE nearby for 3 minutes, louder the closer you
 // are. Shared as a retained world message so people arriving later hear it
 // too, in step (everyone starts from the same moment).
+import { useHrtf } from "./immersive";
 import * as THREE from "three";
 import { CELL, PLACE, placeAt, placeOf, rnd, roomOf, wallEast, wallSouth } from "./maze";
 import { EFFECTS, RECORDS, playRecord, type FxId, type RecordId } from "./music";
@@ -149,7 +150,7 @@ export function createGramophones(presence: Presence, ctx: AudioContext, out: Au
           cur?.stop();
           const r = playRecord(ctx, p.rec, p.fx, p.t0);
           const panner = ctx.createPanner();
-          panner.panningModel = "equalpower";
+          panner.panningModel = useHrtf() ? "HRTF" : "equalpower";
           panner.distanceModel = "inverse";
           panner.refDistance = 3;
           panner.maxDistance = HEAR_M;

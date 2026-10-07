@@ -1,3 +1,4 @@
+import { t as tr, useLang } from "../../i18n";
 import { useEffect, useRef, useState } from "react";
 import { Howl } from "howler";
 import { track } from "../../analytics";
@@ -36,6 +37,7 @@ let startedOnce = false;
 const swallow = (e: React.SyntheticEvent) => e.stopPropagation();
 
 export default function MusicToggle() {
+  useLang();
   const [on, setOn] = useState(readPref);
   const [playing, setPlaying] = useState(false);
   const musicRef = useRef<Howl | null>(null);
@@ -129,17 +131,17 @@ export default function MusicToggle() {
       <div className="music-head">
         <span className="music-disc" />
         <div className="music-marquee">
-          <span>♫ now playing: {TRACK_NAME} ~ seeface1 ~</span>
+          <span>♫ {tr("now playing")}: {TRACK_NAME} ~ seeface1 ~</span>
         </div>
       </div>
-      <div className="music-switch" role="group" aria-label="background music">
-        <span className="music-label">music:</span>
+      <div className="music-switch" role="group" aria-label={tr("background music")}>
+        <span className="music-label">{tr("music")}:</span>
         <button className={on ? "active" : ""} onClick={() => set(true)}>
-          on
+          {tr("on")}
         </button>
         <span className="music-sep">/</span>
         <button className={!on ? "active" : ""} onClick={() => set(false)}>
-          off
+          {tr("off")}
         </button>
       </div>
     </div>

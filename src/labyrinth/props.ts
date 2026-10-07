@@ -363,7 +363,9 @@ export function createProps(): Props {
         g.add(rel);
         pickups.push({ key, kind: "relic", x: rel.position.x, z: rel.position.z, obj: rel, colour, shape });
       }
-    } else if (deep && r < 0.2375 && wall[0]) {
+    } else if (r < 0.245) {
+      // empty: this slice held the bottles of elsewhere (teleport cards now recharge on their own)
+    } else if (deep && r < 0.2475 && wall[0]) {
       (rnd(i, j, salt + 11) < 0.5 ? cokeTable : cocaShrub)(g);
       g.position.set(wall[1], 0, wall[2]);
       g.rotation.y = wall[3];

@@ -136,7 +136,11 @@ export type ArtLayer = {
   update: (px: number, pz: number, dt: number) => void;
   /** a wish changed this room: rebuild its installation */
   refresh: (I: number, J: number) => void;
+  /** approved artists' posts: they also hang on corridor posters all over the world */
+  setGallery: (list: GalleryPiece[]) => void;
 };
+
+export type GalleryPiece = { id: string; img: string; nick: string };
 
 /** seedFor: a wished room image overrides the default one */
 export function createArt(seedFor: (I: number, J: number) => string | null = () => null): ArtLayer {
@@ -200,6 +204,15 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
     return t;
   })();
 
+  // approved art from players: framed with the artist's name (the agreement: "always with your name")
+  let gallery: GalleryPiece[] = [];
+  const galleryCache = new Map<string, THREE.CanvasTexture>();
+  const galleryPoster = (p: GalleryPiece) => {
+    let t = galleryCache.get(p.id);
+    if (!t) galleryCache.set(p.id, (t = makeGalleryPoster(p)));
+    return t;
+  };
+
   let lastCell = "";
 
   function placeRooms(px: number, pz: number) {
@@ -255,7 +268,9 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
         p.position.set(s[1], 1.75, s[2]);
         p.rotation.set(0, s[3], 0);
         const pick = rnd(i, j, 62);
-        (p.material as THREE.MeshBasicMaterial).map = pick < 0.22 ? logoSign : pick < 0.42 ? adPoster(Math.floor(rnd(i, j, 64) * AD_LINES.length)) : pick < 0.68 ? zonePoster(zoneAt((i + 0.5) * CELL, (j + 0.5) * CELL).kind, Math.floor(rnd(i, j, 63) * 4)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
+        // players' approved art takes the photo slots (and a few more) once there is any
+        const piece = gallery.length && pick >= 0.6 ? gallery[Math.floor(rnd(i, j, 61) * gallery.length)] : null;
+        (p.material as THREE.MeshBasicMaterial).map = piece ? galleryPoster(piece) : pick < 0.22 ? logoSign : pick < 0.42 ? adPoster(Math.floor(rnd(i, j, 64) * AD_LINES.length)) : pick < 0.68 ? zonePoster(zoneAt((i + 0.5) * CELL, (j + 0.5) * CELL).kind, Math.floor(rnd(i, j, 63) * 4)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
         (p.material as THREE.MeshBasicMaterial).needsUpdate = true;
         p.visible = true;
       }
@@ -296,7 +311,45 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
       baseUpdate(px, pz, dt);
     },
     refresh,
+    setGallery(list) {
+      const key = (l: GalleryPiece[]) => l.map((p) => p.id).join(",");
+      if (key(list) === key(gallery)) return;
+      gallery = list;
+      for (const [id, t] of galleryCache) if (!list.some((p) => p.id === id)) (t.dispose(), galleryCache.delete(id));
+      placePosters(lastPos.x, lastPos.z);
+    },
   };
+}
+
+// ------------------------------------------------------------------ players' art as posters
+function makeGalleryPoster(p: GalleryPiece) {
+  const W = 512, H = 358;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#070707";
+  g.fillRect(0, 0, W, H);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const img = new Image();
+  img.onload = () => {
+    // fit the whole work, never crop it
+    const box = { w: W - 40, h: H - 70 };
+    const k = Math.min(box.w / img.width, box.h / img.height);
+    const w = img.width * k, h = img.height * k;
+    g.drawImage(img, (W - w) / 2, 18 + (box.h - h) / 2, w, h);
+    g.fillStyle = "#e9e4da";
+    g.font = "italic 22px 'Times New Roman', serif";
+    g.textAlign = "center";
+    g.fillText(`@${p.nick}`, W / 2, H - 20, W - 40);
+    g.strokeStyle = "rgba(255,255,255,0.14)";
+    g.lineWidth = 2;
+    g.strokeRect(6, 6, W - 12, H - 12);
+    t.needsUpdate = true;
+  };
+  img.src = p.img;
+  return t;
 }
 
 // ------------------------------------------------------------------ generated posters per zone
