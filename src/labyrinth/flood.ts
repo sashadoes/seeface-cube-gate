@@ -20,10 +20,23 @@ function hash(n: number) {
   return (h >>> 0) / 4294967295;
 }
 
-// ?flood=1 forces one a few seconds after the page loads (testing / trailers)
-const forcedAt = new URLSearchParams(location.search).has("flood") ? Date.now() + 4000 : 0;
+// Disasters: each 20-minute window holds one, picked from the clock: the flood,
+// a tornado, a fire or the plague (hazards.ts has the last three).
+// ?flood=1 or ?disaster=<kind> forces one a few seconds after the page loads.
+export type DisasterKind = "flood" | "tornado" | "fire" | "plague";
+const KINDS: DisasterKind[] = ["flood", "tornado", "fire", "plague"];
+const q = new URLSearchParams(location.search);
+const forcedKind = (q.get("disaster") as DisasterKind | null) ?? (q.has("flood") ? "flood" : null);
+const forcedAt = forcedKind && KINDS.includes(forcedKind) ? Date.now() + 4000 : 0;
 
 export type FloodPhase = "none" | "warn" | "flood";
+
+/** which disaster this window holds (the same for everyone) */
+export function disasterKind(now = Date.now()): DisasterKind {
+  if (forcedAt) return forcedKind!;
+  const k = Math.floor(now / (FLOOD_EVERY_MIN * 60_000));
+  return KINDS[Math.floor(hash(k + 4242) * KINDS.length)];
+}
 
 export function floodPhase(now = Date.now()): { phase: FloodPhase; left: number } {
   const slot = FLOOD_EVERY_MIN * 60_000;
@@ -145,7 +158,8 @@ export function createFlood() {
       const crashes: number[] = []; // distances of waterfalls that just landed
       let killed = false;
 
-      if (phase === "flood" && ctx.alive) {
+      const isFlood = disasterKind() === "flood";
+      if (phase === "flood" && isFlood && ctx.alive) {
         spawnIn -= dt;
         if (spawnIn <= 0) {
           spawnIn = 0.7 + Math.random() * 0.9;
@@ -203,7 +217,7 @@ export function createFlood() {
       if (nf) light.position.set(nf.x, 2.4, nf.z);
       light.intensity = nf ? (nf.crashed ? 6 : 2) : 0;
 
-      return { phase, left, changed, crashes, killed, nearest };
+      return { phase, left, changed, crashes, killed, nearest, kind: disasterKind() };
     },
   };
 }

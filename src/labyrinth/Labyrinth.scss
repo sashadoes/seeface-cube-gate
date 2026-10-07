@@ -1537,3 +1537,20 @@
     display: none;
   }
 }
+
+// disasters: warning light per kind, and the plague's green sickness
+.lab-flood-fx[data-phase="flood"][data-kind="tornado"] {
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0), rgba(60, 50, 40, 0.35));
+}
+
+.lab-flood-fx[data-phase="flood"][data-kind="fire"] {
+  background: linear-gradient(to top, rgba(255, 110, 30, 0.22), rgba(40, 10, 0, 0.18));
+}
+
+.lab-flood-fx[data-phase="flood"][data-kind="plague"] {
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0), rgba(30, 80, 30, 0.25));
+}
+
+.labyrinth.plagued canvas {
+  filter: sepia(calc(var(--plague) * 0.6)) hue-rotate(calc(var(--plague) * 60deg)) saturate(calc(1 + var(--plague))) blur(calc(var(--plague) * 1.2px));
+}

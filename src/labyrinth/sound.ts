@@ -10,6 +10,8 @@ export type Sound = {
   /** the shared audio context + a bus for gramophones/radio music (own volume slider) */
   ctx: AudioContext;
   musicBus: GainNode;
+  effectsOut: GainNode;
+  ambienceOut: GainNode;
   setWeather: (kind: WeatherKind, intensity: number, wind: number) => void;
   step: (zone: ZoneKind, running: boolean, wet?: number) => void;
   /** the flood siren: 0 = off, 1 = full wail */
@@ -288,6 +290,8 @@ export function createSound(): Sound {
     resume: () => ctx.state !== "running" && ctx.resume(),
     ctx,
     musicBus,
+    effectsOut: effectsBus,
+    ambienceOut: ambienceBus,
     showtune(level) {
       showLevel = level;
       showGain.gain.setTargetAtTime(level * 0.9, ctx.currentTime, 0.3);

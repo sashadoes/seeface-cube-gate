@@ -20,7 +20,7 @@ const POOL: QuestDef[] = [
   { kind: "treasure", goal: 1, text: "find a hidden treasure", reward: 6 },
   { kind: "wish", goal: 1, text: "make a wish", reward: 5 },
   { kind: "jump", goal: 25, text: "jump 25 times", reward: 3 },
-  { kind: "flood", goal: 1, text: "survive a flood", reward: 12 },
+  { kind: "flood", goal: 1, text: "survive a disaster (flood, tornado, fire, plague)", reward: 12 },
   { kind: "place", goal: 3, text: "visit 3 places (museum, theater, mall…)", reward: 8 },
   { kind: "darkroom", goal: 1, text: "find the secret dark room", reward: 20 },
 ];

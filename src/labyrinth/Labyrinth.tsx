@@ -40,6 +40,7 @@ import { free, spawn, roomOf, safeSpot as roomCentreOf, CELL } from "./maze";
 import type { WeatherKind } from "../marks/weather";
 import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
+import { createHazards } from "./hazards";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions } from "./places";
 import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
@@ -995,6 +996,9 @@ function Game({ nick }: { nick: string }) {
       el.dataset.calm = st.flashes ? "" : "1";
     });
 
+    const hazards = createHazards(sound.ctx, sound.ambienceOut);
+    world.scene.add(hazards.group);
+
     // gramophones (music for everyone nearby) + the radio dial
     const gramos = createGramophones(presence, sound.ctx, sound.musicBus);
     world.scene.add(gramos.group);
@@ -1551,15 +1555,21 @@ function Game({ nick }: { nick: string }) {
       // the flood
       const sp = Math.hypot(vel.x, vel.z);
       const fl = flood.update(dt, t, { px: pos.x, pz: pos.z, vx: sp > 0.5 ? vel.x / sp : -Math.sin(input.yaw), vz: sp > 0.5 ? vel.z / sp : -Math.cos(input.yaw), alive });
-      sound.siren(fl.phase === "warn" ? 1 : fl.phase === "flood" ? 0.35 : 0);
+      sound.siren(fl.phase === "warn" ? 1 : fl.phase === "flood" ? (fl.kind === "flood" ? 0.35 : 0.18) : 0);
       for (const d of fl.crashes) sound.crash(d);
       if (fl.changed) {
         floodFx.dataset.phase = fl.changed;
+        floodFx.dataset.kind = fl.kind;
         if (fl.changed === "warn") {
-          sayRef.current("⚠ the flood is coming · get into a room", true);
-          track("flood-warn");
+          const WARN = { flood: "⚠ the flood is coming", tornado: "⚠ a tornado is coming", fire: "⚠ fire", plague: "⚠ the plague is coming" } as const;
+          sayRef.current(`${WARN[fl.kind]} · get into a room`, true);
+          track(`${fl.kind}-warn`);
         }
-        if (fl.changed === "flood") {
+        if (fl.changed === "flood" && fl.kind === "tornado") {
+          sound.setWeather("storm", 1, 90);
+          skyKind = null;
+        }
+        if (fl.changed === "flood" && fl.kind === "flood") {
           floodOn = true;
           world.setWeather({ kind: "storm", intensity: 1, wind: 40, isDay: false, temp: 10 });
           sound.setWeather("storm", 1, 40);
@@ -1570,10 +1580,45 @@ function Game({ nick }: { nick: string }) {
           floodOn = false;
           applySky(false);
           if (alive) {
-            sayRef.current("the water is gone. you survived the flood");
             quest("flood");
-            track("flood-survived");
+            track(`${fl.kind}-survived`);
           }
+        }
+      }
+
+      // the other disasters: tornado, fire, plague
+      const hz = hazards.update(dt, t, fl.kind, fl.phase, { px: pos.x, pz: pos.z, alive });
+      if (hz.pull) {
+        const nx = pos.x + hz.pull.x * dt, nz = pos.z + hz.pull.z * dt;
+        if (free(nx, pos.z)) pos.x = nx;
+        if (free(pos.x, nz)) pos.z = nz;
+      }
+      if (hz.warmth) light = Math.min(100, light + hz.warmth * dt);
+      if (hz.cough) hazards.cough();
+      el.style.setProperty("--plague", String(hz.plague));
+      el.classList.toggle("plagued", hz.plague > 0);
+      if (hz.hit && alive) {
+        if (lethal()) {
+          killedBy = hz.hit.by;
+          track(`${hz.hit.by.replace("the ", "")}-killed`);
+          die();
+        } else {
+          // it hurts, it doesn't take you: thrown somewhere safe (far, for the tornado)
+          const far = hz.hit.fling ? 2 + Math.floor(Math.random() * 2) : 0;
+          const c = roomCentreOf(Math.floor(pos.x / CELL / 7) + (Math.random() < 0.5 ? -far : far), Math.floor(pos.z / CELL / 7) + (Math.random() < 0.5 ? -far : far));
+          pos.x = c.x;
+          pos.z = c.z;
+          vel.x = vel.z = 0;
+          light = Math.min(light, 25);
+          if (hz.hit.by === "the plague" && blood > 0) blood = addBlood(-Math.min(3, blood));
+          hunter.reset(pos.x, pos.z);
+          if (settings().flashes) {
+            el.classList.remove("rift");
+            void el.offsetWidth;
+            el.classList.add("rift");
+            el.style.setProperty("--rift", hz.hit.by === "the fire" ? "#ff9a3c" : hz.hit.by === "the plague" ? "#7aff9a" : "#d8d0c0");
+          }
+          track(`${hz.hit.by.replace("the ", "")}-survived-hit`);
         }
       }
       if (fl.killed && alive) {
