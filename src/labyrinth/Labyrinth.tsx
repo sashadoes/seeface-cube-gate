@@ -23,9 +23,11 @@ import { apiReady, registerPlayer } from "../api";
 import { noteLevel, noteRun, readProgress } from "../progress";
 import { accountsReady, currentAccount, deleteAccount, finishInstagram, instagramReady, instagramUrl, login, logout, refresh, register, type Account, type AuthError } from "../account";
 import LabMap, { type MapSource, type Trail } from "./LabMap";
+import Radar from "./Radar";
 import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, TELEPORT_COST } from "./cards";
 import { onOnline } from "../online";
 import { createProps } from "./props";
+import { createDream } from "./dream";
 import { createRifts } from "./rifts";
 import { LEVELS, levelAtX } from "./zones";
 import { createSound } from "./sound";
@@ -57,6 +59,7 @@ import { createGramophones } from "./gramophone";
 import { EFFECTS, RECORDS, type FxId, type RecordId } from "./music";
 import { STATIONS, createStations } from "./stations";
 import { createAfterlife, ORDER_COST } from "./afterlife";
+import { createBignord } from "./bignord";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
 import { DEFAULTS, hasSavedSettings, onSettings, setSettings, settings, type Settings } from "./settings";
@@ -640,6 +643,7 @@ function Game({ nick }: { nick: string }) {
     const flood = createFlood();
     const places = createPlaces();
     const afterlife = createAfterlife();
+    const bignord = createBignord();
     let tvHinted = false;
     const order = () => {
       if (blood < ORDER_COST) {
@@ -672,11 +676,17 @@ function Game({ nick }: { nick: string }) {
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
     const rifts = createRifts();
-    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, flood.group, places.group, afterlife.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
+    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, flood.group, places.group, afterlife.group, bignord.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
     const sound = createSound();
+    // the daily dream drop: new objects + a dream event every day (public/dream/today.json)
+    const dreamFx = document.createElement("div");
+    dreamFx.className = "lab-dream-fx";
+    el.appendChild(dreamFx);
+    const dream = createDream(sound, dreamFx);
+    world.scene.add(dream.group);
 
     // the lantern you carry
     const lantern = new THREE.SpotLight(0xffe9c4, 6, 14, 0.62, 0.55, 1.2);
@@ -1390,7 +1400,7 @@ function Game({ nick }: { nick: string }) {
       },
       trails: () => trails,
     } satisfies Partial<MapSource>);
-    if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails });
+    if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails, dream });
     // twists: unpredictable things that happen to you
     const twists = createTwists();
     const doppel = new THREE.Sprite(new THREE.SpriteMaterial({ map: demonTexture(demonOf(presence.me)), transparent: true, depthWrite: false, opacity: 0 }));
@@ -1399,6 +1409,7 @@ function Game({ nick }: { nick: string }) {
     doppel.visible = false;
     world.scene.add(doppel);
     let doppelT = -1, mirrorT = 0;
+    let floodGrace = 0; // seconds the water can't knock you again
 
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
@@ -1426,12 +1437,14 @@ function Game({ nick }: { nick: string }) {
         vel.z += (tz - vel.z) * Math.min(1, dt * accel);
         const dx = vel.x * dt, dz = vel.z * dt;
         const ox = pos.x, oz = pos.z;
-        if (free(pos.x + dx, pos.z)) pos.x += dx;
+        // walls, and the labyrinth's edge (a wall of static, it never moves you)
+        const step = (nx: number, nz: number) => free(nx, nz) && (inShip(pos.x, pos.z) || edge.allows(pos.x, pos.z, nx, nz));
+        if (step(pos.x + dx, pos.z)) pos.x += dx;
         else {
           if (Math.abs(vel.x) > 2) input.buzz();
           vel.x *= -0.2; // bump off walls
         }
-        if (free(pos.x, pos.z + dz)) pos.z += dz;
+        if (step(pos.x, pos.z + dz)) pos.z += dz;
         else {
           if (Math.abs(vel.z) > 2) input.buzz();
           vel.z *= -0.2;
@@ -1554,6 +1567,16 @@ function Game({ nick }: { nick: string }) {
       residents.update(dt, t, { px: pos.x, pz: pos.z, light });
       artLayer.update(pos.x, pos.z, dt);
       props.update(pos.x, pos.z, t);
+      dream.update(pos.x, pos.z, t, dt, !!eventKind);
+      if (dream.event()?.gravity === "low") lowGravT = Math.max(lowGravT, 0.5);
+      const gift = alive ? dream.touch(pos.x, pos.z) : null;
+      if (gift === "blood1" || gift === "blood3") earn(gift === "blood3" ? 3 : 1, "dream");
+      if (gift === "light") light = 100;
+      if (gift === "float") lowGravT = Math.max(lowGravT, 10);
+      if (gift === "colours") {
+        colourT = 9;
+        renderer.domElement.style.filter = "hue-rotate(150deg) saturate(1.7)";
+      }
 
       // rifts: step into one and fall into a secret level (or back up)
       const pulled = alive ? rifts.update(pos.x, pos.z, t, dt) : null;
@@ -1618,7 +1641,7 @@ function Game({ nick }: { nick: string }) {
 
       // the edge of the labyrinth
       // the ship is outside the labyrinth's edge rules
-      const eg = inShip(pos.x, pos.z) ? { fog: 0, grew: false, throwBack: null, nearEdge: false } : edge.update(pos.x, pos.z, presence.online(), dt);
+      const eg = inShip(pos.x, pos.z) ? { fog: 0, grew: false, nearEdge: false } : edge.update(pos.x, pos.z, presence.online(), dt);
       edgeFog = eg.fog;
       world.setEdgeFog(Math.max(eg.fog, fogT > 0 ? 0.7 : 0));
       if (eg.grew) sayRef.current(tr("the labyrinth grew · {online} inside", { online: presence.online() }));
@@ -1628,19 +1651,6 @@ function Game({ nick }: { nick: string }) {
         track("edge-reached");
       }
       if (!eg.nearEdge && edgeFog === 0) edgeWarned = false;
-      if (eg.throwBack && alive) {
-        pos.x = eg.throwBack.x;
-        pos.z = eg.throwBack.z;
-        vel.x = vel.z = 0;
-        hunter.reset(pos.x, pos.z);
-        el.classList.remove("rift");
-        void el.offsetWidth;
-        el.classList.add("rift");
-        el.style.setProperty("--rift", "#ffffff");
-        sayRef.current(tr("the static threw you back"));
-        track("edge-thrown");
-      }
-
       // twists
       const tw = twists.update(dt, alive && runTime > 30);
       if (tw === "blackout") {
@@ -1651,18 +1661,6 @@ function Game({ nick }: { nick: string }) {
         doppelT = 0;
         doppel.position.set(pos.x - Math.sin(input.yaw) * 7, 0, pos.z - Math.cos(input.yaw) * 7);
         doppel.visible = true;
-      }
-      if (tw === "moved") {
-        const I = Math.floor(pos.x / CELL / 7) + (Math.random() < 0.5 ? -1 : 1), J = Math.floor(pos.z / CELL / 7) + (Math.random() < 0.5 ? -1 : 1);
-        const c = roomCentreOf(I, J);
-        pos.x = c.x;
-        pos.z = c.z;
-        hunter.reset(pos.x, pos.z);
-        el.classList.remove("rift");
-        void el.offsetWidth;
-        el.classList.add("rift");
-        el.style.setProperty("--rift", "#c8b8ff");
-        sayRef.current(tr("the labyrinth moved you"));
       }
       if (tw === "mirror") {
         mirrorT = 7;
@@ -1803,6 +1801,7 @@ function Game({ nick }: { nick: string }) {
         sayRef.current(tr("tap the screen to order AFTER LIFE™ · {ORDER_COST} ◈", { ORDER_COST }));
       }
       if (!al.nearTV) tvHinted = false;
+      bignord.update(pos.x, pos.z);
       gramos.update(pos.x, pos.z, t);
       ai.update(dt, pos.x, pos.z);
       posts.update(pos.x, pos.z);
@@ -1970,8 +1969,8 @@ function Game({ nick }: { nick: string }) {
       const hz = hazards.update(dt, t, fl.kind, fl.phase, { px: pos.x, pz: pos.z, alive });
       if (hz.pull) {
         const nx = pos.x + hz.pull.x * dt, nz = pos.z + hz.pull.z * dt;
-        if (free(nx, pos.z)) pos.x = nx;
-        if (free(pos.x, nz)) pos.z = nz;
+        if (free(nx, pos.z) && edge.allows(pos.x, pos.z, nx, pos.z)) pos.x = nx;
+        if (free(pos.x, nz) && edge.allows(pos.x, pos.z, pos.x, nz)) pos.z = nz;
       }
       if (hz.warmth) light = Math.min(100, light + hz.warmth * dt);
       if (hz.cough) hazards.cough();
@@ -1983,11 +1982,7 @@ function Game({ nick }: { nick: string }) {
           track(`${hz.hit.by.replace("the ", "")}-killed`);
           die();
         } else {
-          // it hurts, it doesn't take you: thrown somewhere safe (far, for the tornado)
-          const far = hz.hit.fling ? 2 + Math.floor(Math.random() * 2) : 0;
-          const c = roomCentreOf(Math.floor(pos.x / CELL / 7) + (Math.random() < 0.5 ? -far : far), Math.floor(pos.z / CELL / 7) + (Math.random() < 0.5 ? -far : far));
-          pos.x = c.x;
-          pos.z = c.z;
+          // it hurts, it doesn't take you: you stay where you are (only intentional teleports)
           vel.x = vel.z = 0;
           light = Math.min(light, 25);
           if (hz.hit.by === "the plague" && blood > 0) blood = addBlood(-Math.min(3, blood));
@@ -2001,23 +1996,22 @@ function Game({ nick }: { nick: string }) {
           track(`${hz.hit.by.replace("the ", "")}-survived-hit`);
         }
       }
-      if (fl.killed && alive) {
+      floodGrace = Math.max(0, floodGrace - dt);
+      if (fl.killed && alive && floodGrace === 0) {
         if (lethal()) {
           killedBy = "the flood";
           track("flood-killed");
           die();
         } else {
-          // the water throws you instead of taking you
-          const c = roomCentreOf(Math.floor(pos.x / CELL / 7), Math.floor(pos.z / CELL / 7));
-          pos.x = c.x;
-          pos.z = c.z;
-          vel.x = vel.z = 0;
+          // the water knocks you back instead of taking you (you're never moved away)
+          vel.x *= -1.6;
+          vel.z *= -1.6;
+          floodGrace = 2;
           light = Math.min(light, 30);
           el.classList.remove("rift");
           void el.offsetWidth;
           el.classList.add("rift");
           el.style.setProperty("--rift", "#9fdcff");
-          sayRef.current(tr("the water took you and spat you out"));
           track("flood-thrown");
         }
       }
@@ -2124,7 +2118,7 @@ function Game({ nick }: { nick: string }) {
         const place = lvl > 0 ? LEVELS[lvl].name : inPlace ? PLACE_TITLES[inPlace.kind] : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
         const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}&v=${myVibe().id}`;
         setSnapState("busy");
-        makeSnapshot(renderer.domElement, { nick, place, event: eventKind ? EVENTS[eventKind].name : null, inviteUrl })
+        makeSnapshot(renderer.domElement, { nick, place, event: eventKind ? EVENTS[eventKind].name : dream.event()?.name ?? null, inviteUrl })
           .then((b) => {
             if (import.meta.env.DEV) (window as unknown as { __lastSnap: Blob }).__lastSnap = b; // for testing
             return shareSnapshot(b, inviteUrl);
@@ -2279,6 +2273,9 @@ function Game({ nick }: { nick: string }) {
           <span className="g">{EVENTS[hud.event].glyph}</span> {tr(EVENTS[hud.event].name)}
         </div>
       )}
+
+      {/* who is around: the radar turns with you (tap for the full map) */}
+      {!mapOpen && mapRef.current && <Radar source={mapRef.current} onOpen={() => setMapOpen(true)} />}
 
       {/* souls inside right now (you + everyone else) */}
       <div className={"lab-online" + (hud.met ? " met" : "")}>

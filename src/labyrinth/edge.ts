@@ -1,10 +1,9 @@
 // The edge: the labyrinth is only as big as the crowd inside it.
 // Few people → a small labyrinth around the entrance, so the few who are here
 // find each other. Every person who comes in pushes the edge out; when people
-// leave it slowly closes again. At the edge the fog turns to static and throws
-// you back inside. Each level (surface and secret levels) has its own edge
+// leave it slowly closes again. At the edge the fog turns to static and you
+// can't walk any further out (you're never moved: only intentional teleports). Each level (surface and secret levels) has its own edge
 // around its own entrance.
-import { CELL, safeSpot } from "./maze";
 import { LEVEL_OFFSET, levelAtX } from "./zones";
 
 const BASE = 70; // metres of labyrinth for one lonely person
@@ -18,7 +17,6 @@ export type EdgeState = { radius: number; fog: number; centre: { x: number; z: n
 export function createEdge() {
   let radius = edgeRadius(1);
   let announced = radius;
-  let outside = 0; // seconds spent past the edge
 
   function update(px: number, pz: number, online: number, dt: number) {
     const target = edgeRadius(online);
@@ -27,7 +25,6 @@ export function createEdge() {
     const cx = levelAtX(px) * LEVEL_OFFSET;
     const dist = Math.hypot(px - cx, pz);
     const fog = Math.max(0, Math.min(1, (dist - (radius - 14)) / 14));
-    outside = dist > radius + 2 ? outside + dt : 0;
 
     let grew = false;
     if (radius > announced + 30) {
@@ -36,16 +33,16 @@ export function createEdge() {
     }
     if (radius < announced - 30) announced = radius;
 
-    // past the edge for a moment: thrown back to a room inside
-    let throwBack: { x: number; z: number } | null = null;
-    if (outside > 1.2) {
-      outside = 0;
-      const k = (radius - 20) / Math.max(dist, 1);
-      const tx = cx + (px - cx) * k, tz = pz * k;
-      throwBack = safeSpot(Math.floor(tx / CELL / 7), Math.floor(tz / CELL / 7));
-    }
-    return { fog, grew, throwBack, nearEdge: fog > 0.3 };
+    return { fog, grew, nearEdge: fog > 0.3 };
   }
 
-  return { update, state: (px: number): EdgeState => ({ radius, fog: 0, centre: { x: levelAtX(px) * LEVEL_OFFSET, z: 0 } }) };
+  /** may you step from (ox,oz) to (nx,nz)? Past the edge you can only walk back in
+   *  (if the edge shrinks past you, nothing pushes you: just walk inwards). */
+  function allows(ox: number, oz: number, nx: number, nz: number) {
+    const cx = levelAtX(ox) * LEVEL_OFFSET;
+    const dn = Math.hypot(nx - cx, nz);
+    return dn <= radius + 1 || dn <= Math.hypot(ox - cx, oz);
+  }
+
+  return { update, allows, state: (px: number): EdgeState => ({ radius, fog: 0, centre: { x: levelAtX(px) * LEVEL_OFFSET, z: 0 } }) };
 }

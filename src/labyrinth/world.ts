@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { CELL, WALL_H, hasPanel, inShip, placeAt, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
 import type { Weather } from "../marks/weather";
+import { createRelief } from "./relief";
 import { WALL_VARIANTS, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, type ZoneDef } from "./zones";
 
 const VIEW = 7; // cells around the visitor that exist
@@ -108,6 +109,9 @@ export function createWorld(): World {
     scene.add(l);
     return l;
   });
+
+  // tiles, puddles, rugs, skirting, columns, a stepped ceiling (no collisions)
+  const relief = createRelief(scene);
 
   const ambient = new THREE.AmbientLight(0xb8b6ae, 0.13);
   scene.add(ambient);
@@ -239,6 +243,7 @@ export function createWorld(): World {
     }
     panels.count = np;
     panels.instanceMatrix.needsUpdate = true;
+    relief.rebuild(ci, cj, VIEW);
 
     // cubes: the rooms nearest to the visitor
     const R = 7;
@@ -371,9 +376,13 @@ export function createWorld(): World {
     depthLevel = depth;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => (wet = w), setFlashes: (on: boolean) => (flashesOn = on), setSpace: (on: boolean) => (space = on), setCeiling: (on: boolean) => {
+  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => {
+    wet = w;
+    relief.setWet(w);
+  }, setFlashes: (on: boolean) => (flashesOn = on), setSpace: (on: boolean) => (space = on), setCeiling: (on: boolean) => {
     ceil.visible = on;
     panels.visible = on;
+    relief.setCeiling(on);
     openSky = !on;
   } };
 }

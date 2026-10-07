@@ -86,6 +86,8 @@ export function createRifts(): Rifts {
   });
   let lastRegion = "";
   let cooldown = 0;
+  let dwell = 0; // seconds standing inside a rift
+  const DWELL = 1.5;
 
   function riftIn(I: number, J: number): { x: number; z: number; target: number } | null {
     const i = I * REGION + 1 + Math.floor(rnd(I, J, 92) * (REGION - 2));
@@ -133,12 +135,16 @@ export function createRifts(): Rifts {
     }
     cooldown = Math.max(0, cooldown - dt);
     let pulled: number | null = null;
+    // only on purpose: stand inside a rift for a moment (walking through does nothing)
+    const inside = [...live.values()].some((r) => Math.hypot(r.x - px, r.z - pz) < 1.1);
+    dwell = inside && !cooldown ? dwell + dt : 0;
     const near = [...live.values()].sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz));
     near.forEach((r, k) => {
       const { face, sparks, disc } = r.obj.userData as { face: THREE.Group; sparks: THREE.Points; disc: THREE.Mesh };
       face.lookAt(px, 1.5, pz); // always turned towards you
       disc.rotation.z = -t * 1.8;
-      face.scale.setScalar(1 + Math.sin(t * 3) * 0.04);
+      const charge = Math.hypot(r.x - px, r.z - pz) < 1.1 ? Math.min(1, dwell / DWELL) : 0;
+      face.scale.setScalar(1 + Math.sin(t * 3) * 0.04 + charge * 0.35);
       const a = (sparks.geometry.getAttribute("position") as THREE.BufferAttribute).array as Float32Array;
       for (let s = 0; s < a.length / 3; s++) {
         const ang = t * 2 + s * 0.53;
@@ -153,9 +159,10 @@ export function createRifts(): Rifts {
         lights[k].color.setHex(LEVELS[r.target].colour);
         lights[k].intensity = 5 + Math.sin(t * 4) * 1.5;
       }
-      if (!cooldown && Math.hypot(r.x - px, r.z - pz) < 1.1) {
+      if (charge >= 1) {
         pulled = r.target;
         cooldown = 4;
+        dwell = 0;
       }
     });
     for (let k = near.length; k < lights.length; k++) lights[k].intensity = 0;

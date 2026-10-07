@@ -1,0 +1,9 @@
+{
+  "shapes": ["orb", "knot", "crystal", "ring", "monolith", "tesseract", "cluster", "spiral", "lantern", "jelly", "flower", "halo"],
+  "motions": ["spin", "bob", "pulse", "orbit", "drift", "breathe", "flicker"],
+  "tones": ["low", "mid", "high"],
+  "gifts": ["blood1", "blood3", "light", "float", "colours", "nothing"],
+  "particles": ["petals", "embers", "bubbles", "glitter", "ash", "moths", "stars", "snow"],
+  "gravity": ["normal", "low"],
+  "objects": { "min": 4, "max": 8 }
+}

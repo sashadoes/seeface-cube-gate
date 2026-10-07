@@ -2,7 +2,7 @@
 // built only when you're near, from simple shapes + canvas textures, and lit
 // mostly by glowing materials. A fixed pool of 3 real lights goes to the
 // nearest place (a changing light count would make three.js recompile).
-//   the open        – no ceiling: a night sky, a moon, standing stones, fireflies
+//   the open        – no ceiling: a night sky, a moon, standing stones, fireflies, the BIGNORD NEWS tower
 //   the theater     – seats, a stage with midnight-blue curtains, a spotlight, a mic
 //   the mall        – strange shopfronts, a fountain, mannequins, benches
 //   the museum      – exhibits floating under glass, photos in frames, labels
@@ -13,6 +13,7 @@ import { CELL, PLACE, WALL_H, darkDoorSide, placeAt, placeOf, type PlaceKind } f
 import { relicMesh } from "./props";
 import { zoneAt, zoneWallMaterial } from "./zones";
 import { beam, shipSilhouette } from "./ship";
+import { newsTower } from "./bignord";
 
 export const PLACE_NAMES: Record<PlaceKind, string> = {
   open: "the open",
@@ -201,6 +202,8 @@ function buildOpen(g: THREE.Group, b: Built, r: () => number) {
     up.userData.tick(t);
     ship.rotation.y = Math.sin(t * 0.03) * 0.3;
   });
+  // BIGNORD NEWS towers over the north wall
+  b.anim.push(newsTower(g, L));
 }
 
 function buildTheater(g: THREE.Group, b: Built, r: () => number) {

@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-07",
+  "title": "the first night of the new era",
+  "objects": [
+    { "name": "launch moth", "shape": "flower", "colour": "#ffd27a", "glow": "#ff9a3c", "size": 0.9, "motion": "drift", "tone": "high", "gift": "blood1" },
+    { "name": "glass promise", "shape": "crystal", "colour": "#a8f0ff", "glow": "#3fd8ff", "size": 1.1, "motion": "spin", "tone": "mid", "gift": "light" },
+    { "name": "the happy knot", "shape": "knot", "colour": "#ff8ad8", "glow": "#ff3fb4", "size": 0.8, "motion": "bob", "tone": "mid", "gift": "colours" },
+    { "name": "a door for everyone", "shape": "monolith", "colour": "#ffffff", "glow": "#c8b8ff", "size": 1.5, "motion": "breathe", "tone": "low", "gift": "nothing" },
+    { "name": "weightless jelly", "shape": "jelly", "colour": "#9affc8", "glow": "#2fffa0", "size": 1.0, "motion": "pulse", "tone": "high", "gift": "float" },
+    { "name": "new world halo", "shape": "halo", "colour": "#fff1b8", "glow": "#ffd400", "size": 1.2, "motion": "orbit", "tone": "low", "gift": "blood3" },
+    { "name": "four-sided tomorrow", "shape": "tesseract", "colour": "#7affd8", "glow": "#7affd8", "size": 1.0, "motion": "spin", "tone": "mid", "gift": "blood1" }
+  ],
+  "event": { "name": "the world wakes up", "sky": "#ffb84a", "fog": "#6a2cff", "particles": "glitter", "particleColour": "#ffe9a8", "gravity": "low" }
+}

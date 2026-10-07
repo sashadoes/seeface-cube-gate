@@ -1,7 +1,7 @@
 // The dreamed ones (◇): non-human beings who live in the labyrinth alongside
 // the people. Owner's idea: "a mix of people and some non-humans", and "never
 // use the word ai: we're building a dream to get lost in". They are never
-// presented as people: wireframe bodies, a glowing geometric head, the ◇ mark,
+// presented as people: wireframe bodies, a glowing line-drawn face, the ◇ mark,
 // counted separately, and if asked whether they're real or human they say no,
 // in the dream's own words.
 // Everyone sees the same AI in the same place: each walks a fixed route through
@@ -52,18 +52,36 @@ function bodyTexture(colour: string) {
   g.shadowColor = colour;
   g.shadowBlur = 10;
   g.lineWidth = 2;
-  // a glowing diamond head
+  // a glowing face (owner: "keep them as faces always")
+  const cx = W / 2, cy = 52;
   g.beginPath();
-  g.moveTo(W / 2, 20);
-  g.lineTo(W / 2 + 22, 55);
-  g.lineTo(W / 2, 90);
-  g.lineTo(W / 2 - 22, 55);
-  g.closePath();
-  g.stroke();
-  g.globalAlpha = 0.25;
+  g.ellipse(cx, cy, 30, 38, 0, 0, Math.PI * 2);
+  g.globalAlpha = 0.22;
   g.fillStyle = colour;
   g.fill();
   g.globalAlpha = 1;
+  g.stroke();
+  g.beginPath();
+  // brows
+  g.moveTo(cx - 19, cy - 14);
+  g.quadraticCurveTo(cx - 11, cy - 19, cx - 4, cy - 14);
+  g.moveTo(cx + 4, cy - 14);
+  g.quadraticCurveTo(cx + 11, cy - 19, cx + 19, cy - 14);
+  // nose
+  g.moveTo(cx, cy - 6);
+  g.lineTo(cx - 3, cy + 9);
+  g.lineTo(cx + 2, cy + 10);
+  // mouth: a calm, closed smile
+  g.moveTo(cx - 11, cy + 20);
+  g.quadraticCurveTo(cx, cy + 26, cx + 11, cy + 20);
+  g.stroke();
+  // eyes
+  g.fillStyle = colour;
+  for (const ex of [cx - 11, cx + 11]) {
+    g.beginPath();
+    g.ellipse(ex, cy - 4, 5, 3, 0, 0, Math.PI * 2);
+    g.fill();
+  }
   // a wireframe body: shoulders, ribs of light, legs that fade
   g.beginPath();
   g.moveTo(W / 2 - 34, 120);

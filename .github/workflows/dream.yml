@@ -1,0 +1,43 @@
+name: Daily dream drop
+
+# Once a day Claude dreams new objects + a dream event for the labyrinth
+# (scripts/dream/drop.mjs → public/dream/today.json), commits it to main and
+# redeploys the site. Needs the repo secret ANTHROPIC_API_KEY.
+on:
+  schedule:
+    - cron: "5 0 * * *" # 00:05 UTC every day
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: dream
+
+jobs:
+  dream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/dream/drop.mjs
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Commit the drop
+        run: |
+          git config user.name "seeface1 dream"
+          git config user.email "dream@users.noreply.github.com"
+          git add public/dream
+          git commit -m "Dream drop $(date -u +%F)" || exit 0
+          git push
+      # pushes made with GITHUB_TOKEN don't trigger other workflows, so start the deploy by hand
+      - run: gh workflow run deploy.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
