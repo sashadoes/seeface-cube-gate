@@ -10,6 +10,7 @@ import { CELL, roomOf, wallEast, wallSouth } from "../labyrinth/maze";
 import { LEVELS, LEVEL_OFFSET, levelAtX, zoneAt } from "../labyrinth/zones";
 import { DEMONS, demonOf } from "../labyrinth/demons";
 import { cleanNick } from "../labyrinth/nick";
+import { MOD_PUBLIC_KEY, approvalText, type Post } from "../labyrinth/posts";
 import "./Watch.scss";
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
@@ -56,6 +57,17 @@ export default function Watch() {
   followRef.current = follow;
   const [, setTick] = useState(0);
   const [relay, setRelay] = useState("connecting…");
+  // posts waiting for approval (moderation)
+  const posts = useRef(new Map<string, Post>());
+  const approvedIds = useRef(new Set<string>());
+  const clientRef = useRef<ReturnType<typeof mqtt.connect> | null>(null);
+  const [modKey, setModKey] = useState<{ priv: JsonWebKey; pub: JsonWebKey } | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("seeface-mod-key") ?? "null");
+    } catch {
+      return null;
+    }
+  });
   const history = useRef<Sample[]>(loadHistory());
   const peak = useRef({ site: 0, lab: 0 });
 
@@ -97,6 +109,20 @@ export default function Watch() {
           return;
         }
         if (parts[3] === "world") {
+          const [, , , , kind, id] = parts;
+          if (kind === "post" && id) {
+            try {
+              const d = JSON.parse(payload.toString());
+              if (typeof d.img === "string" && d.img.startsWith("data:image/jpeg;base64,")) posts.current.set(id, { ...d, id, nick: cleanNick(d.nick) ?? "someone" });
+            } catch {
+              posts.current.delete(id); // removed (empty retained message)
+            }
+            return;
+          }
+          if (kind === "ok" && id) {
+            approvedIds.current.add(id);
+            return;
+          }
           wishes.current += 1;
           return;
         }
@@ -138,7 +164,9 @@ export default function Watch() {
       });
     };
     connect();
+    const keep = setInterval(() => (clientRef.current = client), 500);
     return () => {
+      clearInterval(keep);
       client?.end(true);
     };
   }, []);
@@ -348,6 +376,29 @@ export default function Watch() {
 
   const zoom = (k: number) => (view.current.scale = Math.max(0.02, Math.min(40, view.current.scale * k)));
 
+  async function createKey() {
+    const k = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const priv = await crypto.subtle.exportKey("jwk", k.privateKey);
+    const pub = await crypto.subtle.exportKey("jwk", k.publicKey);
+    const v = { priv, pub };
+    localStorage.setItem("seeface-mod-key", JSON.stringify(v));
+    setModKey(v);
+  }
+  async function approve(p: Post) {
+    if (!modKey || !clientRef.current) return;
+    const key = await crypto.subtle.importKey("jwk", modKey.priv, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+    const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(approvalText(p))));
+    clientRef.current.publish(`${LAB}/world/ok/${p.id}`, JSON.stringify({ sig: btoa(String.fromCharCode(...sig)) }), { retain: true, qos: 1 });
+    approvedIds.current.add(p.id);
+    setTick((n) => n + 1);
+  }
+  function remove(p: Post) {
+    clientRef.current?.publish(`${LAB}/world/post/${p.id}`, "", { retain: true, qos: 1 });
+    clientRef.current?.publish(`${LAB}/world/ok/${p.id}`, "", { retain: true, qos: 1 });
+    posts.current.delete(p.id);
+    setTick((n) => n + 1);
+  }
+
   function fitAll() {
     setFollow(null);
     const v = view.current;
@@ -422,6 +473,36 @@ export default function Watch() {
         </div>
 
         <aside className="eye-list">
+          <div className="eye-list-head">posts waiting · {[...posts.current.values()].filter((p) => !approvedIds.current.has(p.id)).length}</div>
+          {!modKey && (
+            <div className="eye-mod">
+              <button onClick={() => void createKey()}>create my moderator key</button>
+              <p>one time. it stays in this browser only: approve posts from this device.</p>
+            </div>
+          )}
+          {modKey && !MOD_PUBLIC_KEY && (
+            <div className="eye-mod">
+              <p>send this public key to Claude to switch posts on (it's not secret):</p>
+              <textarea readOnly value={JSON.stringify(modKey.pub)} onFocus={(e) => e.currentTarget.select()} />
+            </div>
+          )}
+          {[...posts.current.values()]
+            .filter((p) => !approvedIds.current.has(p.id))
+            .sort((a, b) => a.t - b.t)
+            .map((p) => (
+              <div key={p.id} className="eye-post">
+                <img src={p.img} alt="" />
+                <div>
+                  <b>@{p.nick}</b> {p.cap}
+                </div>
+                <div className="row">
+                  <button disabled={!modKey} onClick={() => void approve(p)}>
+                    approve
+                  </button>
+                  <button onClick={() => remove(p)}>remove</button>
+                </div>
+              </div>
+            ))}
           <div className="eye-list-head">
             players · {online.length} live · {list.length - online.length} recently left · relay {relay}
           </div>

@@ -42,6 +42,7 @@ import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
 import { createHazards } from "./hazards";
 import { createAi, type AiResidents } from "./ai";
+import { createPosts, shrink, wallAhead, type Post } from "./posts";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions } from "./places";
 import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
@@ -412,6 +413,29 @@ function Game({ nick }: { nick: string }) {
   addLineRef.current = addLine;
   const lastHeard = useRef("");
   const aiRef = useRef<AiResidents | null>(null);
+  // posts on the walls
+  const postsRef = useRef<ReturnType<typeof createPosts> | null>(null);
+  const yawRef = useRef(0);
+  const [composer, setComposer] = useState<null | { mode: "photo" | "draw"; img: string | null }>(null);
+  const [caption, setCaption] = useState("");
+  const [viewing, setViewing] = useState<Post | null>(null);
+  const [, bumpPosts] = useState(0);
+  const pad = useRef<HTMLCanvasElement>(null);
+  const [ink, setInk] = useState("#fff6e2");
+  const hangPost = async () => {
+    const posts = postsRef.current;
+    if (!posts || !composer) return;
+    let img = composer.img;
+    if (composer.mode === "draw" && pad.current) img = await shrink(pad.current);
+    if (!img) return say("choose a photo first", true);
+    const at = wallAhead(posRef.current.x, posRef.current.z, yawRef.current);
+    if (!at) return say("face a wall to hang it", true);
+    posts.publish(img, caption, at);
+    setComposer(null);
+    setCaption("");
+    say("posted · others see it once it's approved", true);
+    track(`post-${composer.mode}`);
+  };
   const posRef = useRef({ x: 0, z: 0 });
   const sendChat = () => {
     const text = draft.trim();
@@ -1005,6 +1029,10 @@ function Game({ nick }: { nick: string }) {
     });
 
     const hazards = createHazards(sound.ctx, sound.ambienceOut);
+    const posts = createPosts(presence, () => nick);
+    postsRef.current = posts;
+    posts.onChange(() => bumpPosts((n) => n + 1));
+    world.scene.add(posts.group);
     const ai = createAi();
     aiRef.current = ai;
     world.scene.add(ai.group);
@@ -1473,6 +1501,8 @@ function Game({ nick }: { nick: string }) {
       if (!al.nearTV) tvHinted = false;
       gramos.update(pos.x, pos.z, t);
       ai.update(dt, pos.x, pos.z);
+      posts.update(pos.x, pos.z);
+      yawRef.current = input.yaw;
       posRef.current.x = pos.x;
       posRef.current.z = pos.z;
       setListener();
@@ -1480,6 +1510,7 @@ function Game({ nick }: { nick: string }) {
       const tapNow = input.consumeTap();
       if (tapNow && al.nearTV && alive) order();
       else if (tapNow && gn && alive) setGramoKey(gn.key);
+      else if (tapNow && posts.lookingAt(pos.x, pos.z, input.yaw)) setViewing(posts.lookingAt(pos.x, pos.z, input.yaw));
       else if (tapNow && c && isNear) {
         world.spinCube(c.mesh);
         spinSfx.play();
@@ -1939,6 +1970,9 @@ function Game({ nick }: { nick: string }) {
             ⤓
           </button>
         )}
+        <button className="lab-btn post" onClick={() => setComposer({ mode: "photo", img: null })} aria-label="post a photo or drawing on the wall">
+          ⊞
+        </button>
         <button className="lab-btn bag" onClick={() => setBagOpen(true)} aria-label="inventory">
           ◫{bagCount > 0 && <small>{bagCount}</small>}
         </button>
@@ -2004,6 +2038,101 @@ function Game({ nick }: { nick: string }) {
           </button>
         </div>
       )}
+      {composer && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-tabs">
+              <button className={composer.mode === "photo" ? "on" : ""} onClick={() => setComposer({ mode: "photo", img: null })}>
+                photo
+              </button>
+              <button className={composer.mode === "draw" ? "on" : ""} onClick={() => setComposer({ mode: "draw", img: null })}>
+                draw
+              </button>
+            </div>
+            <div className="lab-settings-body">
+              {composer.mode === "photo" ? (
+                <label className="lab-post-pick">
+                  {composer.img ? <img src={composer.img} alt="" /> : <span>tap to choose a photo</span>}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setComposer({ mode: "photo", img: await shrink(f) });
+                    }}
+                  />
+                </label>
+              ) : (
+                <div className="lab-post-draw">
+                  <canvas
+                    ref={pad}
+                    width={320}
+                    height={320}
+                    onPointerDown={(e) => {
+                      const c = e.currentTarget, g = c.getContext("2d")!, r = c.getBoundingClientRect();
+                      c.setPointerCapture(e.pointerId);
+                      g.strokeStyle = ink;
+                      g.lineWidth = ink === "#0b0b0b" ? 18 : 4;
+                      g.lineCap = "round";
+                      g.beginPath();
+                      g.moveTo(((e.clientX - r.left) / r.width) * 320, ((e.clientY - r.top) / r.height) * 320);
+                      c.dataset.down = "1";
+                    }}
+                    onPointerMove={(e) => {
+                      const c = e.currentTarget;
+                      if (c.dataset.down !== "1") return;
+                      const g = c.getContext("2d")!, r = c.getBoundingClientRect();
+                      g.lineTo(((e.clientX - r.left) / r.width) * 320, ((e.clientY - r.top) / r.height) * 320);
+                      g.stroke();
+                    }}
+                    onPointerUp={(e) => (e.currentTarget.dataset.down = "")}
+                  />
+                  <div className="inks">
+                    {["#fff6e2", "#ff8aa8", "#9fe8ff", "#d8ff9a", "#ffd27a", "#0b0b0b"].map((c) => (
+                      <button key={c} className={ink === c ? "on" : ""} style={{ background: c }} onClick={() => setInk(c)} aria-label={c === "#0b0b0b" ? "eraser" : "ink"} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <input className="lab-post-cap" value={caption} maxLength={80} onChange={(e) => setCaption(e.target.value)} placeholder="caption (optional)" />
+              <p className="note">it hangs on the wall in front of you. everyone sees it once it's approved.</p>
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setComposer(null)}>cancel</button>
+              <button className="done" onClick={() => void hangPost()}>
+                hang it here
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {viewing && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop} onClick={() => setViewing(null)}>
+          <div className="lab-settings-box lab-post-view" onClick={(e) => e.stopPropagation()}>
+            <img src={viewing.img} alt="" />
+            <div className="lab-settings-body">
+              <b>@{viewing.nick}</b>
+              {viewing.cap && <span>{viewing.cap}</span>}
+              {postsRef.current?.isPending(viewing.id) && <p className="note">only you can see this until it's approved.</p>}
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setViewing(null)}>close</button>
+              <button
+                className="done"
+                onClick={() => {
+                  const p = postsRef.current;
+                  if (!p) return;
+                  p.like(viewing.id, !p.liked(viewing.id));
+                  track("post-like");
+                }}
+              >
+                {postsRef.current?.liked(viewing.id) ? "♥" : "♡"} {postsRef.current?.likeCount(viewing.id) ?? 0}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {soulAsk && (
         <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
           <div className="lab-bag-title">leaving the after life?</div>

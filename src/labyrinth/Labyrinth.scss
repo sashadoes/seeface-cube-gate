@@ -1561,3 +1561,91 @@
   color: #9fe8ff;
   opacity: 0.8;
 }
+
+// ---------------------------------------------------------------- posts
+.lab-post-pick {
+  display: grid !important;
+  place-items: center;
+  min-height: 200px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  cursor: pointer;
+  overflow: hidden;
+
+  img {
+    max-width: 100%;
+    max-height: 280px;
+  }
+
+  input {
+    display: none;
+  }
+}
+
+.lab-post-draw {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+
+  canvas {
+    width: min(320px, 100%);
+    aspect-ratio: 1;
+    background: #0b0b0b;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    touch-action: none;
+  }
+
+  .inks {
+    display: flex;
+    gap: 8px;
+
+    button {
+      all: unset;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      cursor: pointer;
+
+      &.on {
+        outline: 2px solid #fff6e2;
+        outline-offset: 2px;
+      }
+    }
+  }
+}
+
+.lab-post-cap {
+  font: italic 15px "Times New Roman", serif;
+  color: #fff;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 2px;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+  touch-action: auto;
+}
+
+.lab-post-view {
+  img {
+    width: 100%;
+    max-height: 60dvh;
+    object-fit: contain;
+    background: #050505;
+    border-radius: 14px 14px 0 0;
+  }
+
+  b {
+    font: italic 17px "Times New Roman", serif;
+    font-weight: normal;
+    color: #fff6e2;
+  }
+
+  span {
+    font: italic 15px "Times New Roman", serif;
+    color: #a9a293;
+  }
+}

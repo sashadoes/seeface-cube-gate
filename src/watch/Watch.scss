@@ -201,3 +201,64 @@
     display: none;
   }
 }
+
+.eye-mod {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-style: italic;
+  color: #a9a293;
+
+  button {
+    font: italic 14px "Times New Roman", serif;
+    color: #fff6e2;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 12px;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+
+  textarea {
+    width: 100%;
+    height: 90px;
+    font: 11px monospace;
+    background: #0b0b0b;
+    color: #9fe8ff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+}
+
+.eye-post {
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  font-style: italic;
+
+  img {
+    width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    background: #050505;
+  }
+
+  b {
+    font-weight: normal;
+    color: #fff6e2;
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  button {
+    font: italic 13px "Times New Roman", serif;
+    color: #e9e4da;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
+}
