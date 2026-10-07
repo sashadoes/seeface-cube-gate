@@ -1269,7 +1269,7 @@
   max-width: 320px;
 }
 
-// ---------------------------------------------------------------- settings (deco, game-client style)
+// ---------------------------------------------------------------- settings (dark, minimal)
 .lab-gear {
   all: unset;
   position: fixed;
@@ -1282,10 +1282,10 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid rgba(255, 230, 184, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(0, 0, 0, 0.35);
-  color: #ffe6b8;
-  font-size: 15px;
+  color: #cfc6b8;
+  font-size: 14px;
 }
 
 .lab-settings {
@@ -1294,42 +1294,39 @@
   z-index: 1004;
   display: grid;
   place-items: center;
-  background: rgba(3, 6, 8, 0.72);
+  background: rgba(0, 0, 0, 0.78);
   padding: 16px;
   animation: lab-dead-in 0.2s ease-out both;
 }
 
 .lab-settings-box {
-  width: min(560px, 100%);
+  width: min(460px, 100%);
   max-height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(#0e1a1e, #071013);
-  border: 2px solid #c9a24a;
-  outline: 1px solid rgba(201, 162, 74, 0.35);
-  outline-offset: 4px;
+  background: rgba(8, 8, 8, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
   color: #e9e4da;
+  font-family: "Times New Roman", serif;
 }
 
 .lab-settings-tabs {
   display: flex;
-  border-bottom: 1px solid rgba(201, 162, 74, 0.5);
+  gap: 4px;
+  padding: 12px 14px 0;
 
   button {
     all: unset;
-    flex: 1;
     cursor: pointer;
-    text-align: center;
-    padding: 12px 0;
-    font: bold 14px "Arial Narrow", Arial, sans-serif;
-    letter-spacing: 2px;
-    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 14px;
+    font: italic 16px "Times New Roman", serif;
     color: #8f897c;
 
     &.on {
-      color: #f2c864;
-      background: rgba(201, 162, 74, 0.1);
-      box-shadow: inset 0 -3px 0 #c9a24a;
+      color: #fff6e2;
+      background: rgba(255, 255, 255, 0.07);
     }
   }
 }
@@ -1338,24 +1335,24 @@
   overflow-y: auto;
   padding: 16px 20px;
   display: grid;
-  gap: 14px;
+  gap: 16px;
   touch-action: pan-y;
 
   label {
     display: grid;
     align-items: center;
-    gap: 10px;
-    font: 15px "Times New Roman", serif;
+    gap: 12px;
+    font: italic 15px "Times New Roman", serif;
+    color: #cfc6b8;
   }
 
   .slider {
-    grid-template-columns: 1fr 140px 40px;
+    grid-template-columns: 1fr 130px 34px;
 
     i {
-      font: 13px "Arial Narrow", Arial, sans-serif;
-      color: #c9a24a;
+      font: 12px "Times New Roman", serif;
+      color: #6f6a5c;
       text-align: right;
-      font-style: normal;
     }
   }
 
@@ -1365,41 +1362,46 @@
 
   input[type="range"],
   input[type="checkbox"] {
-    accent-color: #c9a24a;
+    accent-color: #cfc6b8;
     touch-action: auto;
   }
 
   input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
   }
 
   select {
-    font: 14px "Arial Narrow", Arial, sans-serif;
-    background: #0b1418;
-    color: #f2e6c8;
-    border: 1px solid #c9a24a;
-    padding: 4px 8px;
+    font: italic 14px "Times New Roman", serif;
+    background: transparent;
+    color: #e9e4da;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 3px 4px;
+    outline: none;
+
+    option {
+      background: #0b0b0b;
+    }
   }
 
   .note {
     margin: 0;
     font: italic 13px "Times New Roman", serif;
-    color: #8f897c;
+    color: #6f6a5c;
   }
 
   .keys {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 4px 12px;
-    font: 13px "Arial Narrow", Arial, sans-serif;
-    color: #a9a293;
+    font: italic 13px "Times New Roman", serif;
+    color: #8f897c;
 
     b {
       grid-column: 1 / -1;
-      color: #c9a24a;
-      letter-spacing: 2px;
-      text-transform: uppercase;
+      font-weight: normal;
+      color: #cfc6b8;
     }
   }
 }
@@ -1407,22 +1409,18 @@
 .lab-settings-foot {
   display: flex;
   justify-content: space-between;
-  padding: 12px 20px;
-  border-top: 1px solid rgba(201, 162, 74, 0.5);
+  padding: 10px 20px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 
   button {
     all: unset;
     cursor: pointer;
-    padding: 8px 18px;
-    border: 1px solid #c9a24a;
-    color: #f2e6c8;
-    font: bold 13px "Arial Narrow", Arial, sans-serif;
-    letter-spacing: 2px;
-    text-transform: uppercase;
+    padding: 6px 4px;
+    font: italic 15px "Times New Roman", serif;
+    color: #8f897c;
 
     &.done {
-      background: #c9a24a;
-      color: #0b1418;
+      color: #fff6e2;
     }
   }
 }
@@ -1432,4 +1430,83 @@
 .labyrinth[data-calm="1"]::after {
   animation: none !important;
   opacity: 0 !important;
+}
+
+// ---------------------------------------------------------------- overlays: same dark minimal look as the rest
+.lab-bag {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.lab-bag-title {
+  font: italic 20px "Times New Roman", serif;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #fff6e2;
+  border: 0;
+  padding: 0;
+}
+
+.lab-bag-item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  outline: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+
+  b {
+    font: italic 15px "Times New Roman", serif;
+    color: #e9e4da;
+
+    i {
+      color: #8f897c;
+    }
+  }
+
+  &.r3 .pic {
+    color: #fff6e2;
+    text-shadow: 0 0 14px rgba(255, 246, 226, 0.5);
+  }
+}
+
+.lab-btn.bag small {
+  background: #cfc6b8;
+  color: #050505;
+}
+
+.lab-invite button {
+  background: rgba(8, 8, 8, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  color: #e9e4da;
+  font: italic 15px "Times New Roman", serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.lab-clip button {
+  background: rgba(8, 8, 8, 0.92);
+  border: 1px solid rgba(255, 246, 226, 0.4);
+  border-radius: 16px;
+  color: #fff6e2;
+  font: italic 16px "Times New Roman", serif;
+  letter-spacing: 0;
+  text-transform: none;
+
+  &.x {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+}
+
+.lab-soul {
+  input {
+    border-bottom-color: rgba(255, 255, 255, 0.25);
+  }
+
+  button {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    color: #e9e4da;
+    font: italic 15px "Times New Roman", serif;
+    letter-spacing: 0;
+    text-transform: none;
+  }
 }
