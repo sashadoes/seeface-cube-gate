@@ -1510,3 +1510,30 @@
     text-transform: none;
   }
 }
+
+// ---------------------------------------------------------------- the radio dial
+.lab-radio {
+  all: unset;
+  position: fixed;
+  top: calc(46px + env(safe-area-inset-top));
+  right: calc(14px + 146px);
+  z-index: 1001;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.35);
+  font: italic 13px "Times New Roman", serif;
+  color: #cfc6b8;
+  white-space: nowrap;
+
+  i {
+    color: #8f897c;
+  }
+}
+
+@media (max-width: 520px) {
+  .lab-radio i {
+    display: none;
+  }
+}

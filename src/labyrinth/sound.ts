@@ -7,6 +7,9 @@ import type { WeatherKind } from "../marks/weather";
 
 export type Sound = {
   resume: () => void;
+  /** the shared audio context + a bus for gramophones/radio music (own volume slider) */
+  ctx: AudioContext;
+  musicBus: GainNode;
   setWeather: (kind: WeatherKind, intensity: number, wind: number) => void;
   step: (zone: ZoneKind, running: boolean, wet?: number) => void;
   /** the flood siren: 0 = off, 1 = full wail */
@@ -19,7 +22,7 @@ export type Sound = {
   /** the Pop Queen's music-box tune: 0 = off, 1 = she's right here */
   showtune: (level: number) => void;
   /** settings: 0–1 for everything, effects, ambience (weather) and voices (siren, songs) */
-  setVolumes: (v: { master: number; effects: number; ambience: number; voices: number }) => void;
+  setVolumes: (v: { master: number; effects: number; ambience: number; voices: number; records: number }) => void;
   /** a MediaStream of everything the game plays (for recording trailers) */
   tap: () => MediaStream;
 };
@@ -36,7 +39,7 @@ export function createSound(): Sound {
     g.connect(master);
     return g;
   };
-  const effectsBus = bus(), ambienceBus = bus(), voicesBus = bus();
+  const effectsBus = bus(), ambienceBus = bus(), voicesBus = bus(), musicBus = bus();
   document.addEventListener("visibilitychange", () => (document.hidden ? ctx.suspend() : ctx.resume()));
 
   // shared noise buffer
@@ -283,6 +286,8 @@ export function createSound(): Sound {
 
   return {
     resume: () => ctx.state !== "running" && ctx.resume(),
+    ctx,
+    musicBus,
     showtune(level) {
       showLevel = level;
       showGain.gain.setTargetAtTime(level * 0.9, ctx.currentTime, 0.3);
@@ -309,6 +314,7 @@ export function createSound(): Sound {
       effectsBus.gain.setTargetAtTime(v.effects, now, 0.05);
       ambienceBus.gain.setTargetAtTime(v.ambience, now, 0.05);
       voicesBus.gain.setTargetAtTime(v.voices, now, 0.05);
+      musicBus.gain.setTargetAtTime(v.records, now, 0.05);
     },
     tap() {
       const d = ctx.createMediaStreamDestination();

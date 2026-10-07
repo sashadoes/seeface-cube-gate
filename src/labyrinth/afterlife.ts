@@ -1,6 +1,6 @@
 // The After Life™: the labyrinth is a showroom for the life after this one.
 // Old cream-and-gold TV sets stand in the corridors playing an infomercial for
-// it (original copy, deco styling), and art-deco posters advertise it. Walk up
+// it (original copy, retro styling). Walk up
 // to a TV and tap it to ORDER: it costs 5 ◈ (in-game blood dollars only, never
 // real money) and ships you an afterlife object for your inventory.
 import * as THREE from "three";
@@ -20,70 +20,6 @@ const AD: string[][] = [
   ["tap the screen", "to order AFTER LIFE™"],
   ["warning:", "may cause eternity"],
 ];
-
-export const POSTER_LINES = [
-  ["STAY.", "IT'S BETTER DOWN HERE"],
-  ["AFTER LIFE™", "THE FUTURE OF EVERYONE"],
-  ["YOUR LIGHT", "IS OUR BUSINESS"],
-  ["SMILE", "YOU'VE ARRIVED"],
-  ["ETERNITY", "NOW WITH WINDOWS"],
-  ["DON'T LOOK BACK", "IT'S RUDE"],
-];
-
-/** an art-deco poster: gold sunburst, double border, big condensed type */
-export function decoPoster(lines: string[], hue: string) {
-  const W = 512, H = 720;
-  const c = document.createElement("canvas");
-  c.width = W;
-  c.height = H;
-  const g = c.getContext("2d")!;
-  g.fillStyle = "#0b1418";
-  g.fillRect(0, 0, W, H);
-  // sunburst
-  g.save();
-  g.translate(W / 2, H * 0.42);
-  for (let k = 0; k < 36; k++) {
-    g.rotate((Math.PI * 2) / 36);
-    g.fillStyle = k % 2 ? hue : "rgba(0,0,0,0)";
-    g.globalAlpha = 0.22;
-    g.beginPath();
-    g.moveTo(0, 0);
-    g.lineTo(-30, -520);
-    g.lineTo(30, -520);
-    g.fill();
-  }
-  g.restore();
-  g.globalAlpha = 1;
-  // half-disc "rising sun"
-  g.fillStyle = hue;
-  g.beginPath();
-  g.arc(W / 2, H * 0.42, 90, Math.PI, 0);
-  g.fill();
-  // double gold border with stepped corners
-  g.strokeStyle = "#c9a24a";
-  g.lineWidth = 8;
-  g.strokeRect(18, 18, W - 36, H - 36);
-  g.lineWidth = 2;
-  g.strokeRect(34, 34, W - 68, H - 68);
-  for (const [x, y] of [[34, 34], [W - 34, 34], [34, H - 34], [W - 34, H - 34]]) {
-    g.fillStyle = "#c9a24a";
-    g.fillRect(x - 10, y - 10, 20, 20);
-  }
-  // type
-  g.textAlign = "center";
-  g.fillStyle = "#f2e6c8";
-  g.font = "bold 74px 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif";
-  g.fillText(lines[0], W / 2, H * 0.66, W - 90);
-  g.fillStyle = "#c9a24a";
-  g.font = "bold 34px 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif";
-  g.fillText(lines[1], W / 2, H * 0.75, W - 90);
-  g.font = "italic 22px 'Times New Roman', serif";
-  g.fillStyle = "#8f897c";
-  g.fillText("a seeface1 production", W / 2, H - 64);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
 
 type TV = { group: THREE.Group; screen: THREE.CanvasTexture; ctx: CanvasRenderingContext2D; x: number; z: number; key: string };
 

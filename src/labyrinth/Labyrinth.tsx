@@ -42,6 +42,9 @@ import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions } from "./places";
 import { createChampions, playerId } from "./champions";
+import { createGramophones } from "./gramophone";
+import { EFFECTS, RECORDS, type FxId, type RecordId } from "./music";
+import { STATIONS, createStations } from "./stations";
 import { createAfterlife, ORDER_COST } from "./afterlife";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
@@ -345,6 +348,14 @@ function Game({ nick }: { nick: string }) {
     setSoulAsk(false);
     track("soul-saved");
   };
+
+  // gramophone record picker + radio dial
+  const [gramoKey, setGramoKey] = useState<string | null>(null);
+  const [pickRec, setPickRec] = useState<RecordId>("waltz");
+  const [pickFx, setPickFx] = useState<FxId>("warm");
+  const gramoPlayRef = useRef<(key: string, rec: RecordId, fx: FxId) => void>(() => {});
+  const [station, setStation] = useState(STATIONS[0]);
+  const radioNextRef = useRef<() => void>(() => {});
 
   // settings (⚙ / Esc)
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -873,6 +884,7 @@ function Game({ nick }: { nick: string }) {
         others,
         queen,
         flood,
+        gramos: () => gramos,
       };
 
     const resize = () => {
@@ -982,6 +994,35 @@ function Game({ nick }: { nick: string }) {
       others.setShow(st.showNames, st.showChat);
       el.dataset.calm = st.flashes ? "" : "1";
     });
+
+    // gramophones (music for everyone nearby) + the radio dial
+    const gramos = createGramophones(presence, sound.ctx, sound.musicBus);
+    world.scene.add(gramos.group);
+    gramoPlayRef.current = (key, rec, fx) => {
+      gramos.play(key, rec, fx, nick);
+      track(`gramophone-${rec}-${fx}`);
+    };
+    const stations = createStations(sound.ctx, sound.musicBus, () => gramos.nearestPlaying(pos.x, pos.z));
+    radioNextRef.current = () => {
+      sound.resume();
+      setStation(stations.next());
+      track("radio-tune");
+    };
+    const listener = sound.ctx.listener;
+    const setListener = () => {
+      const fx = -Math.sin(input.yaw), fz = -Math.cos(input.yaw);
+      if (listener.positionX) {
+        listener.positionX.value = pos.x;
+        listener.positionY.value = 1.6;
+        listener.positionZ.value = pos.z;
+        listener.forwardX.value = fx;
+        listener.forwardY.value = 0;
+        listener.forwardZ.value = fz;
+      } else {
+        (listener as unknown as { setPosition: (x: number, y: number, z: number) => void }).setPosition(pos.x, 1.6, pos.z);
+        (listener as unknown as { setOrientation: (a: number, b: number, c: number, d: number, e: number, f: number) => void }).setOrientation(fx, 0, fz, 0, 1, 0);
+      }
+    };
 
     // deaths: rare when the labyrinth is quiet. With 6+ people inside it's deadly;
     // with fewer, only now and then (1 in 5), otherwise it hurts but you live.
@@ -1415,8 +1456,12 @@ function Game({ nick }: { nick: string }) {
         sayRef.current(`tap the screen to order AFTER LIFE™ · ${ORDER_COST} ◈`);
       }
       if (!al.nearTV) tvHinted = false;
+      gramos.update(pos.x, pos.z, t);
+      setListener();
+      const gn = gramos.near(pos.x, pos.z);
       const tapNow = input.consumeTap();
       if (tapNow && al.nearTV && alive) order();
+      else if (tapNow && gn && alive) setGramoKey(gn.key);
       else if (tapNow && c && isNear) {
         world.spinCube(c.mesh);
         spinSfx.play();
@@ -1657,6 +1702,7 @@ function Game({ nick }: { nick: string }) {
     raf = requestAnimationFrame(frame);
 
     return () => {
+      stations.stop();
       offSettings();
       clearInterval(rememberTimer);
       window.removeEventListener("pagehide", remember);
@@ -1946,6 +1992,50 @@ function Game({ nick }: { nick: string }) {
         </div>
       )}
 
+      <button className="lab-radio" onPointerDown={stop} onPointerUp={stop} onClick={() => radioNextRef.current()} aria-label="radio: next station">
+        ◍ {station.freq} <i>{station.name}</i>
+      </button>
+      {gramoKey && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-body">
+              <label className="toggle">
+                <span>record</span>
+                <select value={pickRec} onChange={(e) => setPickRec(e.target.value as RecordId)}>
+                  {(Object.keys(RECORDS) as RecordId[]).map((r) => (
+                    <option key={r} value={r}>
+                      {RECORDS[r].name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="toggle">
+                <span>effect</span>
+                <select value={pickFx} onChange={(e) => setPickFx(e.target.value as FxId)}>
+                  {(Object.keys(EFFECTS) as FxId[]).map((f) => (
+                    <option key={f} value={f}>
+                      {EFFECTS[f].name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="note">everyone nearby hears it, for 3 minutes.</p>
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setGramoKey(null)}>cancel</button>
+              <button
+                className="done"
+                onClick={() => {
+                  gramoPlayRef.current(gramoKey, pickRec, pickFx);
+                  setGramoKey(null);
+                }}
+              >
+                play for everyone
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <button className="lab-gear" onPointerDown={stop} onPointerUp={stop} onClick={() => setSettingsOpen(true)} aria-label="settings">
         ⚙
       </button>
@@ -1968,6 +2058,7 @@ function Game({ nick }: { nick: string }) {
                       ["effects", "effects · steps, splashes, pickups"],
                       ["ambience", "ambience · rain, wind, thunder"],
                       ["voices", "voices · sirens, songs, choirs"],
+                      ["records", "gramophones & radio music"],
                       ["radio", "the radio · the Hollow's static"],
                     ] as const
                   ).map(([k, label]) => (

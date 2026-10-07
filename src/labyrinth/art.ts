@@ -4,7 +4,7 @@
 // the black-and-white art glows differently from room to room. Corridors get the odd
 // glowing photo poster. All emissive: only a fixed pool of 4 real lights.
 import * as THREE from "three";
-import { POSTER_LINES, decoPoster } from "./afterlife";
+import { zoneAt, type ZoneKind } from "./zones";
 import { CELL, WALL_H, placeAt, placeOf, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
 
 type Art = { tex: THREE.Texture; color: THREE.Color; ready: boolean };
@@ -161,12 +161,12 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
   });
 
   // a glowing see/face sign: about a third of the posters are this instead
-  // After Life™ art-deco posters (made once each)
-  const DECO_HUES = ["#2fb8a8", "#c9a24a", "#d8607a", "#6a8cff", "#e8b84a", "#3cc8e8"];
-  const decoCache = new Map<number, THREE.CanvasTexture>();
-  const deco = (k: number) => {
-    let t = decoCache.get(k);
-    if (!t) decoCache.set(k, (t = decoPoster(POSTER_LINES[k], DECO_HUES[k % DECO_HUES.length])));
+  // generated posters that belong to the place they hang in: each zone has its own look
+  const posterCache = new Map<string, THREE.CanvasTexture>();
+  const zonePoster = (kind: ZoneKind, k: number) => {
+    const key = `${kind}:${k}`;
+    let t = posterCache.get(key);
+    if (!t) posterCache.set(key, (t = makeZonePoster(kind, k)));
     return t;
   };
   const logoSign = (() => {
@@ -243,7 +243,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
         p.position.set(s[1], 1.75, s[2]);
         p.rotation.set(0, s[3], 0);
         const pick = rnd(i, j, 62);
-        (p.material as THREE.MeshBasicMaterial).map = pick < 0.28 ? logoSign : pick < 0.62 ? deco(Math.floor(rnd(i, j, 63) * POSTER_LINES.length)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
+        (p.material as THREE.MeshBasicMaterial).map = pick < 0.28 ? logoSign : pick < 0.62 ? zonePoster(zoneAt((i + 0.5) * CELL, (j + 0.5) * CELL).kind, Math.floor(rnd(i, j, 63) * 4)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
         (p.material as THREE.MeshBasicMaterial).needsUpdate = true;
         p.visible = true;
       }
@@ -285,4 +285,122 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
     },
     refresh,
   };
+}
+
+// ------------------------------------------------------------------ generated posters per zone
+function makeZonePoster(kind: ZoneKind, k: number) {
+  const W = 512, H = 360;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d")!;
+  let seed = kind.length * 131 + k * 977 + 7;
+  const r = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const bg = (col: string) => {
+    g.fillStyle = col;
+    g.fillRect(0, 0, W, H);
+  };
+  if (kind === "pools") {
+    // tiles + rings of water
+    bg("#bfe8ec");
+    g.strokeStyle = "rgba(40,120,130,0.25)";
+    for (let x = 0; x < W; x += 32) for (let y = 0; y < H; y += 32) g.strokeRect(x, y, 32, 32);
+    for (let n = 0; n < 6; n++) {
+      const cx = r() * W, cy = r() * H;
+      for (let q = 1; q < 6; q++) {
+        g.strokeStyle = `rgba(20,110,140,${0.5 - q * 0.08})`;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.ellipse(cx, cy, q * 18, q * 9, 0, 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+  } else if (kind === "neon") {
+    bg("#07040c");
+    const cols = ["#ff3cf0", "#3cf2ff", "#a4ff3c", "#ffb13c"];
+    for (let n = 0; n < 7; n++) {
+      g.strokeStyle = cols[Math.floor(r() * 4)];
+      g.shadowColor = g.strokeStyle;
+      g.shadowBlur = 18;
+      g.lineWidth = 3;
+      g.beginPath();
+      const x0 = r() * W;
+      g.moveTo(x0, 0);
+      for (let y = 0; y <= H; y += 30) g.lineTo(x0 + Math.sin(y / 40 + n) * 60, y);
+      g.stroke();
+    }
+    g.shadowBlur = 0;
+  } else if (kind === "photo") {
+    // botanical: stems and leaves
+    bg("#e6eadb");
+    for (let n = 0; n < 9; n++) {
+      const x = 40 + r() * (W - 80);
+      g.strokeStyle = "#3d5a30";
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(x, H);
+      g.quadraticCurveTo(x + (r() - 0.5) * 120, H / 2, x + (r() - 0.5) * 60, 40 + r() * 80);
+      g.stroke();
+      for (let l = 0; l < 5; l++) {
+        g.fillStyle = `rgba(${60 + r() * 50},${110 + r() * 60},${50 + r() * 30},0.8)`;
+        g.beginPath();
+        g.ellipse(x + (r() - 0.5) * 80, 60 + r() * (H - 120), 16, 6, r() * 3, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  } else if (kind === "white") {
+    // minimal: one shape, lots of nothing
+    bg("#f4f1ea");
+    g.fillStyle = ["#1a1a1a", "#c9c3b6", "#8a8478", "#2a2a2a"][k % 4];
+    if (k % 2) g.fillRect(W * 0.38, H * 0.3, W * 0.24, H * 0.4);
+    else {
+      g.beginPath();
+      g.arc(W / 2, H / 2, 60, 0, Math.PI * 2);
+      g.fill();
+    }
+  } else if (kind === "ash") {
+    bg("#2a2522");
+    for (let n = 0; n < 40; n++) {
+      g.fillStyle = `rgba(${10 + r() * 30},${8 + r() * 20},${6 + r() * 15},${0.2 + r() * 0.4})`;
+      g.beginPath();
+      g.ellipse(r() * W, r() * H, 20 + r() * 80, 6 + r() * 30, r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    for (let n = 0; n < 30; n++) {
+      g.fillStyle = `rgba(255,${120 + r() * 80},40,${r() * 0.8})`;
+      g.fillRect(r() * W, r() * H, 2, 2);
+    }
+  } else if (kind === "deep") {
+    const grad = g.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#0d3a40");
+    grad.addColorStop(1, "#010608");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, W, H);
+    for (let n = 0; n < 60; n++) {
+      g.fillStyle = `rgba(124,255,232,${r() * 0.6})`;
+      g.beginPath();
+      g.arc(r() * W, r() * H, 1 + r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+  } else if (kind === "red") {
+    // warm amber corridors: abstract stripes (no red-room curtains or zigzag floors)
+    bg("#3a1a12");
+    for (let n = 0; n < 12; n++) {
+      g.fillStyle = `rgba(${200 + r() * 55},${110 + r() * 60},${50 + r() * 30},${0.2 + r() * 0.4})`;
+      g.fillRect(0, r() * H, W, 4 + r() * 24);
+    }
+  } else {
+    // the monogram halls: a quiet pattern of the logo mark
+    bg("#d8d2c6");
+    g.fillStyle = "rgba(40,36,30,0.25)";
+    g.font = "italic 42px 'Times New Roman', serif";
+    for (let y = 40; y < H; y += 60) for (let x = (y / 60) % 2 ? 0 : 60; x < W; x += 120) g.fillText("see/face", x, y);
+  }
+  // a thin frame, same everywhere
+  g.strokeStyle = "rgba(0,0,0,0.35)";
+  g.lineWidth = 6;
+  g.strokeRect(3, 3, W - 6, H - 6);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
