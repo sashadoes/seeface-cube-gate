@@ -1,6 +1,8 @@
 // Light and effects, to make the labyrinth look like a moving artwork:
 //   · glow (bloom): everything bright bleeds soft light, like film
-//   · a film look: a touch of chromatic aberration at the edges, grain, vignette
+//   · the vibe (vibes.ts): colour grade, scanlines, tape band, lens, grain;
+//     in "signal" vibes the picture tears and snows near the dark king and
+//     drops out on its own now and then
 //   · light shafts falling from the ceiling lights (god rays)
 //   · dust motes sparkling in the air around you
 //   · a light trail behind you as you walk, tinted by where you are
@@ -13,23 +15,56 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { CELL, WALL_H, hasPanel } from "./maze";
+import type { Vibe } from "./vibes";
 
 const FilmShader = {
-  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, amount: { value: 1 } },
+  uniforms: {
+    tDiffuse: { value: null }, time: { value: 0 }, amount: { value: 1 }, signal: { value: 0 }, res: { value: new THREE.Vector2(1280, 720) },
+    // the vibe (see vibes.ts)
+    mono: { value: 0 }, tint: { value: new THREE.Vector3(1, 1, 1) }, contrast: { value: 1 }, split: { value: 0 }, lift: { value: 0 },
+    scan: { value: 0 }, bandAmt: { value: 0 }, chroma: { value: 0 }, grain: { value: 0.045 }, vig: { value: 0.9 }, fisheye: { value: 0 },
+  },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float time; uniform float amount; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float time; uniform float amount; uniform float signal; uniform vec2 res; varying vec2 vUv;
+    uniform float mono; uniform vec3 tint; uniform float contrast; uniform float split; uniform float lift;
+    uniform float scan; uniform float bandAmt; uniform float chroma; uniform float grain; uniform float vig; uniform float fisheye;
     float rand(vec2 co){ return fract(sin(dot(co, vec2(12.9898, 78.233)) + time) * 43758.5453); }
+    float hash(float n){ return fract(sin(n) * 43758.5453); }
     void main(){
-      vec2 c = vUv - 0.5;
+      vec2 uv = vUv;
+      // a camera lens bulge (cctv)
+      vec2 fc = uv - 0.5;
+      uv = 0.5 + fc * (1.0 - fisheye * 0.3 + fisheye * dot(fc, fc));
+      // lost signal: a tracking band rolls slowly down the picture, and when the
+      // signal breaks (signal > 0) whole lines tear sideways
+      float band = bandAmt * smoothstep(0.0, 0.06, abs(fract(uv.y - time * 0.045) - 0.5) - 0.44);
+      float line = floor(uv.y * res.y / 3.0);
+      float tear = (hash(line + floor(time * 24.0)) - 0.5) * signal * signal * 0.09 * step(0.55, hash(floor(uv.y * 14.0) + floor(time * 9.0)));
+      uv.x += band * 0.004 * sin(uv.y * 300.0 + time * 40.0) + tear;
+      vec2 c = uv - 0.5;
       float d = dot(c, c);
-      // chromatic aberration grows towards the edges
-      vec2 off = c * d * 0.018 * amount;
-      vec3 col = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
-      // grain + vignette
-      col += (rand(vUv) - 0.5) * 0.045 * amount;
-      col *= 1.0 - d * 0.9 * amount;
-      gl_FragColor = vec4(col, 1.0);
+      // chromatic aberration grows towards the edges (and with a bad signal)
+      vec2 off = c * d * 0.018 * amount + vec2(chroma + signal * 0.006, 0.0) * amount;
+      vec3 col = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
+      // colour grade
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(col, vec3(l), mono * amount) * mix(vec3(1.0), tint, amount);
+      col = mix(col, (col - 0.5) * contrast + 0.5, amount);
+      col = mix(col, col * mix(vec3(0.72, 0.95, 1.05), vec3(1.12, 0.88, 1.02), clamp(l * 1.4, 0.0, 1.0)), split * amount);
+      col = col * (1.0 - lift * amount) + vec3(0.95, 0.86, 1.0) * lift * amount;
+      // scanlines
+      col *= 1.0 - scan * amount * step(0.5, fract(vUv.y * res.y / 3.0));
+      // the band is brighter and noisier
+      col += band * (rand(vUv * 1.7) - 0.3) * 0.08 * amount;
+      // grain, snow when the signal breaks
+      float n = rand(vUv);
+      col += (n - 0.5) * (grain + signal * 0.35) * amount;
+      col = mix(col, vec3(n), clamp(signal - 0.75, 0.0, 1.0) * 1.6 * amount);
+      // vignette (and black outside the lens)
+      col *= 1.0 - d * vig * amount;
+      col *= step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+      gl_FragColor = vec4(max(col, 0.0), 1.0);
     }`,
 };
 
@@ -45,16 +80,31 @@ function dot(inner = "rgba(255,255,255,1)") {
   return new THREE.CanvasTexture(c);
 }
 
-export function createFx(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
+export function createFx(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, vibe: Vibe) {
   // ---------------- post-processing
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.55, 0.45, 0.72);
   composer.addPass(bloom);
+  bloom.strength = vibe.bloom;
   const film = new ShaderPass(FilmShader);
+  const u = film.uniforms;
+  u.mono.value = vibe.mono;
+  u.tint.value.set(...vibe.tint);
+  u.contrast.value = vibe.contrast;
+  u.split.value = vibe.split;
+  u.lift.value = vibe.lift;
+  u.scan.value = vibe.scan;
+  u.bandAmt.value = vibe.band;
+  u.chroma.value = vibe.chroma;
+  u.grain.value = vibe.grain;
+  u.vig.value = vibe.vignette;
+  u.fisheye.value = vibe.fisheye;
   composer.addPass(film);
   composer.addPass(new OutputPass());
   let enabled = true;
+  // signal: 0 = clean tape. It breaks near the dark king and drops out now and then
+  let danger = 0, dropT = 0, nextDrop = 20 + Math.random() * 40;
 
   // ---------------- in-world light play
   const group = new THREE.Group();
@@ -125,9 +175,14 @@ export function createFx(renderer: THREE.WebGLRenderer, scene: THREE.Scene, came
     },
     setSize(w: number, h: number) {
       composer.setSize(w, h);
+      film.uniforms.res.value.set(w, h);
       // phones get a cheaper glow (a third of the screen size)
       const k = matchMedia("(pointer: coarse)").matches ? 3 : 2;
       bloom.resolution.set(w / k, h / k);
+    },
+    /** how close danger is (0..1): the picture tears and snows */
+    setDanger(v: number) {
+      danger = v;
     },
     setPixelRatio(pr: number) {
       composer.setPixelRatio(pr);
@@ -135,6 +190,13 @@ export function createFx(renderer: THREE.WebGLRenderer, scene: THREE.Scene, came
     update(dt: number, t: number, me: { x: number; z: number; moving: boolean; sky: boolean; zoneTint: number }) {
       if (!enabled) return;
       film.uniforms.time.value = t;
+      nextDrop -= dt;
+      if (nextDrop <= 0) {
+        dropT = 0.25 + Math.random() * 0.5;
+        nextDrop = 25 + Math.random() * 50;
+      }
+      dropT = Math.max(0, dropT - dt);
+      if (vibe.signal) film.uniforms.signal.value = Math.min(1, Math.max(danger * 0.7, dropT > 0 ? 0.6 + Math.random() * 0.4 : 0));
       // motes follow you, drifting and twinkling
       motes.position.set(me.x, 0, me.z);
       const a = mg.getAttribute("position") as THREE.BufferAttribute;

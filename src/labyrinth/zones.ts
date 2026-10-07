@@ -96,6 +96,92 @@ function neonLines(g: CanvasRenderingContext2D, s: number, seed: number) {
   g.shadowBlur = 0;
 }
 
+// ------------------------------------------------------------------ the archive
+// Leaked pages pasted over some walls: typewritten lines, black redaction bars,
+// a stamp. Seeded by zone + variant, so everyone sees the same pages.
+const FILE_LINES = [
+  "subject entered the hallway at 03:14",
+  "the cube was recovered from room",
+  "witness describes a tall figure, no face",
+  "tape labelled 1994 found intact",
+  "all copies must be destroyed",
+  "the king was seen again on level",
+  "nobody returned from the lower floor",
+  "signal lost at this point",
+  "case closed. case reopened.",
+  "she said the walls were breathing",
+  "do not open during the show",
+  "location of the entrance is unknown",
+  "the visitor asked to stay",
+  "footage ends here",
+];
+const STAMPS = ["CLASSIFIED", "REDACTED", "DO NOT SHARE", "FILE 1994", "NO SIGNAL", "EYES ONLY"];
+
+function seeded(n: number) {
+  let a = Math.floor(n * 2 ** 31) || 1;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function archivePage(g: CanvasRenderingContext2D, s: number, seed: number) {
+  const r = seeded(seed);
+  const w = s * (0.5 + r() * 0.2), h = w * 1.3;
+  g.save();
+  g.translate(s * (0.3 + r() * 0.4), s * (0.32 + r() * 0.36));
+  g.rotate((r() - 0.5) * 0.18);
+  // the sheet: old paper, a little transparent so the wall shows through
+  g.fillStyle = "rgba(226,222,210,0.78)";
+  g.fillRect(-w / 2, -h / 2, w, h);
+  g.strokeStyle = "rgba(0,0,0,0.25)";
+  g.strokeRect(-w / 2, -h / 2, w, h);
+  // header line
+  g.fillStyle = "rgba(20,20,20,0.85)";
+  g.font = `bold ${Math.round(w * 0.05)}px "Courier New", monospace`;
+  g.fillText(`FILE ${1000 + Math.floor(r() * 8999)} · LEVEL ${Math.floor(r() * 4)}`, -w / 2 + w * 0.08, -h / 2 + h * 0.09);
+  // typewritten lines, some words blacked out
+  const fs = Math.round(w * 0.042);
+  g.font = `${fs}px "Courier New", monospace`;
+  const left = -w / 2 + w * 0.08, maxW = w * 0.84;
+  for (let y = -h / 2 + h * 0.17; y < h / 2 - h * 0.08; y += fs * 1.7) {
+    if (r() < 0.12) continue;
+    const words = FILE_LINES[Math.floor(r() * FILE_LINES.length)].split(" ");
+    let x = left;
+    for (const word of words) {
+      const ww = g.measureText(word + " ").width;
+      if (x + ww > left + maxW) break;
+      if (r() < 0.32) {
+        g.fillStyle = "rgba(5,5,5,0.95)";
+        g.fillRect(x, y - fs * 0.85, ww - fs * 0.3, fs * 1.05);
+      } else {
+        g.fillStyle = "rgba(25,25,25,0.8)";
+        g.fillText(word, x, y);
+      }
+      x += ww;
+    }
+  }
+  // a whole paragraph gone
+  if (r() < 0.6) {
+    g.fillStyle = "rgba(5,5,5,0.95)";
+    g.fillRect(left, h * (r() * 0.3 - 0.05), maxW * (0.6 + r() * 0.4), fs * 3.4);
+  }
+  // the stamp
+  g.translate(w * (r() * 0.3 - 0.15), h * (0.18 + r() * 0.15));
+  g.rotate(-0.25 + r() * 0.5);
+  const stamp = STAMPS[Math.floor(r() * STAMPS.length)];
+  g.font = `bold ${Math.round(w * 0.1)}px "Courier New", monospace`;
+  const sw = g.measureText(stamp).width;
+  g.globalAlpha = 0.55;
+  g.strokeStyle = g.fillStyle = "#3a3a3a";
+  g.lineWidth = 3;
+  g.strokeRect(-sw / 2 - 10, -w * 0.09, sw + 20, w * 0.125);
+  g.fillText(stamp, -sw / 2, w * 0.01);
+  g.restore();
+}
+
 /**
  * A wall/floor texture from a random image: monochrome, zone contrast and
  * brightness; sometimes the logo faintly on top. Tint comes from the material.
@@ -126,6 +212,9 @@ export function monoTexture(zone: ZoneDef, variant: number, opts: { floor?: bool
     g.fillStyle = v;
     g.fillRect(0, 0, s, s);
     if (zone.neon && !opts.floor) neonLines(g, s, (variant * 0.37) % 1);
+    // about half the wall images carry a leaked page
+    const page = rnd(variant, zone.kind.length, 73);
+    if (!opts.floor && page < 0.5) archivePage(g, s, page);
     // the logo: only on some walls, never the same strength
     const h = rnd(variant, zone.kind.length, opts.floor ? 77 : 71);
     if (!opts.floor && h < zone.logoChance) {

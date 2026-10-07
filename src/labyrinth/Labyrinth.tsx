@@ -21,7 +21,7 @@ import { createWishes, readBlood, addBlood, WISH_COST, WISH_KINDS, type WishKind
 import { cleanNick, savedNick, saveNick } from "./nick";
 import { apiReady, registerPlayer } from "../api";
 import { noteLevel, noteRun, readProgress } from "../progress";
-import { accountsReady, currentAccount, deleteAccount, login, logout, refresh, register, type Account, type AuthError } from "../account";
+import { accountsReady, currentAccount, deleteAccount, finishInstagram, instagramReady, instagramUrl, login, logout, refresh, register, type Account, type AuthError } from "../account";
 import LabMap from "./LabMap";
 import { onOnline } from "../online";
 import { createProps } from "./props";
@@ -46,6 +46,7 @@ import { createPosts, shrink, wallAhead, type Post } from "./posts";
 import { createShip } from "./ship";
 import { createNotes, type Note } from "./notes";
 import { createFx } from "./fx";
+import { myVibe, trackVibe } from "./vibes";
 import { createMarket, type Listing } from "./market";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions, setStalls } from "./places";
 import { createChampions, playerId } from "./champions";
@@ -112,6 +113,14 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
   const [consent, setConsent] = useState(false);
   // optional account: save progress + play on any device
   const [account, setAccount] = useState<Account | null>(() => currentAccount());
+  const [igOn, setIgOn] = useState(false);
+  useEffect(() => {
+    void instagramReady().then(setIgOn);
+    // coming back from instagram
+    const q = new URLSearchParams(location.search).get("ig");
+    if (q === "ok") void finishInstagram().then((a) => a && (setAccount(a), saveNick(a.nick), track("account-instagram")));
+    else if (q && q !== "off") setAuthErr(q === "cancelled" ? "instagram sign-in cancelled" : "instagram sign-in didn't work · try again");
+  }, []);
   const [mode, setMode] = useState<"" | "save" | "delete">("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -212,7 +221,7 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
           (account ? (
             <>
               {" "}
-              · <span className="saved">✓ saved to {account.nick}</span> ·{" "}
+              · <span className="saved">✓ saved to {account.nick}{account.instagram ? " · instagram" : ""}</span> ·{" "}
               <button
                 type="button"
                 onClick={() => {
@@ -239,6 +248,14 @@ function NickGate({ onDone }: { onDone: (n: string) => void }) {
       </div>
       {accountsReady && !account && mode === "save" && (
         <div className="lab-gate-account">
+          {igOn && (
+            <>
+              <a className="lab-ig" href={instagramUrl()}>
+                <span className="glyph">⬚</span> continue with instagram
+              </a>
+              <div className="lab-or">or a password</div>
+            </>
+          )}
           <input
             type="password"
             value={password}
@@ -405,14 +422,49 @@ function Game({ nick }: { nick: string }) {
   // chat with strangers + weird interactions
   type Line = { key: number; id: string; nick: string; text: string; mine?: boolean };
   const [chat, setChat] = useState<Line[]>([]);
-  const [chatOpen, setChatOpen] = useState(false);
+  // the open chat keeps the whole conversation (this visit); closed, lines float and fade
+  const [log, setLog] = useState<Line[]>([]);
+  const [chatOpen, setChatOpenState] = useState(false);
+  const chatOpenRef = useRef(false);
+  const [unread, setUnread] = useState(0);
+  const [lineMenu, setLineMenu] = useState<number | null>(null);
+  const setChatOpen = (open: boolean) => {
+    chatOpenRef.current = open;
+    setChatOpenState(open);
+    setLineMenu(null);
+    if (open) {
+      setUnread(0);
+      track("chat-open");
+    }
+  };
   const [draft, setDraft] = useState("");
+  const chatInput = useRef<HTMLInputElement>(null);
+  const logEnd = useRef<HTMLDivElement>(null);
   const muted = useRef(new Set<string>());
   const lineKey = useRef(0);
   const addLine = (l: Omit<Line, "key">) => {
     const line = { ...l, key: ++lineKey.current };
     setChat((c) => [...c.slice(-4), line]);
+    setLog((c) => [...c.slice(-59), line]);
+    if (!l.mine && !chatOpenRef.current) setUnread((n) => n + 1);
     setTimeout(() => setChat((c) => c.filter((x) => x.key !== line.key)), 25_000);
+  };
+  useEffect(() => {
+    if (chatOpen) logEnd.current?.scrollIntoView({ block: "end" });
+  }, [chatOpen, log.length]);
+  const muteLine = (l: Line) => {
+    muted.current.add(l.id);
+    setChat((c) => c.filter((x) => x.id !== l.id));
+    setLog((c) => c.filter((x) => x.id !== l.id));
+    setLineMenu(null);
+    say(`${l.nick} muted`, true);
+    track("chat-mute");
+  };
+  /** real people close enough to hear you clearly (30 m) and at all (80 m) */
+  const hearers = () => {
+    const ps = presenceRef.current ? [...presenceRef.current.peers.values()] : [];
+    const d = (p: { x: number; z: number }) => Math.hypot(p.x - posRef.current.x, p.z - posRef.current.z);
+    return { clear: ps.filter((p) => d(p) <= 30).length, far: ps.filter((p) => d(p) > 30 && d(p) <= 80).length };
   };
   const addLineRef = useRef(addLine);
   addLineRef.current = addLine;
@@ -470,17 +522,17 @@ function Game({ nick }: { nick: string }) {
     track(`post-${composer.mode}`);
   };
   const posRef = useRef({ x: 0, z: 0 });
-  const sendChat = () => {
-    const text = draft.trim();
-    if (!text) return setChatOpen(false);
+  const sendChat = (said?: string) => {
+    const text = (said ?? draft).trim();
+    if (!text) return;
     if (presenceRef.current?.say(text)) {
       addLine({ id: "me", nick, text, mine: true });
       questRef.current("say");
       // one of the dreamed ones (◇) nearby may answer (never claiming to be a person)
       const heard = aiRef.current?.hear(text, posRef.current.x, posRef.current.z);
       if (heard) setTimeout(() => addLine({ id: `ai-${heard.name}`, nick: `◇ ${heard.name}`, text: heard.reply }), 1400);
-      setDraft("");
-      setChatOpen(false);
+      if (said === undefined) setDraft("");
+      chatInput.current?.focus(); // stay in the conversation
       track("chat-said");
     } else say("that can't be said here (or slow down)", true);
   };
@@ -548,7 +600,8 @@ function Game({ nick }: { nick: string }) {
 
     const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 80);
     const world = createWorld();
-    const fx = createFx(renderer, world.scene, camera);
+    const fx = createFx(renderer, world.scene, camera, myVibe());
+    const stopVibe = trackVibe();
     const perf = createPerf(renderer, world.scene, (pr) => fx.setPixelRatio(pr));
     // first visit: pick a quality that suits this device
     if (!hasSavedSettings()) setSettings({ quality: detectTier(renderer) });
@@ -1067,7 +1120,7 @@ function Game({ nick }: { nick: string }) {
       track("clip-record");
       const lvl = levelAtX(pos.x);
       const place = lvl > 0 ? LEVELS[lvl].name : inPlace ? PLACE_TITLES[inPlace.kind] : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
-      const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}`;
+      const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}&v=${myVibe().id}`;
       try {
         const { blob } = await clipper.record({ nick, place, inviteUrl });
         clipBlob.current = { blob, url: inviteUrl };
@@ -1912,6 +1965,7 @@ function Game({ nick }: { nick: string }) {
         camera.far = far;
         camera.updateProjectionMatrix();
       }
+      fx.setDanger(alive ? lastDanger : 0);
       fx.update(dt, t, { x: pos.x, z: pos.z, moving: Math.hypot(vel.x, vel.z) > 0.6, sky, zoneTint: world.zone().panel });
       perf.frame(dt, camera);
       fx.render();
@@ -1929,7 +1983,7 @@ function Game({ nick }: { nick: string }) {
         }
         const lvl = levelAtX(pos.x);
         const place = lvl > 0 ? LEVELS[lvl].name : inPlace ? PLACE_TITLES[inPlace.kind] : PLACE_NAMES[world.zone().kind] ?? "the labyrinth";
-        const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}`;
+        const inviteUrl = `${location.origin}/labyrinth?with=${presence.me}&v=${myVibe().id}`;
         setSnapState("busy");
         makeSnapshot(renderer.domElement, { nick, place, event: eventKind ? EVENTS[eventKind].name : null, inviteUrl })
           .then((b) => {
@@ -1950,6 +2004,7 @@ function Game({ nick }: { nick: string }) {
     raf = requestAnimationFrame(frame);
 
     return () => {
+      stopVibe();
       stations.stop();
       offSettings();
       clearInterval(rememberTimer);
@@ -1978,7 +2033,7 @@ function Game({ nick }: { nick: string }) {
   const invite = async () => {
     const id = presenceRef.current?.me;
     if (!id) return;
-    const url = `${location.origin}/labyrinth?with=${id}`;
+    const url = `${location.origin}/labyrinth?with=${id}&v=${myVibe().id}`;
     track("invite-sent");
     try {
       if (navigator.share) {
@@ -2730,33 +2785,69 @@ function Game({ nick }: { nick: string }) {
         </div>
       )}
 
-      {/* chat with strangers: what people near you said */}
-      <div className="lab-chat" style={st.showChat ? undefined : { display: "none" }} onPointerDown={stop} onPointerUp={stop}>
-        {chat.map((l) => (
-          <button
-            key={l.key}
-            className={"lab-chat-line" + (l.mine ? " mine" : "")}
-            title={l.mine ? "" : "tap to mute"}
-            onClick={() => {
-              if (l.mine) return;
-              muted.current.add(l.id);
-              setChat((c) => c.filter((x) => x.id !== l.id));
-              say(`${l.nick} muted`, true);
-              track("chat-mute");
-            }}
-          >
-            <b>{l.nick}</b> {l.text}
-          </button>
-        ))}
+      {/* chat with strangers: closed = a big talk button + the last lines floating;
+          open = the whole conversation, who can hear you, quick phrases, send */}
+      <div className={"lab-chat" + (chatOpen ? " open" : "")} style={st.showChat ? undefined : { display: "none" }} onPointerDown={stop} onPointerUp={stop}>
         {chatOpen ? (
-          <form
-            className="lab-chat-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              sendChat();
-            }}
-          >
-            <input autoFocus value={draft} maxLength={80} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setChatOpen(false)} placeholder="say something to whoever is near…" />
+          <div className="lab-chat-panel" onKeyDown={(e) => e.key === "Escape" && setChatOpen(false)}>
+            <div className="lab-chat-head">
+              {(() => {
+                const h = hearers();
+                return (
+                  <span>
+                    {h.clear ? `${h.clear} ${h.clear === 1 ? "person hears" : "people hear"} you` : "no one is close enough to hear you"}
+                    {h.far ? ` · ${h.far} further away` : ""}
+                  </span>
+                );
+              })()}
+              <button className="lab-chat-x" onClick={() => setChatOpen(false)} aria-label="close chat">
+                ×
+              </button>
+            </div>
+            <div className="lab-chat-log">
+              {log.length === 0 && <div className="lab-chat-empty">say hi. anyone within 30 m hears you.</div>}
+              {log.map((l) => (
+                <div key={l.key} className={"lab-chat-row" + (l.mine ? " mine" : "")}>
+                  <button className="lab-chat-line" onClick={() => !l.mine && setLineMenu(lineMenu === l.key ? null : l.key)}>
+                    <b>{l.mine ? "you" : l.nick}</b> {l.text}
+                  </button>
+                  {lineMenu === l.key && (
+                    <span className="lab-chat-menu">
+                      <button
+                        onClick={() => {
+                          setDraft(`@${l.nick.replace(/^◇ /, "")} `);
+                          setLineMenu(null);
+                          chatInput.current?.focus();
+                        }}
+                      >
+                        reply
+                      </button>
+                      <button onClick={() => muteLine(l)}>mute</button>
+                    </span>
+                  )}
+                </div>
+              ))}
+              <div ref={logEnd} />
+            </div>
+            <div className="lab-quick">
+              {["hi", "where are you?", "follow me", "wait for me", "look at this", "nice", "bye"].map((q) => (
+                <button key={q} type="button" onClick={() => sendChat(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+            <form
+              className="lab-chat-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendChat();
+              }}
+            >
+              <input ref={chatInput} autoFocus value={draft} maxLength={80} enterKeyHint="send" onChange={(e) => setDraft(e.target.value)} placeholder="type a message…" />
+              <button type="submit" className="lab-chat-send" disabled={!draft.trim()} aria-label="send">
+                ➝
+              </button>
+            </form>
             <div className="lab-emotes">
               {EMOTES.map((k) => (
                 <button type="button" key={k} onClick={() => emote(k)}>
@@ -2764,11 +2855,19 @@ function Game({ nick }: { nick: string }) {
                 </button>
               ))}
             </div>
-          </form>
+          </div>
         ) : (
-          <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label="talk">
-            talk…
-          </button>
+          <>
+            {chat.map((l) => (
+              <button key={l.key} className={"lab-chat-line" + (l.mine ? " mine" : "")} onClick={() => setChatOpen(true)}>
+                <b>{l.mine ? "you" : l.nick}</b> {l.text}
+              </button>
+            ))}
+            <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label="open chat">
+              <span className="lab-chat-icon">❝</span> chat
+              {unread > 0 && <span className="lab-chat-badge">{unread > 9 ? "9+" : unread}</span>}
+            </button>
+          </>
         )}
       </div>
 

@@ -791,14 +791,21 @@
   align-items: flex-start;
   gap: 4px;
   font: italic 15px "Times New Roman", serif;
+
+  // open: a panel over the bottom of the screen (full width on phones)
+  &.open {
+    width: min(400px, calc(100vw - 32px));
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 1003;
+  }
 }
 
 .lab-chat-line {
   all: unset;
   max-width: 100%;
-  padding: 3px 10px;
+  padding: 4px 11px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   color: #fff6e2;
   cursor: pointer;
   animation: lab-chat-in 0.3s ease-out both;
@@ -818,27 +825,173 @@
   from { opacity: 0; transform: translateY(6px); }
 }
 
+// the big, obvious way in
 .lab-chat-open {
   all: unset;
-  color: #a9a293;
-  padding: 3px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 18px;
+  color: #fff6e2;
+  font-size: 17px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 230, 184, 0.45);
+  border-radius: 22px;
   cursor: pointer;
+  box-shadow: 0 0 18px rgba(255, 230, 184, 0.08);
+
+  &:hover {
+    border-color: rgba(255, 230, 184, 0.8);
+  }
+}
+
+.lab-chat-icon {
+  font-style: normal;
+  color: #ffcf8a;
+}
+
+.lab-chat-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  background: #ffcf8a;
+  color: #120c05;
+  font: bold 12px/20px system-ui, sans-serif;
+  text-align: center;
+  animation: lab-chat-in 0.3s ease-out both;
+}
+
+.lab-chat-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  box-sizing: border-box;
+  background: rgba(6, 5, 4, 0.86);
+  border: 1px solid rgba(255, 230, 184, 0.25);
+  border-radius: 16px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: lab-chat-in 0.2s ease-out both;
+}
+
+.lab-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #a9a293;
+  font-size: 13px;
+  padding-left: 4px;
+}
+
+.lab-chat-x {
+  all: unset;
+  width: 36px;
+  height: 36px;
+  line-height: 34px;
+  text-align: center;
+  font: 24px system-ui, sans-serif;
+  color: #fff6e2;
+  cursor: pointer;
+  border-radius: 18px;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.lab-chat-log {
+  max-height: min(34vh, 260px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.lab-chat-empty {
+  color: #8a8478;
+  padding: 6px 4px;
+}
+
+.lab-chat-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+
+  &.mine {
+    justify-content: flex-end;
+  }
+
+  .lab-chat-line {
+    animation: none;
+  }
+}
+
+.lab-chat-menu {
+  display: inline-flex;
+  gap: 4px;
+
+  button {
+    all: unset;
+    cursor: pointer;
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff6e2;
+    font-size: 14px;
+  }
+}
+
+.lab-quick {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  button {
+    all: unset;
+    flex: none;
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 230, 184, 0.3);
+    color: #ffe6b8;
+    white-space: nowrap;
+  }
 }
 
 .lab-chat-form {
   width: 100%;
+  display: flex;
+  gap: 6px;
 
   input {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     box-sizing: border-box;
     font: italic 16px "Times New Roman", serif;
     color: #fff;
     background: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 230, 184, 0.4);
-    border-radius: 14px;
-    padding: 7px 12px;
+    border-radius: 22px;
+    padding: 10px 14px;
     outline: none;
     user-select: text;
     -webkit-user-select: text;
@@ -846,11 +999,29 @@
   }
 }
 
+.lab-chat-send {
+  all: unset;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  text-align: center;
+  line-height: 44px;
+  font: 20px system-ui, sans-serif;
+  background: #ffcf8a;
+  color: #120c05;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+}
+
 .lab-emotes {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-top: 6px;
 
   button {
     all: unset;
@@ -1780,4 +1951,35 @@
   a {
     color: #ffe6b8;
   }
+}
+
+// ---------------------------------------------------------------- instagram sign-in
+.lab-ig {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 16px;
+  font: italic 16px "Times New Roman", serif;
+  color: #fff6e2;
+  text-decoration: none;
+
+  .glyph {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 1.5px solid #fff6e2;
+    font-size: 9px;
+    color: #fff6e2;
+  }
+}
+
+.lab-or {
+  text-align: center;
+  font: italic 13px "Times New Roman", serif;
+  color: #6f6a5c;
 }

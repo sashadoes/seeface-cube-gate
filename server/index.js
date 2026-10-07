@@ -7,6 +7,9 @@
 //   PUT  /api/progress { progress }    (auth) → { account }   (merged: best of both)
 //   POST /api/logout                   (auth)
 //   POST /api/account/delete { password } (auth) → deletes the account and its sessions
+//   GET  /api/instagram/start     → sends the player to Instagram
+//   GET  /api/instagram/callback  ← Instagram sends them back; we make/find their
+//                                   account and hand the game a session token
 //   GET  /api/health
 //   GET  /api/stats  (header x-admin-key: ADMIN_KEY) → active players, retention, sources
 //
@@ -25,6 +28,11 @@ import { promisify } from "node:util";
 const scrypt = promisify(scryptCb);
 
 const PORT = Number(process.env.PORT || 8787);
+// Instagram login (optional): set these and the button appears in the game.
+// IG_APP_ID / IG_APP_SECRET come from the Meta app; IG_REDIRECT must match the
+// redirect URI you register there, e.g. https://api.seeface1.world/api/instagram/callback
+const IG = { id: process.env.IG_APP_ID || "", secret: process.env.IG_APP_SECRET || "", redirect: process.env.IG_REDIRECT || "" };
+const SITE = process.env.SITE_URL || "https://seeface1.world";
 const ORIGINS = (process.env.ALLOWED_ORIGINS || "https://seeface1.world,http://localhost:5173")
   .split(",")
   .map((s) => s.trim())
@@ -43,6 +51,7 @@ if (process.env.MONGODB_URI) {
   accounts = client.db(process.env.MONGODB_DB || "seeface1").collection("accounts");
   sessions = client.db(process.env.MONGODB_DB || "seeface1").collection("sessions");
   await accounts.createIndex({ nickLower: 1 }, { unique: true });
+  await accounts.createIndex({ ig: 1 }, { unique: true, partialFilterExpression: { ig: { $type: "string" } } });
   await sessions.createIndex({ tokenHash: 1 }, { unique: true });
   await sessions.createIndex({ at: 1 }, { expireAfterSeconds: 180 * 24 * 3600 }); // sessions last 180 days
   console.log("storage: MongoDB");
@@ -98,6 +107,11 @@ const store = {
   async getAccount(nickLower) {
     if (accounts) return accounts.findOne({ nickLower });
     return (await db()).accounts[nickLower] ?? null;
+  },
+  async accountByIg(ig) {
+    if (accounts) return accounts.findOne({ ig });
+    const d = await db();
+    return Object.values(d.accounts).find((a) => a.ig === ig) ?? null;
   },
   async createAccount(doc) {
     if (accounts) {
@@ -190,7 +204,7 @@ function mergeProgress(a, b) {
     levels: [...new Set([...a.levels, ...b.levels])].sort(),
   };
 }
-const publicAccount = (a) => ({ nick: a.nick, email: a.email ?? null, progress: a.progress, created: a.created });
+const publicAccount = (a) => ({ nick: a.nick, email: a.email ?? null, progress: a.progress, created: a.created, instagram: a.igName ?? null });
 
 // ------------------------------------------------------------------ validation
 const NICK = /^[\p{L}\p{N}_.]{2,16}$/u;
@@ -224,7 +238,7 @@ app.use(
   })
 );
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, storage: players ? "mongodb" : "file" }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, storage: players ? "mongodb" : "file", instagram: igReady() }));
 
 app.post("/api/players", async (req, res) => {
   if (limited(req.ip)) return res.status(429).json({ ok: false, error: "slow down" });
@@ -315,7 +329,7 @@ app.post("/api/login", async (req, res) => {
   if (typeof nick !== "string" || typeof password !== "string" || password.length > 200) return res.status(400).json({ ok: false, error: "wrong" });
   const acc = await store.getAccount(nick.toLowerCase());
   // same answer for "no such name" and "wrong password"
-  if (!acc || !(await checkPassword(password, acc))) return res.status(401).json({ ok: false, error: "wrong" });
+  if (!acc || !acc.hash || !(await checkPassword(password, acc))) return res.status(401).json({ ok: false, error: "wrong" });
   await store.updateAccount(acc.nickLower, { lastSeen: new Date() });
   const token = await store.newSession(acc.nickLower);
   res.json({ ok: true, token, account: publicAccount(acc) });
@@ -349,9 +363,81 @@ app.post("/api/account/delete", async (req, res) => {
   if (tooManyTries(req.ip)) return res.status(429).json({ ok: false });
   const a = await auth(req);
   if (!a) return res.status(401).json({ ok: false });
-  if (typeof req.body?.password !== "string" || !(await checkPassword(req.body.password, a.acc))) return res.status(401).json({ ok: false, error: "wrong" });
+  // an instagram account has no password: ask them to confirm their nickname instead
+  const ok = a.acc.hash ? typeof req.body?.password === "string" && (await checkPassword(req.body.password, a.acc)) : req.body?.password === a.acc.nick;
+  if (!ok) return res.status(401).json({ ok: false, error: "wrong" });
   await store.deleteAccount(a.acc.nickLower);
   res.json({ ok: true });
+});
+
+// ------------------------------------------------------------------ instagram login
+const igReady = () => Boolean(IG.id && IG.secret && IG.redirect);
+// short-lived states, so a callback can't be replayed from somewhere else
+const igStates = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of igStates) if (now - v > 10 * 60_000) igStates.delete(k);
+}, 60_000).unref();
+
+app.get("/api/instagram/start", (req, res) => {
+  if (!igReady()) return res.status(503).json({ ok: false, error: "not configured" });
+  const state = randomBytes(16).toString("hex");
+  igStates.set(state, Date.now());
+  const u = new URL("https://www.instagram.com/oauth/authorize");
+  u.searchParams.set("client_id", IG.id);
+  u.searchParams.set("redirect_uri", IG.redirect);
+  u.searchParams.set("response_type", "code");
+  u.searchParams.set("scope", "instagram_business_basic");
+  u.searchParams.set("state", state);
+  res.redirect(u.toString());
+});
+
+/** instagram username → a nickname this game accepts, and free */
+async function nickFromIg(username) {
+  let base = String(username || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_.]/gu, "")
+    .slice(0, 16);
+  if (base.length < 2) base = "face_" + Math.floor(1000 + Math.random() * 9000);
+  for (let k = 0; k < 20; k++) {
+    const tryNick = k === 0 ? base : `${base.slice(0, 13)}_${k}`;
+    if (!(await store.getAccount(tryNick.toLowerCase()))) return tryNick;
+  }
+  return "face_" + Math.floor(1000 + Math.random() * 9000);
+}
+
+app.get("/api/instagram/callback", async (req, res) => {
+  const back = (q) => res.redirect(`${SITE}/labyrinth/${q}`);
+  if (!igReady()) return back("?ig=off");
+  const { code, state, error } = req.query;
+  if (error || !code) return back("?ig=cancelled");
+  if (!state || !igStates.delete(state)) return back("?ig=expired");
+  try {
+    // 1. the code becomes a token
+    const form = new URLSearchParams({ client_id: IG.id, client_secret: IG.secret, grant_type: "authorization_code", redirect_uri: IG.redirect, code: String(code) });
+    const tokRes = await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", body: form });
+    const tok = await tokRes.json();
+    if (!tok.access_token) throw new Error(tok.error_message || "no token");
+    // 2. who they are (we keep only their instagram id and username)
+    const meRes = await fetch(`https://graph.instagram.com/v21.0/me?fields=id,username&access_token=${encodeURIComponent(tok.access_token)}`);
+    const me = await meRes.json();
+    if (!me.id) throw new Error("no profile");
+    const ig = String(me.id);
+    // 3. their account: the one linked to this instagram, or a new one
+    let acc = await store.accountByIg(ig);
+    if (!acc) {
+      const nick = await nickFromIg(me.username);
+      const now = new Date();
+      acc = { nick, nickLower: nick.toLowerCase(), salt: null, hash: null, ig, igName: String(me.username || "").slice(0, 40), email: null, consent: false, consentText: null, progress: cleanProgress(null), created: now, lastSeen: now };
+      if (!(await store.createAccount(acc))) return back("?ig=taken");
+    } else await store.updateAccount(acc.nickLower, { lastSeen: new Date(), igName: String(me.username || "").slice(0, 40) });
+    const token = await store.newSession(acc.nickLower);
+    // the game reads the token from the address and wipes it from the bar
+    back(`?ig=ok#token=${token}`);
+  } catch (e) {
+    console.error("instagram login failed", e.message);
+    back("?ig=failed");
+  }
 });
 
 app.post("/api/forget", async (req, res) => {

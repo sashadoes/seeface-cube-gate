@@ -4,7 +4,7 @@
 import { apiBase, apiReady } from "./api";
 import { onProgress, readProgress, writeProgress, type Progress } from "./progress";
 
-export type Account = { nick: string; email: string | null; progress: Progress };
+export type Account = { nick: string; email: string | null; progress: Progress; instagram?: string | null };
 
 const TOKEN_KEY = "seeface-account-token";
 const ACCOUNT_KEY = "seeface-account";
@@ -26,6 +26,34 @@ const set = (k: string, v: string | null) => {
 };
 
 export const accountsReady = apiReady;
+
+/** does this server offer instagram login? (asked once) */
+let igKnown: boolean | null = null;
+export async function instagramReady() {
+  if (!apiBase) return false;
+  if (igKnown !== null) return igKnown;
+  try {
+    const r = await fetch(`${apiBase}/api/health`);
+    const d = await r.json();
+    igKnown = Boolean(d.instagram);
+  } catch {
+    igKnown = false;
+  }
+  return igKnown;
+}
+
+export const instagramUrl = () => `${apiBase}/api/instagram/start`;
+
+/** Instagram sent them back with a session token in the address: take it in */
+export async function finishInstagram(): Promise<Account | null> {
+  const token = new URLSearchParams(location.hash.slice(1)).get("token");
+  if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
+  set(TOKEN_KEY, token);
+  history.replaceState(null, "", location.pathname);
+  const acc = await refresh();
+  if (acc) void save();
+  return acc;
+}
 
 export function currentAccount(): Account | null {
   try {
