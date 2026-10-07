@@ -3,7 +3,7 @@
 // floating in every room under its own spotlight. Only the cells around the
 // visitor exist at any time; they are rebuilt as you walk (infinite maze).
 import * as THREE from "three";
-import { CELL, WALL_H, hasPanel, placeAt, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
+import { CELL, WALL_H, hasPanel, inShip, placeAt, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
 import type { Weather } from "../marks/weather";
 import { WALL_VARIANTS, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, type ZoneDef } from "./zones";
 
@@ -23,6 +23,8 @@ export type World = {
   setWeather: (w: Weather) => void;
   nearestCube: (px: number, pz: number) => { mesh: THREE.Object3D; dist: number } | null;
   spinCube: (cube: THREE.Object3D) => void;
+  /** inside the ship: thin air, far sight */
+  setSpace: (on: boolean) => void;
   /** settings: lightning flashes on/off */
   setFlashes: (on: boolean) => void;
   /** hide the ceiling (under the open sky) */
@@ -61,6 +63,7 @@ export function createWorld(): World {
   let wet = 0;
   let flashesOn = true;
   let openSky = false; // under the open sky: night instead of the corridor fog
+  let space = false; // inside the ship
   scene.fog = new THREE.FogExp2(0x0c0c0b, 0.06);
 
   // ---------------------------------------------------------------- materials
@@ -245,6 +248,7 @@ export function createWorld(): World {
       for (let J = J0 - 1; J <= J0 + 1; J++) {
         if (placeAt(I, J)) continue; // places have their own things, no cube
         const c = roomCentre(I, J);
+        if (inShip(c.x, c.z)) continue; // nor the ship
         rooms.push({ I, J, d: Math.hypot(c.x - (ci + 0.5) * CELL, c.z - (cj + 0.5) * CELL) });
       }
     rooms.sort((a, b) => a.d - b.d);
@@ -287,9 +291,9 @@ export function createWorld(): World {
     // the atmosphere drifts towards this location's
     const k = Math.min(1, dt * 1.5);
     const fog = scene.fog as THREE.FogExp2;
-    fog.color.lerp(tmpCol.setHex(openSky ? 0x060914 : zone.fog), k);
+    fog.color.lerp(tmpCol.setHex(space ? 0x0c1220 : openSky ? 0x060914 : zone.fog), k);
     (scene.background as THREE.Color).copy(fog.color);
-    fog.density += ((openSky ? 0.022 : Math.min(zone.fogDensity + weatherFog + depthLevel * 0.008, 0.16)) + edgeFog * 0.3 - fog.density) * Math.max(k, edgeFog > 0 ? 0.1 : 0);
+    fog.density += ((space ? 0.0045 : openSky ? 0.022 : Math.min(zone.fogDensity + weatherFog + depthLevel * 0.008, 0.16)) + edgeFog * 0.3 - fog.density) * Math.max(k, edgeFog > 0 ? 0.1 : 0);
     ambient.color.lerp(tmpCol.setHex(zone.ambient), k);
     ambient.intensity += (Math.max(zone.ambientIntensity - depthLevel * 0.015, 0.04) - ambient.intensity) * k;
     ceilMat.color.lerp(tmpCol.setHex(zone.ceiling), k);
@@ -367,7 +371,7 @@ export function createWorld(): World {
     depthLevel = depth;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => (wet = w), setFlashes: (on: boolean) => (flashesOn = on), setCeiling: (on: boolean) => {
+  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => (wet = w), setFlashes: (on: boolean) => (flashesOn = on), setSpace: (on: boolean) => (space = on), setCeiling: (on: boolean) => {
     ceil.visible = on;
     panels.visible = on;
     openSky = !on;

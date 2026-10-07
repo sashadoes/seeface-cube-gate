@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { CELL, PLACE, WALL_H, darkDoorSide, placeAt, placeOf, type PlaceKind } from "./maze";
 import { relicMesh } from "./props";
 import { zoneAt, zoneWallMaterial } from "./zones";
+import { beam, shipSilhouette } from "./ship";
 
 export const PLACE_NAMES: Record<PlaceKind, string> = {
   open: "the open",
@@ -179,6 +180,17 @@ function buildOpen(g: THREE.Group, b: Built, r: () => number) {
     }
   });
   b.spots.push({ x: L / 2, y: 6, z: L / 2, color: 0xa8bcff, intensity: 4 });
+  // the ship hangs in the sky over the open, and a beam comes down to the middle
+  const ship = shipSilhouette();
+  ship.position.set(L / 2, 70, L / 2);
+  g.add(ship);
+  const up = beam(70);
+  up.position.set(L / 2, 0, L / 2);
+  g.add(up);
+  b.anim.push((t) => {
+    up.userData.tick(t);
+    ship.rotation.y = Math.sin(t * 0.03) * 0.3;
+  });
 }
 
 function buildTheater(g: THREE.Group, b: Built, r: () => number) {

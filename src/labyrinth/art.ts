@@ -5,7 +5,7 @@
 // glowing photo poster. All emissive: only a fixed pool of 4 real lights.
 import * as THREE from "three";
 import { zoneAt, type ZoneKind } from "./zones";
-import { CELL, WALL_H, placeAt, placeOf, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
+import { CELL, WALL_H, inShip, placeAt, placeOf, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
 
 type Art = { tex: THREE.Texture; color: THREE.Color; ready: boolean };
 const cache = new Map<string, Art>();
@@ -198,6 +198,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
       for (let J = J0 - 1; J <= J0 + 1; J++) {
         if (placeAt(I, J)) continue; // places are dressed by places.ts
         const c = roomCentre(I, J);
+        if (inShip(c.x, c.z)) continue;
         list.push({ I, J, d: Math.hypot(c.x - px, c.z - pz) });
       }
     list.sort((a, b) => a.d - b.d);

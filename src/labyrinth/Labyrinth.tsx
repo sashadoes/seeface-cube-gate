@@ -36,13 +36,14 @@ const PLACE_NAMES: Record<string, string> = {
   monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
   photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep",
 };
-import { free, spawn, roomOf, safeSpot as roomCentreOf, CELL } from "./maze";
+import { free, spawn, roomOf, safeSpot as roomCentreOf, CELL, inShip, placeCentre } from "./maze";
 import type { WeatherKind } from "../marks/weather";
 import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
 import { createHazards } from "./hazards";
 import { createAi, type AiResidents } from "./ai";
 import { createPosts, shrink, wallAhead, type Post } from "./posts";
+import { createShip } from "./ship";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions } from "./places";
 import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
@@ -1029,6 +1030,9 @@ function Game({ nick }: { nick: string }) {
     });
 
     const hazards = createHazards(sound.ctx, sound.ambienceOut);
+    const ship = createShip();
+    world.scene.add(ship.group);
+    let beamT = 0;
     const posts = createPosts(presence, () => nick);
     postsRef.current = posts;
     posts.onChange(() => bumpPosts((n) => n + 1));
@@ -1318,7 +1322,8 @@ function Game({ nick }: { nick: string }) {
       }
 
       // the edge of the labyrinth
-      const eg = edge.update(pos.x, pos.z, presence.online(), dt);
+      // the ship is outside the labyrinth's edge rules
+      const eg = inShip(pos.x, pos.z) ? { fog: 0, grew: false, throwBack: null, nearEdge: false } : edge.update(pos.x, pos.z, presence.online(), dt);
       edgeFog = eg.fog;
       world.setEdgeFog(Math.max(eg.fog, fogT > 0 ? 0.7 : 0));
       if (eg.grew) sayRef.current(`the labyrinth grew · ${presence.online()} inside`);
@@ -1502,6 +1507,35 @@ function Game({ nick }: { nick: string }) {
       gramos.update(pos.x, pos.z, t);
       ai.update(dt, pos.x, pos.z);
       posts.update(pos.x, pos.z);
+      ship.update(pos.x, pos.z, t);
+      world.setSpace(inShip(pos.x, pos.z));
+      // the beams: stand in one for 2.5 s to go up to the ship / back down to the open
+      const onShip = inShip(pos.x, pos.z);
+      const openBeam = inPlace?.kind === "open" ? placeCentre(inPlace.I, inPlace.J) : null;
+      const inBeam = (openBeam && Math.hypot(openBeam.x - pos.x, openBeam.z - pos.z) < 1.3) || (onShip && Math.hypot(ship.dock.x - pos.x, ship.dock.z - pos.z) < 1.3);
+      beamT = inBeam && alive ? beamT + dt : 0;
+      if (beamT > 2.5) {
+        beamT = 0;
+        if (onShip) {
+          const back = placeCentre(1, 1); // the open by the entrance
+          pos.x = back.x + 3;
+          pos.z = back.z;
+          track("ship-leave");
+        } else {
+          pos.x = ship.dock.x + 4;
+          pos.z = ship.dock.z;
+          input.yaw = -Math.PI / 2; // facing the church
+          track("ship-board");
+        }
+        vel.x = vel.z = 0;
+        hunter.reset(pos.x + 60, pos.z + 60);
+        if (settings().flashes) {
+          el.classList.remove("rift");
+          void el.offsetWidth;
+          el.classList.add("rift");
+          el.style.setProperty("--rift", "#bfe8ff");
+        }
+      }
       yawRef.current = input.yaw;
       posRef.current.x = pos.x;
       posRef.current.z = pos.z;
@@ -1690,7 +1724,7 @@ function Game({ nick }: { nick: string }) {
       // places: the open, the theater, the mall, the museum, the supermarket, the dark room
       const pl = places.update(pos.x, pos.z, t, dt);
       inPlace = pl.inside;
-      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual");
+      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && !inShip(pos.x, pos.z));
       // the ritual: stand in the gold circle by the altar for 5 seconds
       if (pl.atAltar && alive) {
         if (ritualT === 0) sayRef.current("stand still… the ritual has begun");

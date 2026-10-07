@@ -22,6 +22,36 @@ function hash(a: number, b: number, c: number) {
 
 export const rnd = hash;
 
+// ------------------------------------------------------------------ the ship
+// A giant spaceship far out on the x axis (reached by a beam in "the open").
+// Inside there is no maze: one huge deck inside an elliptical hull, with a
+// gothic church in the middle (solid walls with a door, pews, an altar).
+export const SHIP = { x: 400_000, z: 0, halfLen: 120, halfWid: 55, height: 60 };
+// the church: 40 m long (x), 20 m wide (z), door on the west side (-x)
+export const CHURCH = { x0: -20, x1: 20, z0: -10, z1: 10, wall: 0.8, door: 3 };
+
+export const inShip = (x: number, z: number) => Math.abs(x - SHIP.x) < SHIP.halfLen + 8 && Math.abs(z - SHIP.z) < SHIP.halfWid + 8;
+const inShipCell = (i: number, j: number) => inShip((i + 0.5) * CELL, (j + 0.5) * CELL);
+
+function shipFree(x: number, z: number, r: number) {
+  const dx = x - SHIP.x, dz = z - SHIP.z;
+  // inside the hull (an ellipse on the deck)
+  if ((dx / (SHIP.halfLen - 2 - r)) ** 2 + (dz / (SHIP.halfWid - 2 - r)) ** 2 > 1) return false;
+  // the church's walls (with the door gap on the west wall)
+  const c = CHURCH;
+  const inX = dx > c.x0 - r && dx < c.x1 + r, inZ = dz > c.z0 - r && dz < c.z1 + r;
+  if (inX && inZ) {
+    const nearWest = dx < c.x0 + c.wall + r, nearEast = dx > c.x1 - c.wall - r;
+    const nearNorth = dz < c.z0 + c.wall + r, nearSouth = dz > c.z1 - c.wall - r;
+    if (nearWest && !(Math.abs(dz) < c.door / 2)) return false;
+    if (nearEast || nearNorth || nearSouth) return false;
+    // the altar (east end) and the pews (two blocks of rows)
+    if (dx > 13 && dx < 16 && Math.abs(dz) < 2.5) return false;
+    for (let px = -14; px <= 8; px += 3) if (dx > px - r && dx < px + 0.6 + r && ((dz > -7.5 - r && dz < -1.5 + r) || (dz > 1.5 - r && dz < 7.5 + r))) return false;
+  }
+  return true;
+}
+
 // ------------------------------------------------------------------ places
 // Some regions hold a big place instead of a room: a PLACE×PLACE block of open
 // floor with a doorway in the middle of each side. One of each sits right
@@ -43,6 +73,7 @@ const FAR_PLACES: PlaceKind[] = ["open", "theater", "mall", "museum", "market"];
 
 export function placeAt(I: number, J: number): PlaceKind | null {
   if (I === 0 && J === 0) return null; // the entrance keeps its room
+  if (inShip((I * REGION + 4) * CELL, (J * REGION + 4) * CELL)) return null;
   const near = NEAR_PLACES[`${I},${J}`];
   if (near) return near;
   if (Math.abs(I) <= 1 && Math.abs(J) <= 1) return null;
@@ -103,6 +134,7 @@ export function roomOrigin(I: number, J: number) {
 export function roomOf(i: number, j: number) {
   const I = Math.floor(i / REGION), J = Math.floor(j / REGION);
   if (placeAt(I, J)) return null; // that region has a place instead of a room
+  if (inShipCell(i, j)) return null;
   const o = roomOrigin(I, J);
   if (i >= o.i && i < o.i + ROOM && j >= o.j && j < o.j + ROOM) return { I, J, ...o };
   return null;
@@ -122,6 +154,7 @@ function sameRoom(a: [number, number], b: [number, number]) {
 
 /** Wall on the east edge of cell (i, j)? */
 export function wallEast(i: number, j: number) {
+  if (inShipCell(i, j) || inShipCell(i + 1, j)) return false;
   const pe = placeEdge([i, j], [i + 1, j]);
   if (pe !== null) return pe;
   if (sameRoom([i, j], [i + 1, j])) return false;
@@ -133,6 +166,7 @@ export function wallEast(i: number, j: number) {
 
 /** Wall on the south edge of cell (i, j)? */
 export function wallSouth(i: number, j: number) {
+  if (inShipCell(i, j) || inShipCell(i, j + 1)) return false;
   const pe = placeEdge([i, j], [i, j + 1]);
   if (pe !== null) return pe;
   if (sameRoom([i, j], [i, j + 1])) return false;
@@ -143,7 +177,7 @@ export function wallSouth(i: number, j: number) {
 
 /** Ceiling light panel in this cell? (liminal fluorescent squares) */
 export function hasPanel(i: number, j: number) {
-  return roomOf(i, j) === null && placeOf(i, j) === null && hash(i, j, 5) < 0.22;
+  return roomOf(i, j) === null && placeOf(i, j) === null && !inShipCell(i, j) && hash(i, j, 5) < 0.22;
 }
 
 /** Can a body of radius r stand at (x, z)? */
@@ -172,6 +206,7 @@ const SOLID: Partial<Record<PlaceKind, [number, number, number, number][]>> = {
 };
 
 export function free(x: number, z: number, r = 0.35) {
+  if (inShip(x, z)) return shipFree(x, z, r);
   const i = Math.floor(x / CELL), j = Math.floor(z / CELL);
   const pl = placeOf(i, j);
   if (pl) {
