@@ -7,6 +7,7 @@ const SITE = "https://seeface1.world";
 const pages = {
   labyrinth: { title: "seeface1 · the labyrinth", description: "The labyrinth behind the seeface1 cube: an endless 3D maze you walk with strangers. Floods, a Pop Queen, secret rooms. Play in your browser.", index: true },
   privacy: { title: "seeface1 · privacy", description: "What seeface1 keeps and why.", index: true },
+  artists: { title: "seeface1 · artists", description: "The agreement artists accept when they hang their work in the seeface1 labyrinth.", index: true },
   marks: { title: "seeface1 · marks", description: "seeface1 marks.", index: false },
   "the-eye": { title: "the eye", description: "", index: false },
 };

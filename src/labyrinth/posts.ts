@@ -16,7 +16,8 @@ import { playerId } from "./champions";
 /** The moderator's PUBLIC key (JWK). Set it after creating the key on /the-eye. */
 export const MOD_PUBLIC_KEY: JsonWebKey | null = null;
 
-export type Post = { id: string; img: string; cap: string; nick: string; by: string; x: number; z: number; ry: number; t: number };
+/** the artist accepted /artists (own work + free permission to show it) */
+export type Post = { id: string; img: string; cap: string; nick: string; by: string; x: number; z: number; ry: number; t: number; agreed?: number };
 
 export async function verifyApproval(post: Post, sig: string) {
   if (!MOD_PUBLIC_KEY) return false;
@@ -171,7 +172,7 @@ export function createPosts(presence: Presence, myNick: () => string) {
     /** hang a new post on the wall ahead */
     publish(img: string, cap: string, at: { x: number; z: number; ry: number }) {
       const id = `${me}-${Date.now().toString(36)}`;
-      const post: Post = { id, img, cap: filterMark(cap) ?? "", nick: myNick(), by: me, x: +at.x.toFixed(2), z: +at.z.toFixed(2), ry: +at.ry.toFixed(3), t: Date.now() };
+      const post: Post = { id, img, cap: filterMark(cap) ?? "", nick: myNick(), by: me, x: +at.x.toFixed(2), z: +at.z.toFixed(2), ry: +at.ry.toFixed(3), t: Date.now(), agreed: Date.now() };
       presence.publishWorld(`post/${id}`, post);
       posts.set(id, post);
       changed();

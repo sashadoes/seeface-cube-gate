@@ -494,6 +494,8 @@ export default function Watch() {
                 <img src={p.img} alt="" />
                 <div>
                   <b>@{p.nick}</b> {p.cap}
+                  <br />
+                  <small>{p.agreed ? "✓ artist agreement accepted" : "no artist agreement (posted before it existed): ask the artist"}</small>
                 </div>
                 <div className="row">
                   <button disabled={!modKey} onClick={() => void approve(p)}>

@@ -11,6 +11,7 @@ const MarksMode = lazy(() => import("./marks/MarksMode"));
 const Labyrinth = lazy(() => import("./labyrinth/Labyrinth"));
 const Privacy = lazy(() => import("./components/privacy/Privacy"));
 const Watch = lazy(() => import("./watch/Watch"));
+const Artists = lazy(() => import("./components/artists/Artists"));
 
 const path = location.pathname.replace(/\/+$/, "");
 
@@ -28,6 +29,13 @@ export default function App() {
     return (
       <Suspense fallback={null}>
         <Watch />
+      </Suspense>
+    );
+  }
+  if (path === "/artists") {
+    return (
+      <Suspense fallback={null}>
+        <Artists />
       </Suspense>
     );
   }

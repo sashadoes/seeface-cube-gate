@@ -1698,3 +1698,86 @@
   color: #fff6e2;
   line-height: 1.35;
 }
+
+// ---------------------------------------------------------------- the open market
+.lab-market-btn {
+  all: unset;
+  position: fixed;
+  left: 50%;
+  bottom: calc(150px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 1002;
+  cursor: pointer;
+  padding: 9px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 210, 122, 0.5);
+  background: rgba(8, 8, 8, 0.85);
+  font: italic 16px "Times New Roman", serif;
+  color: #ffd27a;
+}
+
+.lab-market-purse {
+  margin-left: auto;
+  align-self: center;
+  padding-right: 6px;
+  font: italic 14px "Times New Roman", serif;
+  color: #ff8a7a;
+}
+
+.lab-market-list {
+  display: grid;
+  gap: 8px;
+
+  > div {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .g {
+    font-size: 24px;
+    text-align: center;
+    color: #fff6e2;
+  }
+
+  .n {
+    font: italic 15px "Times New Roman", serif;
+    color: #e9e4da;
+
+    i {
+      display: block;
+      font-size: 12px;
+      color: #8f897c;
+    }
+  }
+
+  button {
+    all: unset;
+    cursor: pointer;
+    padding: 5px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 210, 122, 0.45);
+    font: italic 14px "Times New Roman", serif;
+    color: #ffd27a;
+  }
+}
+
+.lab-agree {
+  display: grid !important;
+  grid-template-columns: auto 1fr !important;
+  align-items: start !important;
+  gap: 10px !important;
+  font: italic 13px "Times New Roman", serif !important;
+  color: #a9a293 !important;
+
+  input {
+    margin-top: 3px;
+  }
+
+  a {
+    color: #ffe6b8;
+  }
+}

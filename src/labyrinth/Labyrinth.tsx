@@ -46,7 +46,8 @@ import { createPosts, shrink, wallAhead, type Post } from "./posts";
 import { createShip } from "./ship";
 import { createNotes, type Note } from "./notes";
 import { createFx } from "./fx";
-import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions } from "./places";
+import { createMarket, type Listing } from "./market";
+import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions, setStalls } from "./places";
 import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
 import { EFFECTS, RECORDS, type FxId, type RecordId } from "./music";
@@ -416,6 +417,14 @@ function Game({ nick }: { nick: string }) {
   addLineRef.current = addLine;
   const lastHeard = useRef("");
   const aiRef = useRef<AiResidents | null>(null);
+  // the open market
+  const marketRef = useRef<ReturnType<typeof createMarket> | null>(null);
+  const [atMarket, setAtMarket] = useState(false);
+  const [marketTab, setMarketTab] = useState<null | "buy" | "sell" | "mine">(null);
+  const [sellItem, setSellItem] = useState<ItemId | "">("");
+  const [sellPrice, setSellPrice] = useState("10");
+  const [, bumpMarket] = useState(0);
+
   // notes between players
   const notesRef = useRef<ReturnType<typeof createNotes> | null>(null);
   const [notesOpen, setNotesOpen] = useState<null | "write" | "inbox">(null);
@@ -439,6 +448,7 @@ function Game({ nick }: { nick: string }) {
   const yawRef = useRef(0);
   const [composer, setComposer] = useState<null | { mode: "photo" | "draw"; img: string | null }>(null);
   const [caption, setCaption] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [viewing, setViewing] = useState<Post | null>(null);
   const [, bumpPosts] = useState(0);
   const pad = useRef<HTMLCanvasElement>(null);
@@ -449,6 +459,7 @@ function Game({ nick }: { nick: string }) {
     let img = composer.img;
     if (composer.mode === "draw" && pad.current) img = await shrink(pad.current);
     if (!img) return say("choose a photo first", true);
+    if (!agreed) return say("tick the box: it's your own work", true);
     const at = wallAhead(posRef.current.x, posRef.current.z, yawRef.current);
     if (!at) return say("face a wall to hang it", true);
     posts.publish(img, caption, at);
@@ -1056,6 +1067,28 @@ function Game({ nick }: { nick: string }) {
     const ship = createShip();
     world.scene.add(ship.group);
     let beamT = 0;
+    const market = createMarket(presence, () => nick, {
+      sold: (l: Listing) => {
+        blood = readBlood();
+        sound.chime();
+        sayRef.current(`you sold ${ITEMS[l.item].name} for ${l.price} ◈ to @${l.soldTo}`, true);
+        track("market-sold");
+      },
+      changed: () => {
+        blood = readBlood();
+        // one stall per seller, up to 12 stalls
+        const bySeller = new Map<string, { seller: string; items: { glyph: string; name: string; price: number }[] }>();
+        for (const l of market.open()) {
+          const row = bySeller.get(l.sellerId) ?? { seller: l.seller, items: [] };
+          row.items.push({ glyph: ITEMS[l.item].glyph, name: ITEMS[l.item].name, price: l.price });
+          bySeller.set(l.sellerId, row);
+        }
+        setStalls([...bySeller.values()].slice(0, 12));
+        bumpMarket((n) => n + 1);
+      },
+    });
+    marketRef.current = market;
+    let wasAtMarket = false;
     const notes = createNotes(presence, () => nick);
     notesRef.current = notes;
     let unreadSeen = 0;
@@ -1759,7 +1792,12 @@ function Game({ nick }: { nick: string }) {
       // places: the open, the theater, the mall, the museum, the supermarket, the dark room
       const pl = places.update(pos.x, pos.z, t, dt);
       inPlace = pl.inside;
-      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && !inShip(pos.x, pos.z));
+      const nowAtMarket = pl.inside?.kind === "bazaar";
+      if (nowAtMarket !== wasAtMarket) {
+        wasAtMarket = nowAtMarket;
+        setAtMarket(nowAtMarket);
+      }
+      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && pl.inside?.kind !== "bazaar" && !inShip(pos.x, pos.z));
       // the ritual: stand in the gold circle by the altar for 5 seconds
       if (pl.atAltar && alive) {
         if (ritualT === 0) sayRef.current("stand still… the ritual has begun");
@@ -1826,7 +1864,7 @@ function Game({ nick }: { nick: string }) {
       if (heldObj) heldObj.rotation.y += dt * 1.5;
 
       // light & effects; under open skies (and in the ship) the eye sees much further
-      const sky = inPlace?.kind === "open" || inPlace?.kind === "ritual" || inShip(pos.x, pos.z);
+      const sky = inPlace?.kind === "open" || inPlace?.kind === "ritual" || inPlace?.kind === "bazaar" || inShip(pos.x, pos.z);
       const far = sky ? 500 : 80;
       if (camera.far !== far) {
         camera.far = far;
@@ -2125,6 +2163,109 @@ function Game({ nick }: { nick: string }) {
           </button>
         </div>
       )}
+      {atMarket && !marketTab && (
+        <button className="lab-market-btn" onPointerDown={stop} onPointerUp={stop} onClick={() => setMarketTab("buy")}>
+          open the market
+        </button>
+      )}
+      {marketTab && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-tabs">
+              {(["buy", "sell", "mine"] as const).map((t) => (
+                <button key={t} className={marketTab === t ? "on" : ""} onClick={() => setMarketTab(t)}>
+                  {t === "mine" ? "my stall" : t}
+                </button>
+              ))}
+              <span className="lab-market-purse">◈ {hud.blood}</span>
+            </div>
+            <div className="lab-settings-body">
+              {marketTab === "buy" && (
+                <div className="lab-market-list">
+                  {(marketRef.current?.open() ?? []).filter((l) => !marketRef.current?.isMine(l)).map((l) => (
+                    <div key={l.id}>
+                      <span className="g">{ITEMS[l.item].glyph}</span>
+                      <span className="n">
+                        {ITEMS[l.item].name}
+                        <i>@{l.seller}</i>
+                      </span>
+                      <button
+                        onClick={() => {
+                          const r = marketRef.current?.buy(l);
+                          if (r === "ok") {
+                            say(`bought: ${ITEMS[l.item].name}`, true);
+                            track("market-bought");
+                          } else if (r === "poor") say("not enough ◈", true);
+                          else if (r === "gone") say("someone was faster", true);
+                        }}
+                      >
+                        {l.price} ◈
+                      </button>
+                    </div>
+                  ))}
+                  {!(marketRef.current?.open() ?? []).filter((l) => !marketRef.current?.isMine(l)).length && <p className="note">nothing for sale yet. be the first: sell something.</p>}
+                </div>
+              )}
+              {marketTab === "sell" && (
+                <>
+                  <label className="toggle">
+                    <span>object</span>
+                    <select value={sellItem} onChange={(e) => setSellItem(e.target.value as ItemId)}>
+                      <option value="">choose from your bag…</option>
+                      {(Object.keys(bag) as ItemId[])
+                        .filter((id) => bag[id])
+                        .map((id) => (
+                          <option key={id} value={id}>
+                            {ITEMS[id].name} ×{bag[id]}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="toggle">
+                    <span>price in ◈</span>
+                    <input className="lab-post-cap" type="number" min={1} max={999} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
+                  </label>
+                  <p className="note">it goes on a stall with your name. you're paid when someone buys it, even if you're away.</p>
+                </>
+              )}
+              {marketTab === "mine" && (
+                <div className="lab-market-list">
+                  {(marketRef.current?.mine() ?? []).map((l) => (
+                    <div key={l.id}>
+                      <span className="g">{ITEMS[l.item].glyph}</span>
+                      <span className="n">
+                        {ITEMS[l.item].name}
+                        <i>{l.soldTo ? `sold to @${l.soldTo}` : `${l.price} ◈`}</i>
+                      </span>
+                      {!l.soldTo && <button onClick={() => marketRef.current?.cancel(l)}>take back</button>}
+                    </div>
+                  ))}
+                  {!(marketRef.current?.mine() ?? []).length && <p className="note">your stall is empty.</p>}
+                </div>
+              )}
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setMarketTab(null)}>close</button>
+              {marketTab === "sell" && (
+                <button
+                  className="done"
+                  onClick={() => {
+                    if (!sellItem) return say("choose an object first", true);
+                    if (marketRef.current?.sell(sellItem, Number(sellPrice))) {
+                      say(`on your stall: ${ITEMS[sellItem].name} · ${Math.round(Number(sellPrice))} ◈`, true);
+                      setSellItem("");
+                      setMarketTab("mine");
+                      track("market-listed");
+                    } else say("price 1–999 ◈", true);
+                  }}
+                >
+                  put it on my stall
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {notesOpen && (
         <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
           <div className="lab-settings-box">
@@ -2255,6 +2396,15 @@ function Game({ nick }: { nick: string }) {
                 </div>
               )}
               <input className="lab-post-cap" value={caption} maxLength={80} onChange={(e) => setCaption(e.target.value)} placeholder="caption (optional)" />
+              <label className="lab-agree">
+                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+                <span>
+                  I made this myself. I let seeface1 show it in the labyrinth and in seeface1's promotion, for free, with my name. It stays mine and I can have it removed any time.{" "}
+                  <a href="/artists" target="_blank" rel="noreferrer">
+                    the artist agreement
+                  </a>
+                </span>
+              </label>
               <p className="note">it hangs on the wall in front of you. everyone sees it once it's approved.</p>
             </div>
             <div className="lab-settings-foot">

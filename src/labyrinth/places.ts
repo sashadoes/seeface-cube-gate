@@ -22,7 +22,17 @@ export const PLACE_NAMES: Record<PlaceKind, string> = {
   market: "the supermarket",
   dark: "the dark room",
   ritual: "the hall of champions",
+  bazaar: "the open market",
 };
+
+// ------------------------------------------------------------------ the market's stalls (fed by market.ts)
+export type StallRow = { seller: string; items: { glyph: string; name: string; price: number }[] };
+let stalls: StallRow[] = [];
+const stallRedraws = new Set<() => void>();
+export function setStalls(rows: StallRow[]) {
+  stalls = rows;
+  stallRedraws.forEach((f) => f());
+}
 
 // ------------------------------------------------------------------ champions (fed by champions.ts)
 export type ChampionRow = { id: string; nick: string; best: number };
@@ -608,6 +618,146 @@ function buildRitual(g: THREE.Group, b: Built) {
   b.spots.push({ x: 10, y: 2.4, z: 10, color: 0xffa040, intensity: 10 }, { x: 10, y: 3.2, z: 3, color: 0xffe08a, intensity: 6 });
 }
 
+function buildBazaar(g: THREE.Group, b: Built) {
+  // warm stone ground, an open night sky, strings of lights, 12 stalls in a ring
+  floorOf(g, 0x2a2420, 0.7, 0.1, 8);
+  const wood = mat(0x4a2e1c, 0, 0, 0.6);
+  const AWN = ["#c9584a", "#d8a83c", "#3c8c7a", "#6a5ac8", "#c85aa0", "#3c78c8"];
+  const signs: { tex: THREE.CanvasTexture; ctx: CanvasRenderingContext2D }[] = [];
+  const goods: THREE.Sprite[][] = [];
+  for (let k = 0; k < 12; k++) {
+    const a = ((15 + 30 * k) * Math.PI) / 180;
+    const x = 10 + 7 * Math.cos(a), z = 10 + 7 * Math.sin(a);
+    const stall = new THREE.Group();
+    stall.position.set(x, 0, z);
+    stall.lookAt(10, 0, 10); // facing the middle
+    box(stall, 1.6, 0.9, 0.7, 0, 0.45, 0, wood);
+    box(stall, 0.08, 2.4, 0.08, -0.75, 1.2, -0.3, wood);
+    box(stall, 0.08, 2.4, 0.08, 0.75, 1.2, -0.3, wood);
+    // a striped awning
+    const stripes = document.createElement("canvas");
+    stripes.width = 64;
+    stripes.height = 8;
+    const sg = stripes.getContext("2d")!;
+    for (let x2 = 0; x2 < 64; x2 += 16) {
+      sg.fillStyle = AWN[k % AWN.length];
+      sg.fillRect(x2, 0, 8, 8);
+      sg.fillStyle = "#f2ead8";
+      sg.fillRect(x2 + 8, 0, 8, 8);
+    }
+    const awnTex = new THREE.CanvasTexture(stripes);
+    awnTex.colorSpace = THREE.SRGBColorSpace;
+    const awn = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.1), new THREE.MeshStandardMaterial({ map: awnTex, side: THREE.DoubleSide, roughness: 0.8 }));
+    awn.position.set(0, 2.35, 0.1);
+    awn.rotation.x = -Math.PI / 2 + 0.35;
+    stall.add(awn);
+    // the sign: seller + what's for sale (redrawn when listings change)
+    const c = document.createElement("canvas");
+    c.width = 320;
+    c.height = 200;
+    const ctx = c.getContext("2d")!;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.94), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, transparent: true }));
+    sign.position.set(0, 1.55, -0.28);
+    stall.add(sign);
+    signs.push({ tex, ctx });
+    // up to 3 goods floating on the counter
+    const row = [0, 1, 2].map((n) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
+      sp.scale.setScalar(0.32);
+      sp.position.set(-0.5 + n * 0.5, 1.08, 0.05);
+      sp.visible = false;
+      stall.add(sp);
+      return sp;
+    });
+    goods.push(row);
+    g.add(stall);
+  }
+  // the sign pillar in the middle
+  box(g, 1.2, 3.2, 1.2, 10, 1.6, 10, mat(0x111114, 0, 0, 0.4));
+  for (const ry of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const m = sign(new THREE.Group(), "OPEN MARKET", 1.15, 0.45, 0, 0, 0, 0, { color: "#ffd27a", glow: true, bg: "#0b0b0b", font: "bold 54px 'Arial Narrow', Arial, sans-serif" });
+    m.position.set(10 + Math.sin(ry) * 0.61, 2.7, 10 + Math.cos(ry) * 0.61);
+    m.rotation.y = ry;
+    g.add(m);
+  }
+  // strings of warm bulbs from the pillar to the stalls
+  const bulbs: THREE.Sprite[] = [];
+  for (let k = 0; k < 12; k++) {
+    const a = ((15 + 30 * k) * Math.PI) / 180;
+    for (let n = 1; n < 9; n++) {
+      const f = n / 9;
+      const bl = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: n % 3 ? 0xffd27a : 0xff9aa8, blending: THREE.AdditiveBlending, depthWrite: false }));
+      bl.position.set(10 + Math.cos(a) * 7 * f, 3.3 - Math.sin(f * Math.PI) * 0.7, 10 + Math.sin(a) * 7 * f);
+      bl.scale.setScalar(0.22);
+      bulbs.push(bl);
+      g.add(bl);
+    }
+  }
+  const glyphTex = new Map<string, THREE.CanvasTexture>();
+  const glyph = (ch: string) => {
+    let t = glyphTex.get(ch);
+    if (!t) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const x = c.getContext("2d")!;
+      x.font = "44px serif";
+      x.textAlign = "center";
+      x.textBaseline = "middle";
+      x.fillStyle = "#fff6e2";
+      x.shadowColor = "#ffd27a";
+      x.shadowBlur = 12;
+      x.fillText(ch, 32, 34);
+      t = new THREE.CanvasTexture(c);
+      glyphTex.set(ch, t);
+    }
+    return t;
+  };
+  const draw = () => {
+    signs.forEach((s2, k) => {
+      const row = stalls[k];
+      const x = s2.ctx;
+      x.clearRect(0, 0, 320, 200);
+      x.fillStyle = "rgba(10,8,6,0.85)";
+      x.fillRect(0, 0, 320, 200);
+      x.strokeStyle = "rgba(255,230,184,0.4)";
+      x.lineWidth = 3;
+      x.strokeRect(3, 3, 314, 194);
+      x.textAlign = "center";
+      x.fillStyle = row ? "#fff6e2" : "#6f6a5c";
+      x.font = "italic 30px 'Times New Roman', serif";
+      x.fillText(row ? `@${row.seller}` : "free stall", 160, 44, 300);
+      x.font = "italic 22px 'Times New Roman', serif";
+      (row?.items ?? []).slice(0, 3).forEach((it, n) => {
+        x.fillStyle = "#cfc6b8";
+        x.fillText(`${it.name} · ${it.price} ◈`, 160, 92 + n * 34, 300);
+      });
+      if (!row) {
+        x.fillStyle = "#8f897c";
+        x.fillText("sell here: open the market", 160, 110);
+      }
+      s2.tex.needsUpdate = true;
+      goods[k].forEach((sp, n) => {
+        const it = row?.items[n];
+        sp.visible = !!it;
+        if (it) {
+          (sp.material as THREE.SpriteMaterial).map = glyph(it.glyph);
+          (sp.material as THREE.SpriteMaterial).needsUpdate = true;
+        }
+      });
+    });
+  };
+  draw();
+  stallRedraws.add(draw);
+  b.cleanup = () => stallRedraws.delete(draw);
+  b.anim.push((t) => {
+    bulbs.forEach((bl, k) => ((bl.material as THREE.SpriteMaterial).opacity = 0.65 + Math.sin(t * 2 + k * 0.7) * 0.35));
+    goods.forEach((row) => row.forEach((sp, n) => (sp.position.y = 1.08 + Math.sin(t * 2 + n) * 0.04)));
+  });
+  b.spots.push({ x: 10, y: 3.2, z: 10, color: 0xffd8a0, intensity: 16 }, { x: 4, y: 3, z: 16, color: 0xffb0c0, intensity: 6 }, { x: 16, y: 3, z: 4, color: 0xffe0a0, intensity: 6 });
+}
+
 const BUILD: Record<PlaceKind, (g: THREE.Group, b: Built, r: () => number) => void> = {
   open: buildOpen,
   theater: buildTheater,
@@ -616,6 +766,7 @@ const BUILD: Record<PlaceKind, (g: THREE.Group, b: Built, r: () => number) => vo
   market: buildMarket,
   dark: (g, b) => buildDark(g, b),
   ritual: (g, b) => buildRitual(g, b),
+  bazaar: (g, b) => buildBazaar(g, b),
 };
 
 // ------------------------------------------------------------------ the layer

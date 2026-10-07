@@ -161,6 +161,17 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
   });
 
   // a glowing see/face sign: about a third of the posters are this instead
+  // "opening soon" ads (owner: "seeface · the new experience · opening soon")
+  const adCache = new Map<number, THREE.CanvasTexture>();
+  const adPoster = (k: number) => {
+    let t = adCache.get(k);
+    if (!t) adCache.set(k, (t = makeAdPoster(k, logoImg)));
+    return t;
+  };
+  const logoImg = new Image();
+  logoImg.onload = () => adCache.forEach((t, k) => drawAd(t.image as HTMLCanvasElement, k, logoImg) && (t.needsUpdate = true));
+  logoImg.src = "/imgs/seeface-logo-transparent.png";
+
   // generated posters that belong to the place they hang in: each zone has its own look
   const posterCache = new Map<string, THREE.CanvasTexture>();
   const zonePoster = (kind: ZoneKind, k: number) => {
@@ -244,7 +255,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
         p.position.set(s[1], 1.75, s[2]);
         p.rotation.set(0, s[3], 0);
         const pick = rnd(i, j, 62);
-        (p.material as THREE.MeshBasicMaterial).map = pick < 0.28 ? logoSign : pick < 0.62 ? zonePoster(zoneAt((i + 0.5) * CELL, (j + 0.5) * CELL).kind, Math.floor(rnd(i, j, 63) * 4)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
+        (p.material as THREE.MeshBasicMaterial).map = pick < 0.22 ? logoSign : pick < 0.42 ? adPoster(Math.floor(rnd(i, j, 64) * AD_LINES.length)) : pick < 0.68 ? zonePoster(zoneAt((i + 0.5) * CELL, (j + 0.5) * CELL).kind, Math.floor(rnd(i, j, 63) * 4)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
         (p.material as THREE.MeshBasicMaterial).needsUpdate = true;
         p.visible = true;
       }
@@ -401,6 +412,53 @@ function makeZonePoster(kind: ZoneKind, k: number) {
   g.strokeStyle = "rgba(0,0,0,0.35)";
   g.lineWidth = 6;
   g.strokeRect(3, 3, W - 6, H - 6);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// ------------------------------------------------------------------ "opening soon" ads
+const AD_LINES: [string, string, string][] = [
+  ["seeface", "the new experience", "opening soon"],
+  ["seeface", "the new experience", "opening soon"],
+  ["the exhibition hall", "every artist on the walls", "opening soon"],
+  ["shows", "your name on the marquee", "opening soon"],
+  ["the open market", "south-east of the entrance", "now open"],
+];
+
+function drawAd(c: HTMLCanvasElement, k: number, logo: HTMLImageElement) {
+  const g = c.getContext("2d")!;
+  const W = c.width, H = c.height;
+  const [title, sub, when] = AD_LINES[k];
+  g.fillStyle = "#070707";
+  g.fillRect(0, 0, W, H);
+  const v = g.createRadialGradient(W / 2, H * 0.4, 10, W / 2, H * 0.4, W * 0.7);
+  v.addColorStop(0, "rgba(255,246,226,0.10)");
+  v.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = v;
+  g.fillRect(0, 0, W, H);
+  if (logo.complete && logo.naturalWidth) g.drawImage(logo, W / 2 - 55, 26, 110, 110);
+  g.textAlign = "center";
+  g.fillStyle = "#fff6e2";
+  g.font = "italic 46px 'Times New Roman', serif";
+  g.fillText(title, W / 2, 190, W - 40);
+  g.fillStyle = "#a9a293";
+  g.font = "italic 24px 'Times New Roman', serif";
+  g.fillText(sub, W / 2, 228, W - 40);
+  g.fillStyle = when === "now open" ? "#ffd27a" : "#cfc6b8";
+  g.font = "italic 30px 'Times New Roman', serif";
+  g.fillText(`· ${when} ·`, W / 2, 300);
+  g.strokeStyle = "rgba(255,255,255,0.12)";
+  g.lineWidth = 2;
+  g.strokeRect(12, 12, W - 24, H - 24);
+  return true;
+}
+
+function makeAdPoster(k: number, logo: HTMLImageElement) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 360;
+  drawAd(c, k, logo);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
