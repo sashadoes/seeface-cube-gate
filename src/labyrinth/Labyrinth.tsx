@@ -670,6 +670,43 @@ function Game({ nick }: { nick: string }) {
       blood = addBlood(n);
       track(`blood-${why}`);
     };
+    // the dark king (the Hollow) no longer kills. Meeting him pays: a welcome
+    // gift the first time ever, a little once a day after that. Then he's gone.
+    const KING_EVER = "seeface-king-welcomed";
+    const kingDayKey = () => `seeface-king-${Math.floor(Date.now() / 86_400_000)}`;
+    const flag = (k: string) => {
+      try {
+        return localStorage.getItem(k) === "1";
+      } catch {
+        return true; // no storage: no free money loop
+      }
+    };
+    const setFlag = (k: string) => {
+      try {
+        localStorage.setItem(k, "1");
+      } catch {
+        // ignore
+      }
+    };
+    let kingSummonT = 0;
+    const kingMeets = () => {
+      const first = !flag(KING_EVER);
+      const today = !flag(kingDayKey());
+      if (first || today) {
+        setFlag(KING_EVER);
+        setFlag(kingDayKey());
+        const gift = first ? 100 : 10;
+        blood = addBlood(gift);
+        sound.choir(true);
+        setTimeout(() => sound.choir(false), 3500);
+        track(first ? "king-welcome" : "king-gift");
+        if (first) {
+          sayRef.current(`the dark king bows to you · +${gift} ◈`, true);
+          setTimeout(() => sayRef.current("keep it. soon, something in this world will be yours.", true), 5200);
+        } else sayRef.current(`the dark king remembers you · +${gift} ◈`, true);
+      }
+      hunter.reset(pos.x + 40, pos.z + 40);
+    };
     let signalFlare = 0;
     let metSomeone = false;
     signalRef.current = () => {
@@ -1293,17 +1330,16 @@ function Game({ nick }: { nick: string }) {
         const danger = Math.max(0, 1 - h.dist / (CELL * 5)) * (h.hunting ? 1 : 0.45);
         radio.set(Math.max(danger, edgeFog * 0.7));
         lastDanger = danger;
-        if (h.dist < 1.0 && !room) {
-          if (lethal()) die();
-          else {
-            // few people inside: it passes THROUGH you instead. cold, dark, a little poorer
-            light = 4;
-            if (blood > 0) blood = addBlood(-Math.min(2, blood));
-            hunter.reset(pos.x + 40, pos.z + 40);
-            sayRef.current("it passed through you. you're still here.");
-            caughtSfx.play();
-            track("hollow-passed");
-          }
+        if (h.dist < 1.0 && !room && kingSummonT <= 0) kingMeets();
+        // never met him: he comes to greet you once, standing right in front of you
+        if (kingSummonT <= 0 && !flag(KING_EVER) && alive && !room && runTime > GRACE + 4) {
+          hunter.object.position.set(pos.x - Math.sin(input.yaw) * 2.5, 0, pos.z - Math.cos(input.yaw) * 2.5);
+          kingSummonT = 2.2;
+        }
+        if (kingSummonT > 0) {
+          hunter.object.position.set(pos.x - Math.sin(input.yaw) * 2.5, 0, pos.z - Math.cos(input.yaw) * 2.5);
+          kingSummonT -= dt;
+          if (kingSummonT <= 0) kingMeets();
         }
       }
 
