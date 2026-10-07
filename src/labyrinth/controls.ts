@@ -1,6 +1,9 @@
 // Walking controls.
 //   computer: W/A/S/D or arrows to move, drag (or ←/→) to look, Shift to run, Space to jump, E to spin a cube, F to strike
-//   phone:    left half = joystick (appears where you touch), right half = drag to look, tap = spin a cube
+//   phone:    one thumb is enough: the left-half stick (appears where you touch) walks AND
+//             steers (sideways = turn, like a car); push it all the way to run. The right
+//             half still drags to look. Walking straight-ish along a corridor gently lines
+//             the view up with it. Tap = spin a cube.
 
 export type Input = {
   move: { x: number; z: number }; // x: strafe right, z: forward (-1..1)
@@ -74,7 +77,7 @@ export function createInput(target: HTMLElement): Input {
       input.pitch -= (e.clientY - p.ly) * k;
       clampPitch();
     } else {
-      const R = 60;
+      const R = 52;
       let dx = e.clientX - p.sx, dy = e.clientY - p.sy;
       const d = Math.hypot(dx, dy);
       if (d > R) (dx *= R / d), (dy *= R / d);
@@ -96,7 +99,11 @@ export function createInput(target: HTMLElement): Input {
   target.addEventListener("pointercancel", end);
 
   // ---------------------------------------------------------------- per frame
+  let last = performance.now();
   const tick = () => {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
     let x = 0, z = 0;
     if (keys.has("KeyW") || keys.has("ArrowUp")) z += 1;
     if (keys.has("KeyS") || keys.has("ArrowDown")) z -= 1;
@@ -105,13 +112,25 @@ export function createInput(target: HTMLElement): Input {
     if (keys.has("ArrowLeft")) input.yaw += 0.035;
     if (keys.has("ArrowRight")) input.yaw -= 0.035;
     if (input.joystick.active) {
-      x += input.joystick.x;
-      z -= input.joystick.y;
+      // dead zone, then a smooth curve so small moves are gentle
+      const jx = Math.abs(input.joystick.x) < 0.12 ? 0 : input.joystick.x;
+      const jy = Math.abs(input.joystick.y) < 0.12 ? 0 : input.joystick.y;
+      // sideways steers (turns you), with only a little side-step
+      input.yaw -= jx * Math.abs(jx) * 2.6 * dt;
+      x += jx * 0.25;
+      z -= jy;
+      // corridor assist: when walking roughly along a corridor, line up with it
+      if (-jy > 0.3 && Math.abs(jx) < 0.25) {
+        const q = Math.PI / 2;
+        const target = Math.round(input.yaw / q) * q;
+        const off = input.yaw - target;
+        if (Math.abs(off) < 0.42) input.yaw -= off * Math.min(1, dt * 2.2);
+      }
     }
     const len = Math.hypot(x, z);
     input.move.x = len > 1 ? x / len : x;
     input.move.z = len > 1 ? z / len : z;
-    input.run = input.runHeld || keys.has("ShiftLeft") || keys.has("ShiftRight") || Math.hypot(input.joystick.x, input.joystick.y) > 0.92;
+    input.run = input.runHeld || keys.has("ShiftLeft") || keys.has("ShiftRight") || Math.hypot(input.joystick.x, input.joystick.y) > 0.88;
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);

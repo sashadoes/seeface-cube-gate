@@ -4,6 +4,7 @@
 // the black-and-white art glows differently from room to room. Corridors get the odd
 // glowing photo poster. All emissive: only a fixed pool of 4 real lights.
 import * as THREE from "three";
+import { POSTER_LINES, decoPoster } from "./afterlife";
 import { CELL, WALL_H, placeAt, placeOf, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
 
 type Art = { tex: THREE.Texture; color: THREE.Color; ready: boolean };
@@ -160,6 +161,14 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
   });
 
   // a glowing see/face sign: about a third of the posters are this instead
+  // After Life™ art-deco posters (made once each)
+  const DECO_HUES = ["#2fb8a8", "#c9a24a", "#d8607a", "#6a8cff", "#e8b84a", "#3cc8e8"];
+  const decoCache = new Map<number, THREE.CanvasTexture>();
+  const deco = (k: number) => {
+    let t = decoCache.get(k);
+    if (!t) decoCache.set(k, (t = decoPoster(POSTER_LINES[k], DECO_HUES[k % DECO_HUES.length])));
+    return t;
+  };
   const logoSign = (() => {
     const c = document.createElement("canvas");
     c.width = 512;
@@ -233,7 +242,8 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
         const p = posters[k++];
         p.position.set(s[1], 1.75, s[2]);
         p.rotation.set(0, s[3], 0);
-        (p.material as THREE.MeshBasicMaterial).map = rnd(i, j, 62) < 0.35 ? logoSign : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
+        const pick = rnd(i, j, 62);
+        (p.material as THREE.MeshBasicMaterial).map = pick < 0.28 ? logoSign : pick < 0.62 ? deco(Math.floor(rnd(i, j, 63) * POSTER_LINES.length)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
         (p.material as THREE.MeshBasicMaterial).needsUpdate = true;
         p.visible = true;
       }

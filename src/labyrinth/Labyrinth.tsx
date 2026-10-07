@@ -41,6 +41,8 @@ import type { WeatherKind } from "../marks/weather";
 import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES } from "./places";
+import { createAfterlife, ORDER_COST } from "./afterlife";
+import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
 
@@ -303,6 +305,44 @@ function Game({ nick }: { nick: string }) {
     clearTimeout(noticeTimer.current);
     noticeTimer.current = window.setTimeout(() => setNotice(""), 5000);
   };
+  // leaving? offer to save their soul (an account), once per visit, after 2 minutes
+  const [soulAsk, setSoulAsk] = useState(false);
+  const [soulPw, setSoulPw] = useState("");
+  const [soulMsg, setSoulMsg] = useState("");
+  useEffect(() => {
+    if (!accountsReady || currentAccount()) return;
+    const started = Date.now();
+    let asked = false;
+    const out = (e: MouseEvent) => {
+      if (asked || e.clientY > 0 || e.relatedTarget || Date.now() - started < 120_000) return;
+      asked = true;
+      setSoulAsk(true);
+      track("soul-ask");
+    };
+    document.addEventListener("mouseout", out);
+    return () => document.removeEventListener("mouseout", out);
+  }, []);
+  const saveSoul = async () => {
+    if (soulPw.length < 6) return setSoulMsg("at least 6 characters");
+    const r = await register(nick, soulPw);
+    setSoulPw("");
+    if ("error" in r) return setSoulMsg(r.error === "taken" ? "that name is taken. log in from the entry screen." : "couldn't save right now. try again.");
+    setSoulMsg("");
+    setSoulAsk(false);
+    track("soul-saved");
+  };
+
+  // the inventory: afterlife objects you've collected
+  const [bag, setBag] = useState(() => readBag());
+  const [bagOpen, setBagOpen] = useState(false);
+  useEffect(() => {
+    const off = onBag(() => setBag(readBag()));
+    return () => {
+      off();
+    };
+  }, []);
+  const bagCount = Object.values(bag).reduce((a, b) => a + (b ?? 0), 0);
+
   // daily quests (same three for everyone today)
   const questsRef = useRef<ReturnType<typeof createQuests> | null>(null);
   if (!questsRef.current) questsRef.current = createQuests();
@@ -360,6 +400,26 @@ function Game({ nick }: { nick: string }) {
   const signalRef = useRef<() => void>(() => {});
   const [invited, setInvited] = useState(false);
   const [stick, setStick] = useState({ active: false, ox: 0, oy: 0, x: 0, y: 0 });
+  // one-time hint for phones (gone after the first walk)
+  const [moveHint, setMoveHint] = useState(() => {
+    try {
+      return !localStorage.getItem("seeface-move-hint");
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    if (!stick.active || !moveHint) return;
+    const t = setTimeout(() => {
+      setMoveHint(false);
+      try {
+        localStorage.setItem("seeface-move-hint", "1");
+      } catch {
+        // ignore
+      }
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [stick.active, moveHint]);
   const snapRef = useRef<() => void>(() => {});
   const dropRef = useRef<() => void>(() => {});
   const [snapState, setSnapState] = useState<"" | "busy" | "done">("");
@@ -385,6 +445,24 @@ function Game({ nick }: { nick: string }) {
     const queen = createPopQueen();
     const flood = createFlood();
     const places = createPlaces();
+    const afterlife = createAfterlife();
+    let tvHinted = false;
+    const order = () => {
+      if (blood < ORDER_COST) {
+        sayRef.current("insufficient ◈. the after life isn't free (yet)");
+        return;
+      }
+      blood = addBlood(-ORDER_COST);
+      const it = addItem(randomItem(1));
+      sound.chime();
+      sayRef.current(`order confirmed: ${it.name} · your After Life™ ships never`);
+      track("afterlife-order");
+    };
+    const found = (luck = 0) => {
+      const it = addItem(randomItem(luck));
+      setTimeout(() => sayRef.current(`you found: ${it.name}`), 1200);
+      track(`item-${it.id}`);
+    };
     let inPlace: ReturnType<typeof places.update>["inside"] = null;
     const placesSeen = new Set<string>();
     const floodFx = document.createElement("div");
@@ -400,7 +478,7 @@ function Game({ nick }: { nick: string }) {
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
     const rifts = createRifts();
-    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, flood.group, places.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
+    world.scene.add(hunter.object, residents.group, keepers.group, queen.group, flood.group, places.group, afterlife.group, others.group, artLayer.group, wishes.group, props.group, rifts.group, camera);
     const input: Input = createInput(renderer.domElement);
     inputRef.current = input;
     const radio = createRadio();
@@ -458,6 +536,7 @@ function Game({ nick }: { nick: string }) {
       track(`weather-${w.kind}`);
     };
     applySky(false);
+    setTimeout(() => sayRef.current("welcome to the after life™"), 1500);
 
     // ---------------------------------------------------------------- run state
     const start = spawn();
@@ -788,6 +867,10 @@ function Game({ nick }: { nick: string }) {
       if (d < 20) sayRef.current(`${from.nick} ${kind === "stare" ? "stares at you" : kind === "spin" ? "spins" : kind === "melt" ? "melts into the floor" : kind === "float" ? "floats" : "screams"}`);
     });
 
+    // deaths: rare when the labyrinth is quiet. With 6+ people inside it's deadly;
+    // with fewer, only now and then (1 in 5), otherwise it hurts but you live.
+    const lethal = () => presence.online() >= 6 || Math.random() < 0.2;
+
     // quests: pay out and announce
     const quest = (k: QuestKind, n = 1) => {
       const r = questsRef.current!.bump(k, n);
@@ -882,6 +965,7 @@ function Game({ nick }: { nick: string }) {
           if (pk.kind === "relic") {
             hold(pk.colour!, pk.shape!);
             quest("relic");
+            found();
             sound.chime();
             track("relic-picked");
           } else if (pk.kind === "money") {
@@ -932,7 +1016,18 @@ function Game({ nick }: { nick: string }) {
         const danger = Math.max(0, 1 - h.dist / (CELL * 5)) * (h.hunting ? 1 : 0.45);
         radio.set(Math.max(danger, edgeFog * 0.7));
         lastDanger = danger;
-        if (h.dist < 1.0 && !room) die();
+        if (h.dist < 1.0 && !room) {
+          if (lethal()) die();
+          else {
+            // few people inside: it passes THROUGH you instead. cold, dark, a little poorer
+            light = 4;
+            if (blood > 0) blood = addBlood(-Math.min(2, blood));
+            hunter.reset(pos.x + 40, pos.z + 40);
+            sayRef.current("it passed through you. you're still here.");
+            caughtSfx.play();
+            track("hollow-passed");
+          }
+        }
       }
 
       const speedNow = Math.hypot(vel.x, vel.z);
@@ -1141,6 +1236,7 @@ function Game({ nick }: { nick: string }) {
         if (Math.hypot(treasure.x - pos.x, treasure.z - pos.z) < 2.5) {
           treasure = null;
           sayRef.current("you found the treasure");
+          found(2);
           quest("treasure");
         } else if (t > treasure.until) treasure = null;
       }
@@ -1196,7 +1292,15 @@ function Game({ nick }: { nick: string }) {
       // ---------------- cubes: spin a new room's cube → shard + full light
       const c = world.nearestCube(pos.x, pos.z);
       const isNear = !!c && c.dist < CELL * 0.75 && alive;
-      if (input.consumeTap() && c && isNear) {
+      const al = afterlife.update(pos.x, pos.z, t);
+      if (al.nearTV && !tvHinted) {
+        tvHinted = true;
+        sayRef.current(`tap the screen to order AFTER LIFE™ · ${ORDER_COST} ◈`);
+      }
+      if (!al.nearTV) tvHinted = false;
+      const tapNow = input.consumeTap();
+      if (tapNow && al.nearTV && alive) order();
+      else if (tapNow && c && isNear) {
         world.spinCube(c.mesh);
         spinSfx.play();
         light = 100;
@@ -1311,9 +1415,24 @@ function Game({ nick }: { nick: string }) {
         }
       }
       if (fl.killed && alive) {
-        killedBy = "the flood";
-        track("flood-killed");
-        die();
+        if (lethal()) {
+          killedBy = "the flood";
+          track("flood-killed");
+          die();
+        } else {
+          // the water throws you instead of taking you
+          const c = roomCentreOf(Math.floor(pos.x / CELL / 7), Math.floor(pos.z / CELL / 7));
+          pos.x = c.x;
+          pos.z = c.z;
+          vel.x = vel.z = 0;
+          light = Math.min(light, 30);
+          el.classList.remove("rift");
+          void el.offsetWidth;
+          el.classList.add("rift");
+          el.style.setProperty("--rift", "#9fdcff");
+          sayRef.current("the water took you and spat you out");
+          track("flood-thrown");
+        }
       }
 
       // places: the open, the theater, the mall, the museum, the supermarket, the dark room
@@ -1453,6 +1572,7 @@ function Game({ nick }: { nick: string }) {
       {/* danger: the edges close in, colder and redder */}
       <div className="lab-vignette" style={{ opacity: hud.danger }} />
 
+      {isPhone && moveHint && <div className="lab-hint">left thumb: walk + turn · push far to run · right side: look around</div>}
       {stick.active && (
         <div className="lab-stick" style={{ left: stick.ox, top: stick.oy }}>
           <span style={{ transform: `translate(${stick.x * 34}px, ${stick.y * 34}px)` }} />
@@ -1528,6 +1648,9 @@ function Game({ nick }: { nick: string }) {
             ⤓
           </button>
         )}
+        <button className="lab-btn bag" onClick={() => setBagOpen(true)} aria-label="inventory">
+          ◫{bagCount > 0 && <small>{bagCount}</small>}
+        </button>
         <button className="lab-btn map" onClick={() => setMapOpen(true)} aria-label="map">
           ◎
         </button>
@@ -1590,6 +1713,54 @@ function Game({ nick }: { nick: string }) {
           </button>
         </div>
       )}
+      {soulAsk && (
+        <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-bag-title">leaving the after life?</div>
+          <div className="lab-soul">
+            <p>
+              save your soul. register <b>{nick}</b> and your ◈ {readProgress().blood}, your best run and your {bagCount} objects will wait for you, on any device.
+            </p>
+            <input type="password" value={soulPw} onChange={(e) => setSoulPw(e.target.value)} placeholder="choose a password (6+)" autoComplete="new-password" maxLength={200} />
+            <div className="row">
+              <button onClick={() => void saveSoul()}>save my soul</button>
+              <button onClick={() => setSoulAsk(false)}>not now</button>
+            </div>
+            {soulMsg && <div className="err">{soulMsg}</div>}
+          </div>
+        </div>
+      )}
+
+      {bagOpen && (
+        <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-bag-title">your afterlife objects · {bagCount}</div>
+          {bagCount === 0 && <div className="lab-bag-empty">nothing yet. pick up relics, find treasures, or order from an After Life™ TV.</div>}
+          <div className="lab-bag-grid">
+            {(Object.keys(ITEMS) as ItemId[])
+              .filter((id) => bag[id])
+              .map((id) => (
+                <div key={id} className={"lab-bag-item r" + ITEMS[id].rarity}>
+                  <div className="pic">
+                    <img
+                      src={`/items/${id}.png`}
+                      alt=""
+                      onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+                      onLoad={(e) => ((e.currentTarget.nextSibling as HTMLElement).style.display = "none")}
+                    />
+                    <span>{ITEMS[id].glyph}</span>
+                  </div>
+                  <b>
+                    {ITEMS[id].name} {bag[id]! > 1 && <i>×{bag[id]}</i>}
+                  </b>
+                  <em>{ITEMS[id].blurb}</em>
+                </div>
+              ))}
+          </div>
+          <button className="lab-wish-close" onClick={() => setBagOpen(false)} aria-label="close">
+            ×
+          </button>
+        </div>
+      )}
+
       {/* today's quests */}
       <div className={"lab-quests" + (questsOpen ? " open" : "")} onPointerDown={stop} onPointerUp={stop}>
         <button className="lab-quests-chip" onClick={() => setQuestsOpen((o) => !o)}>
