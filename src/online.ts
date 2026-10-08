@@ -14,6 +14,24 @@ const seen = new Map<string, number>();
 const listeners = new Set<(n: number) => void>();
 const me = Math.random().toString(36).slice(2, 10);
 let started = false;
+let client: { connected: boolean; publish: (t: string, p: string, o: { retain: boolean; qos: 0 | 1 }) => unknown } | null = null;
+const waiting = new Map<string, string>(); // retained messages to send once connected
+
+function flush() {
+  if (!client?.connected) return;
+  for (const [t, p] of waiting) client.publish(t, p, { retain: true, qos: 1 });
+  waiting.clear();
+}
+
+/** Send a retained message on the same connection (the play journal, insight.ts).
+ *  Queued until connected; returns false when it could only be queued. */
+export function shareRetained(topic: string, payload: string) {
+  waiting.set(topic, payload);
+  if (!started) void start();
+  const sent = Boolean(client?.connected);
+  flush();
+  return sent;
+}
 
 function count() {
   const now = Date.now();
@@ -38,10 +56,12 @@ async function start() {
       reconnectPeriod: 5000,
       will: { topic: `${TOPIC}/${me}`, payload: "bye", qos: 0, retain: false },
     });
+    client = c;
     const pulse = () => c.connected && !document.hidden && c.publish(`${TOPIC}/${me}`, "1");
     c.on("connect", () => {
       c.subscribe(`${TOPIC}/+`);
       pulse();
+      flush();
     });
     c.on("message", (topic, payload) => {
       const id = topic.split("/").pop();

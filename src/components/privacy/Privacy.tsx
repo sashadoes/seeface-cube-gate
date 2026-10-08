@@ -21,7 +21,9 @@ export default function Privacy() {
         <h2 style={{ fontWeight: "normal" }}>keepers</h2>
         <p>Masked figures marked ✶ (the cartographer, the collector, the jester, the mourner) are characters of the game, not people.</p>
         <h2 style={{ fontWeight: "normal" }}>analytics</h2>
-        <p>We count visits with GoatCounter: no cookies, no personal data. Your browser keeps a small note of the day you first came, the day you last came and which link brought you, so we can count how many people come back. It stays on your device and holds nothing about who you are.</p>
+        <p>We count visits with GoatCounter: no cookies, no personal data. Your browser keeps a small note of the day you first came, the day you last came and which link brought you, so we can count how many people come back. It holds nothing about who you are.</p>
+        <h2 style={{ fontWeight: "normal" }}>play journal</h2>
+        <p>To make the game better, your browser also keeps a short play journal: how long you played on the cube and in the labyrinth, which days you came, the ◈ you earned and spent (and on what), and which things you did in the game (for example "opened the chat" or "used a teleport card"). It is shared with the people who run seeface1, tied only to a random number for your device and the nickname you already show to other players. It never contains your email, your IP address or your messages. If your browser sends Do Not Track or Global Privacy Control, no journal is shared.</p>
         <h2 style={{ fontWeight: "normal" }}>deleting your data</h2>
         <p>Email us and we'll delete everything we hold about you. Every news email has an unsubscribe link.</p>
         <p style={{ marginTop: 40 }}>

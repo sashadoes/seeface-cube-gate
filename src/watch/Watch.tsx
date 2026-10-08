@@ -11,6 +11,9 @@ import { LEVELS, LEVEL_OFFSET, levelAtX, zoneAt } from "../labyrinth/zones";
 import { DEMONS, demonOf } from "../labyrinth/demons";
 import { cleanNick } from "../labyrinth/nick";
 import { MOD_PUBLIC_KEY, approvalText, type Post } from "../labyrinth/posts";
+import { JOURNAL_TOPIC, type Journal } from "../insight";
+import { validJournal } from "./insights";
+import Players from "./Players";
 import "./Watch.scss";
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
@@ -20,6 +23,8 @@ const ALIVE_MS = 25_000;
 const STALE_MS = 6_000;
 const TRAIL_KEEP_MS = 15 * 60_000; // trails of people who left stay for 15 min
 const HISTORY_KEY = "seeface-eye-history";
+const JOURNALS_KEY = "seeface-eye-journals"; // a local copy, in case the relay forgets retained messages
+const JOURNALS_KEEP = 600;
 
 type Pt = { x: number; z: number; t: number };
 type Player = { id: string; nick: string; x: number; z: number; yaw: number; light: number; held: number; first: number; last: number; trail: Pt[]; walked: number };
@@ -43,6 +48,16 @@ function loadHistory(): Sample[] {
   } catch {
     return [];
   }
+}
+
+function loadJournals() {
+  const m = new Map<string, Journal>();
+  try {
+    for (const j of JSON.parse(localStorage.getItem(JOURNALS_KEY) ?? "[]") as unknown[]) if (validJournal(j)) m.set(j.id, j);
+  } catch {
+    // ignore
+  }
+  return m;
 }
 
 export default function Watch() {
@@ -70,6 +85,10 @@ export default function Watch() {
   });
   const history = useRef<Sample[]>(loadHistory());
   const peak = useRef({ site: 0, lab: 0 });
+  const journals = useRef(loadJournals());
+  const journalsChanged = useRef(true);
+  const [journalList, setJournalList] = useState<Journal[]>(() => [...journals.current.values()]);
+  const [tab, setTab] = useState<"live" | "players">(() => (location.hash === "#players" ? "players" : "live"));
 
   // never let search engines index this page
   useEffect(() => {
@@ -90,7 +109,7 @@ export default function Watch() {
       client.on("connect", () => {
         setRelay(RELAYS[r].replace("wss://", "").split(":")[0]);
         // listen only: no publish anywhere in this file
-        client!.subscribe([`${SITE}/+`, `${LAB}/pos/#`, `${LAB}/bye/+`, `${LAB}/world/#`]);
+        client!.subscribe([`${SITE}/+`, `${LAB}/pos/#`, `${LAB}/bye/+`, `${LAB}/world/#`, `${JOURNAL_TOPIC}/+`]);
       });
       client.on("error", () => {
         client?.end(true);
@@ -101,6 +120,23 @@ export default function Watch() {
       client.on("message", (topic, payload) => {
         const parts = topic.split("/");
         const now = Date.now();
+        if (topic.startsWith(JOURNAL_TOPIC + "/")) {
+          // a player's play journal (src/insight.ts), retained: arrives for everyone ever seen
+          if (payload.length > 16_000) return;
+          try {
+            const j = JSON.parse(payload.toString());
+            if (!validJournal(j) || j.id !== parts[parts.length - 1]) return;
+            j.nick = cleanNick(j.nick) ?? null;
+            const had = journals.current.get(j.id);
+            if (!had || had.last <= j.last) {
+              journals.current.set(j.id, j);
+              journalsChanged.current = true;
+            }
+          } catch {
+            // ignore garbage
+          }
+          return;
+        }
         if (topic.startsWith(SITE)) {
           const id = parts.pop()!;
           if (id.length > 16) return;
@@ -192,6 +228,16 @@ export default function Watch() {
         }
       }
       drawSpark();
+      if (journalsChanged.current) {
+        journalsChanged.current = false;
+        const all = [...journals.current.values()].sort((a, b) => b.last - a.last).slice(0, JOURNALS_KEEP);
+        setJournalList(all);
+        try {
+          localStorage.setItem(JOURNALS_KEY, JSON.stringify(all));
+        } catch {
+          // full: the relay still has them
+        }
+      }
       setTick((n) => n + 1);
     }, 1000);
     return () => clearInterval(iv);
@@ -433,6 +479,20 @@ export default function Watch() {
     <main className="eye">
       <header className="eye-top">
         <div className="eye-title">◉ the eye</div>
+        <nav className="eye-tabs">
+          {(["live", "players"] as const).map((k) => (
+            <button
+              key={k}
+              className={tab === k ? "on" : ""}
+              onClick={() => {
+                setTab(k);
+                window.history.replaceState(null, "", k === "players" ? "#players" : location.pathname);
+              }}
+            >
+              {k === "live" ? "live map" : `players & insights · ${journalList.length}`}
+            </button>
+          ))}
+        </nav>
         <div className="eye-stat">
           <b>{siteNow}</b>
           <span>on the site now</span>
@@ -457,7 +517,12 @@ export default function Watch() {
         </a>
       </header>
 
-      <section className="eye-body">
+      {tab === "players" && (
+        <div className="eye-players">
+          <Players journals={journalList} />
+        </div>
+      )}
+      <section className="eye-body" style={tab === "players" ? { display: "none" } : undefined}>
         <div className="eye-map">
           <canvas ref={canvas} />
           <div className="eye-tools">

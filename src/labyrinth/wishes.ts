@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { CELL, WALL_H } from "./maze";
 import type { Presence } from "./net";
 import { noteBlood } from "../progress";
+import { noteBloodChange } from "../insight";
 
 export const WISH_COST = 10;
 const BLOOD_KEY = "seeface-blood";
@@ -33,8 +34,11 @@ export function readBlood() {
   }
 }
 
-export function addBlood(n: number) {
-  const v = Math.max(0, readBlood() + n);
+/** change ◈ by n; `why` says what for (the play journal on /the-eye) */
+export function addBlood(n: number, why = "other") {
+  const was = readBlood();
+  const v = Math.max(0, was + n);
+  noteBloodChange(v - was, why);
   try {
     localStorage.setItem(BLOOD_KEY, String(v));
   } catch {

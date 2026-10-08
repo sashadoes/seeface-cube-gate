@@ -675,7 +675,7 @@ function Game({ nick }: { nick: string }) {
         sayRef.current(tr("insufficient ◈. the after life isn't free (yet)"), true);
         return;
       }
-      blood = addBlood(-ORDER_COST);
+      blood = addBlood(-ORDER_COST, "afterlife-order");
       const it = addItem(randomItem(1));
       sound.chime();
       sayRef.current(tr("order confirmed: {name} · your After Life™ ships never", { name: tr(it.name) }), true);
@@ -785,7 +785,7 @@ function Game({ nick }: { nick: string }) {
     const earn = (n: number, why: string) => {
       // secret levels pay double
       if (n > 0 && levelAtX(pos.x) > 0) n *= 2;
-      blood = addBlood(n);
+      blood = addBlood(n, why);
       track(`blood-${why}`);
     };
     // the dark king (the Hollow) no longer kills. Meeting him pays: a welcome
@@ -814,7 +814,7 @@ function Game({ nick }: { nick: string }) {
         setFlag(KING_EVER);
         setFlag(kingDayKey());
         const gift = first ? 100 : 10;
-        blood = addBlood(gift);
+        blood = addBlood(gift, "dark-king");
         sound.choir(true);
         setTimeout(() => sound.choir(false), 3500);
         track(first ? "king-welcome" : "king-gift");
@@ -1044,7 +1044,7 @@ function Game({ nick }: { nick: string }) {
       const safe = roomOf(Math.floor(pos.x / CELL), Math.floor(pos.z / CELL)) !== null;
       if (!alive || !close || safe || runTime < PROTECTED) return;
       const lost = Math.min(20, Math.floor(blood / 2));
-      blood = addBlood(-lost);
+      blood = addBlood(-lost, "knifed");
       presence.confirmKill(from.id, lost);
       killedBy = from.nick;
       track("knifed");
@@ -1069,7 +1069,7 @@ function Game({ nick }: { nick: string }) {
         const z = free(pos.x + fx * 1.4, pos.z + fz * 1.4) ? pos.z + fz * 1.4 : pos.z;
         wishes.make(k, x, z);
       }
-      blood = addBlood(-WISH_COST);
+      blood = addBlood(-WISH_COST, "wish");
       questRef.current("wish");
       shiftSfx.play();
       track(`wish-${k}`);
@@ -1292,7 +1292,7 @@ function Game({ nick }: { nick: string }) {
         addLineRef.current({ id: `npc-${id}`, nick: `◇ ${npcName(id)}`, text: brokeLine(id) });
         return;
       }
-      blood = addBlood(-it.price);
+      blood = addBlood(-it.price, `npc-${item}`);
       if (item === "energy_can") (light = 100), (stamina = 100);
       else if (item === "mystery_capsule") addItem(randomItem(1));
       else if (item === "rusty_key") addCards(1);
@@ -2042,7 +2042,7 @@ function Game({ nick }: { nick: string }) {
           // it hurts, it doesn't take you: you stay where you are (only intentional teleports)
           vel.x = vel.z = 0;
           light = Math.min(light, 25);
-          if (hz.hit.by === "the plague" && blood > 0) blood = addBlood(-Math.min(3, blood));
+          if (hz.hit.by === "the plague" && blood > 0) blood = addBlood(-Math.min(3, blood), "plague");
           hunter.reset(pos.x, pos.z);
           if (settings().flashes) {
             el.classList.remove("rift");
@@ -2140,7 +2140,7 @@ function Game({ nick }: { nick: string }) {
       sound.showtune(eventKind === "popqueen" ? Math.max(0.15, Math.min(1, 1 - (qd - 2) / 18)) : 0);
       if (qa?.steal) {
         const lost = Math.min(blood, qa.steal);
-        if (lost > 0) blood = addBlood(-lost);
+        if (lost > 0) blood = addBlood(-lost, "popqueen");
         sayRef.current(lost > 0 ? `the Pop Queen took ${lost} ◈` : "the Pop Queen bowed. you had nothing to give");
         caughtSfx.play();
         track("popqueen-caught");

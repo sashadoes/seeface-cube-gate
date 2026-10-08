@@ -57,7 +57,7 @@ export function createMarket(presence: Presence, myNick: () => string, events: {
       if (l.soldToId) {
         paid.add(l.id);
         savePaid();
-        addBlood(l.price);
+        addBlood(l.price, "market-sale");
         events.sold(l);
       } else if (Date.now() - l.t > LIFE) {
         paid.add(l.id);
@@ -119,7 +119,7 @@ export function createMarket(presence: Presence, myNick: () => string, events: {
       const cur = listings.get(l.id);
       if (!cur || cur.soldToId) return "gone";
       if (readBlood() < l.price) return "poor";
-      addBlood(-l.price);
+      addBlood(-l.price, "market-buy");
       addItem(l.item);
       Object.assign(cur, { soldTo: myNick(), soldToId: me });
       presence.publishWorld(`sold/${l.id}`, { buyer: myNick(), buyerId: me, t: Date.now() });
