@@ -2299,3 +2299,24 @@
     cursor: default;
   }
 }
+
+// the Ministry of Elsewhere's how-to card (tap a broadcast booth)
+.lab-howto {
+  gap: 10px;
+  h3 {
+    margin: 0;
+    font: italic 400 22px/1.2 Georgia, "Times New Roman", serif;
+    color: #f2ead8;
+  }
+  ol {
+    margin: 0;
+    padding-left: 22px;
+    display: grid;
+    gap: 6px;
+    font: italic 17px/1.3 Georgia, "Times New Roman", serif;
+    color: #e6dccb;
+  }
+  li::marker {
+    color: #b9a0ff;
+  }
+}

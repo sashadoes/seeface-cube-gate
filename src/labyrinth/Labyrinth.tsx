@@ -24,7 +24,7 @@ import { noteLevel, noteRun, readProgress } from "../progress";
 import { accountsReady, currentAccount, deleteAccount, finishInstagram, instagramReady, instagramUrl, login, logout, refresh, register, type Account, type AuthError } from "../account";
 import LabMap, { type MapSource, type Trail } from "./LabMap";
 import Radar from "./Radar";
-import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, TELEPORT_COST } from "./cards";
+import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, MAX_CARDS, TELEPORT_COST } from "./cards";
 import { onOnline } from "../online";
 import { createProps } from "./props";
 import { createDream } from "./dream";
@@ -60,6 +60,8 @@ import { createGramophones } from "./gramophone";
 import { EFFECTS, RECORDS, type FxId, type RecordId } from "./music";
 import { STATIONS, createStations } from "./stations";
 import { createAfterlife, ORDER_COST } from "./afterlife";
+import { createMinistry } from "./ministry";
+import { createHelpers } from "./helpers";
 import { createBignord } from "./bignord";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
@@ -408,6 +410,8 @@ function Game({ nick }: { nick: string }) {
 
   // gramophone record picker + radio dial
   const [gramoKey, setGramoKey] = useState<string | null>(null);
+  // the Ministry of Elsewhere's how-to card (tap a broadcast booth)
+  const [howTo, setHowTo] = useState(false);
   const [pickRec, setPickRec] = useState<RecordId>("waltz");
   const [pickFx, setPickFx] = useState<FxId>("warm");
   const gramoPlayRef = useRef<(key: string, rec: RecordId, fx: FxId) => void>(() => {});
@@ -706,6 +710,10 @@ function Game({ nick }: { nick: string }) {
     inputRef.current = input;
     const radio = createRadio();
     const sound = createSound();
+    // the teleport campaign: Ministry broadcast booths + the little helpers
+    const ministry = createMinistry(sound);
+    const helpers = createHelpers(sound);
+    world.scene.add(ministry.group, helpers.group);
     // the daily dream drop: new objects + a dream event every day (public/dream/today.json)
     const dreamFx = document.createElement("div");
     dreamFx.className = "lab-dream-fx";
@@ -1456,6 +1464,7 @@ function Game({ nick }: { nick: string }) {
       },
       trails: () => trails,
     } satisfies Partial<MapSource>);
+    if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { helpers, ministry });
     if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails, dream });
     // twists: unpredictable things that happen to you
     const twists = createTwists();
@@ -1857,6 +1866,35 @@ function Game({ nick }: { nick: string }) {
         sayRef.current(tr("tap the screen to order AFTER LIFE™ · {ORDER_COST} ◈", { ORDER_COST }));
       }
       if (!al.nearTV) tvHinted = false;
+      const mi = ministry.update(pos.x, pos.z);
+      // little helpers: a gift, or a digital demon in disguise
+      const hev = helpers.update(dt, pos.x, pos.z, input.yaw, alive && !inShip(pos.x, pos.z));
+      if (hev?.kind === "gift") {
+        if (!helpers.takeGift()) sayRef.current(tr("{name} the little helper says hi", { name: hev.name }), true);
+        else if (readCards() < MAX_CARDS && helpers.takeCardGift()) {
+          addCards(1);
+          sound.chime();
+          sayRef.current(tr("{name} the little helper gave you a teleport card ⟡", { name: hev.name }), true);
+        } else if (light < 60) {
+          light = 100;
+          sayRef.current(tr("{name} the little helper filled your lantern", { name: hev.name }), true);
+        } else {
+          earn(1, "helper");
+          sayRef.current(tr("{name} the little helper gave you 1 ◈", { name: hev.name }), true);
+        }
+        track("helper-gift");
+      } else if (hev?.kind === "demon") {
+        const tell = hev.first ? " · " + tr("tip: digital demons cast no shadow") : "";
+        if (!helpers.takeTheft()) sayRef.current(tr("it was a digital demon. it found nothing to take") + tell, true);
+        else if (readCards() > 0) {
+          addCards(-1);
+          sayRef.current(tr("it was a digital demon. it took a teleport card ⟡") + tell, true);
+        } else if (blood >= 2) {
+          blood = addBlood(-2, "digital-demon");
+          sayRef.current(tr("it was a digital demon. it took 2 ◈") + tell, true);
+        } else sayRef.current(tr("it was a digital demon. it found nothing to take") + tell, true);
+        track("helper-demon");
+      }
       bignord.update(pos.x, pos.z);
       gramos.update(pos.x, pos.z, t);
       ai.update(dt, pos.x, pos.z);
@@ -1898,7 +1936,10 @@ function Game({ nick }: { nick: string }) {
       setListener();
       const gn = gramos.near(pos.x, pos.z);
       const tapNow = input.consumeTap();
-      if (tapNow && al.nearTV && alive) order();
+      if (tapNow && mi.nearBooth && alive) {
+        setHowTo(true);
+        track("ministry-howto");
+      } else if (tapNow && al.nearTV && alive) order();
       else if (tapNow && gn && alive) setGramoKey(gn.key);
       else if (tapNow && posts.lookingAt(pos.x, pos.z, input.yaw)) setViewing(posts.lookingAt(pos.x, pos.z, input.yaw));
       else if (tapNow && notes.lookingAt(pos.x, pos.z, input.yaw)) setNoteView(notes.lookingAt(pos.x, pos.z, input.yaw));
@@ -2194,6 +2235,7 @@ function Game({ nick }: { nick: string }) {
     raf = requestAnimationFrame(frame);
 
     return () => {
+      ministry.dispose();
       stopVibe();
       stations.stop();
       offSettings();
@@ -2827,6 +2869,36 @@ function Game({ nick }: { nick: string }) {
       <button className="lab-radio" onPointerDown={stop} onPointerUp={stop} onClick={() => radioNextRef.current()} aria-label={tr("radio: next station")}>
         ◍ {station.freq} <i>{tr(station.name)}</i>
       </button>
+      {howTo && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-body lab-howto">
+              <h3>{tr("how to teleport")}</h3>
+              <ol>
+                <li>{tr("open the map")}</li>
+                <li>{tr("tap where you want to be")}</li>
+                <li>{tr("you are there")}</li>
+              </ol>
+              <p className="note">{tr("one trip costs one card ⟡. cards recharge while you play: one every 3 minutes, up to 3.")}</p>
+              <p className="note">{tr("incognito costs two cards, and nobody is told where you went.")}</p>
+              <p className="note">{tr("why? to meet someone. or to escape.")}</p>
+              <p className="note">{tr("you have {n} ⟡", { n: cards })}</p>
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setHowTo(false)}>{tr("close")}</button>
+              <button
+                className="done"
+                onClick={() => {
+                  setHowTo(false);
+                  setMapOpen(true);
+                }}
+              >
+                {tr("open the map")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {gramoKey && (
         <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
           <div className="lab-settings-box">
