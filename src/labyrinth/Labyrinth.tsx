@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Howl } from "howler";
 import { createWorld } from "./world";
@@ -35,6 +35,8 @@ import { currentEvent, EVENTS, type EventKind } from "./events";
 import { makeSnapshot, shareSnapshot } from "./snapshot";
 import { relicMesh } from "./props";
 
+const questProgress = (q: QuestView) => (q.kind === "walk" ? `${q.count}/${q.goal} m` : q.kind === "dark" ? `${q.count}/${q.goal} s` : `${q.count}/${q.goal}`);
+
 const PLACE_NAMES: Record<string, string> = {
   monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
   photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep",
@@ -59,7 +61,7 @@ import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
 import { EFFECTS, RECORDS, type FxId, type RecordId } from "./music";
 import { STATIONS, createStations } from "./stations";
-import { createAfterlife, ORDER_COST } from "./afterlife";
+import { createAfterlife, nearestTV, ORDER_COST } from "./afterlife";
 import { createMinistry } from "./ministry";
 import { createHelpers } from "./helpers";
 import { createBignord } from "./bignord";
@@ -367,6 +369,12 @@ function Game({ nick }: { nick: string }) {
     };
   }, []);
   const [wishOpen, setWishOpen] = useState(false);
+  // "what can I do with ◈?": tap the ◈ chip. It glows after the dark king's gift
+  // until it's been opened once (2026-10-08: players kept 94% of their ◈, and the
+  // 7 who spent any stayed ~4 min instead of ~2).
+  const [spendOpen, setSpendOpen] = useState(false);
+  const [spendHint, setSpendHint] = useState(false);
+  const spendGoRef = useRef<(where: "tv" | "market") => void>(() => {});
   const [mapOpen, setMapOpen] = useState(false);
   // meeting someone from the map: who you're walking to, and messages like "x is coming to find you"
   const meetRef = useRef<string | null>(null);
@@ -457,6 +465,13 @@ function Game({ nick }: { nick: string }) {
   const [questList, setQuestList] = useState<QuestView[]>(() => questsRef.current!.list());
   const [questsOpen, setQuestsOpen] = useState(false);
   const questRef = useRef<(k: QuestKind, n?: number) => void>(() => {});
+  // the radio chip sits just left of the quest chip, whose width follows the quest shown
+  const questChipRef = useRef<HTMLButtonElement | null>(null);
+  const [radioRight, setRadioRight] = useState(160);
+  useLayoutEffect(() => {
+    const w = questChipRef.current?.offsetWidth;
+    if (w) setRadioRight(14 + w + 8);
+  });
 
   // chat with strangers + weird interactions
   type Line = { key: number; id: string; nick: string; text: string; mine?: boolean };
@@ -684,6 +699,7 @@ function Game({ nick }: { nick: string }) {
       sound.chime();
       sayRef.current(tr("order confirmed: {name} · your After Life™ ships never", { name: tr(it.name) }), true);
       track("afterlife-order");
+      questRef.current("order");
     };
     const found = (luck = 0) => {
       const it = addItem(randomItem(luck));
@@ -797,9 +813,22 @@ function Game({ nick }: { nick: string }) {
       track(`blood-${why}`);
     };
     // the dark king (the Hollow) no longer kills. Meeting him pays: a welcome
-    // gift the first time ever, a little once a day after that. Then he's gone.
+    // gift the first time ever, then once a day he comes to you again, and the
+    // gift grows with every day in a row you come back (a reason to return:
+    // on 2026-10-08 nobody of 54 came back another day).
     const KING_EVER = "seeface-king-welcomed";
-    const kingDayKey = () => `seeface-king-${Math.floor(Date.now() / 86_400_000)}`;
+    const kingDay = () => Math.floor(Date.now() / 86_400_000);
+    const kingDayKey = () => `seeface-king-${kingDay()}`;
+    const KING_STREAK = "seeface-king-streak";
+    const kingStreak = (): { day: number; n: number } => {
+      try {
+        return JSON.parse(localStorage.getItem(KING_STREAK) ?? "null") ?? { day: 0, n: 0 };
+      } catch {
+        return { day: 0, n: 0 };
+      }
+    };
+    /** tomorrow's gift if they come back (day n in a row → 10 + 10·(n−1), at most 60) */
+    const kingGiftFor = (n: number) => Math.min(60, 10 + 10 * (n - 1));
     const flag = (k: string) => {
       try {
         return localStorage.getItem(k) === "1";
@@ -821,7 +850,14 @@ function Game({ nick }: { nick: string }) {
       if (first || today) {
         setFlag(KING_EVER);
         setFlag(kingDayKey());
-        const gift = first ? 100 : 10;
+        const st = kingStreak();
+        const n = st.day === kingDay() - 1 ? st.n + 1 : 1;
+        try {
+          localStorage.setItem(KING_STREAK, JSON.stringify({ day: kingDay(), n }));
+        } catch {
+          // ignore
+        }
+        const gift = first ? 100 : kingGiftFor(Math.max(2, n));
         blood = addBlood(gift, "dark-king");
         sound.choir(true);
         setTimeout(() => sound.choir(false), 3500);
@@ -829,7 +865,10 @@ function Game({ nick }: { nick: string }) {
         if (first) {
           sayRef.current(tr("the dark king bows to you · +{gift} ◈", { gift }), true);
           setTimeout(() => sayRef.current(tr("keep it. soon, something in this world will be yours."), true), 5200);
-        } else sayRef.current(tr("the dark king remembers you · +{gift} ◈", { gift }), true);
+          setTimeout(() => sayRef.current(tr("come back tomorrow. he'll bring more."), true), 10400);
+        } else sayRef.current(tr("the dark king remembers you · day {n} · +{gift} ◈", { n: Math.max(2, n), gift }), true);
+        // ◈ is worth something: the ◈ chip glows until they've looked at what it buys
+        setSpendHint(true);
       }
       hunter.reset(pos.x + 40, pos.z + 40);
     };
@@ -1357,8 +1396,15 @@ function Game({ nick }: { nick: string }) {
       }
       if (r.allDone) {
         earn(ALL_DONE_BONUS, "quests-all");
-        setTimeout(() => sayRef.current(tr("all of today's quests done · +{ALL_DONE_BONUS} ◈ · new ones tomorrow", { ALL_DONE_BONUS })), 3000);
-        track("quests-all-done");
+        if (r.firstNight) {
+          // the daily three open now: shown in the chip, said once (answers what they just did)
+          setTimeout(() => sayRef.current(tr("first night done · +{n} ◈ · today's quests are open", { n: ALL_DONE_BONUS }), true), 3000);
+          setQuestList(questsRef.current!.list());
+          track("quests-first-done");
+        } else {
+          setTimeout(() => sayRef.current(tr("all of today's quests done · +{ALL_DONE_BONUS} ◈ · new ones tomorrow", { ALL_DONE_BONUS })), 3000);
+          track("quests-all-done");
+        }
       }
     };
     questRef.current = quest;
@@ -1464,6 +1510,16 @@ function Game({ nick }: { nick: string }) {
       },
       trails: () => trails,
     } satisfies Partial<MapSource>);
+    spendGoRef.current = (where) => {
+      if (where === "tv") {
+        const tv = nearestTV(pos.x, pos.z);
+        if (tv) mapRef.current!.guide(tv.x, tv.z, "After Life™ TV");
+      } else {
+        const m = placeCentre(1, -1);
+        mapRef.current!.guide(m.x, m.z, "the open market");
+      }
+      track(`spend-go-${where}`);
+    };
     if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { helpers, ministry });
     if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails, dream });
     // twists: unpredictable things that happen to you
@@ -1596,8 +1652,11 @@ function Game({ nick }: { nick: string }) {
         radio.set(Math.max(danger, edgeFog * 0.7));
         lastDanger = danger;
         if (h.dist < 1.0 && !room && kingSummonT <= 0) kingMeets();
-        // never met him: he comes to greet you once, standing right in front of you
-        if (kingSummonT <= 0 && !flag(KING_EVER) && alive && !room && runTime > GRACE + 4) {
+        // he comes to greet you, standing right in front of you: the first time
+        // ever, and once each day you come back. Also in the starting room and
+        // soon after you arrive (on 2026-10-08, 7 of 34 newcomers stayed in the
+        // first room, never met him, earned nothing and left within ~2 min).
+        if (kingSummonT <= 0 && !flag(kingDayKey()) && alive && runTime > (flag(KING_EVER) ? GRACE : 6)) {
           hunter.object.position.set(pos.x - Math.sin(input.yaw) * 2.5, 0, pos.z - Math.cos(input.yaw) * 2.5);
           kingSummonT = 2.2;
         }
@@ -1883,6 +1942,7 @@ function Game({ nick }: { nick: string }) {
           sayRef.current(tr("{name} the little helper gave you 1 ◈", { name: hev.name }), true);
         }
         track("helper-gift");
+        quest("helper");
       } else if (hev?.kind === "demon") {
         const tell = hev.first ? " · " + tr("tip: digital demons cast no shadow") : "";
         if (!helpers.takeTheft()) sayRef.current(tr("it was a digital demon. it found nothing to take") + tell, true);
@@ -1894,6 +1954,7 @@ function Game({ nick }: { nick: string }) {
           sayRef.current(tr("it was a digital demon. it took 2 ◈") + tell, true);
         } else sayRef.current(tr("it was a digital demon. it found nothing to take") + tell, true);
         track("helper-demon");
+        quest("helper");
       }
       bignord.update(pos.x, pos.z);
       gramos.update(pos.x, pos.z, t);
@@ -2354,7 +2415,19 @@ function Game({ nick }: { nick: string }) {
           <text x="27" y="31">✶</text>
         </svg>
         <div className="lab-stamina" style={{ width: `${hud.stamina * 0.42}px` }} />
-        <div className="lab-blood">◈ {hud.blood}</div>
+        <button
+          className={"lab-blood" + (spendHint ? " hint" : "")}
+          onPointerDown={stop}
+          onPointerUp={stop}
+          onClick={() => {
+            setSpendOpen(true);
+            setSpendHint(false);
+            track("spend-open");
+          }}
+          aria-label={tr("spend your ◈")}
+        >
+          ◈ {hud.blood}
+        </button>
         <div className="lab-shards">
           <span className="glyph">◆</span>
           {hud.shards}
@@ -2478,6 +2551,50 @@ function Game({ nick }: { nick: string }) {
             ))}
           </div>
           <button className="lab-wish-close" onClick={() => setWishOpen(false)} aria-label={tr("close")}>
+            ×
+          </button>
+        </div>
+      )}
+
+      {spendOpen && (
+        <div className="lab-wish lab-spend" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-wish-title">◈ {hud.blood} · {tr("spend your ◈")}</div>
+          <div className="lab-spend-list">
+            <button
+              disabled={hud.blood < WISH_COST}
+              onClick={() => {
+                setSpendOpen(false);
+                setWishOpen(true);
+              }}
+            >
+              <span className="g">✦</span>
+              <span className="l">{tr("make a wish")}</span>
+              <em>{WISH_COST} ◈</em>
+            </button>
+            <button
+              onClick={() => {
+                setSpendOpen(false);
+                spendGoRef.current("tv");
+              }}
+            >
+              <span className="g">▣</span>
+              <span className="l">{tr("order from an After Life™ TV")}</span>
+              <em>{ORDER_COST} ◈ · ⌖</em>
+            </button>
+            {hud.level === 0 && (
+              <button
+                onClick={() => {
+                  setSpendOpen(false);
+                  spendGoRef.current("market");
+                }}
+              >
+                <span className="g">⚖</span>
+                <span className="l">{tr("the open market")}</span>
+                <em>⌖</em>
+              </button>
+            )}
+          </div>
+          <button className="lab-wish-close" onClick={() => setSpendOpen(false)} aria-label={tr("close")}>
             ×
           </button>
         </div>
@@ -2866,7 +2983,7 @@ function Game({ nick }: { nick: string }) {
         </div>
       )}
 
-      <button className="lab-radio" onPointerDown={stop} onPointerUp={stop} onClick={() => radioNextRef.current()} aria-label={tr("radio: next station")}>
+      <button className="lab-radio" style={{ right: radioRight }} onPointerDown={stop} onPointerUp={stop} onClick={() => radioNextRef.current()} aria-label={tr("radio: next station")}>
         ◍ {station.freq} <i>{tr(station.name)}</i>
       </button>
       {howTo && (
@@ -3068,20 +3185,32 @@ function Game({ nick }: { nick: string }) {
 
       {/* today's quests */}
       <div className={"lab-quests" + (questsOpen ? " open" : "")} onPointerDown={stop} onPointerUp={stop}>
-        <button className="lab-quests-chip" onClick={() => setQuestsOpen((o) => !o)}>
-          ◇ {tr("quests")} {questList.filter((q) => q.done).length}/{questList.length}
+        <button className="lab-quests-chip" ref={questChipRef} onClick={() => setQuestsOpen((o) => !o)}>
+          {(() => {
+            // closed, the chip shows the next quest and how far along it is, so there's always a goal
+            const next = questList.find((q) => !q.done);
+            if (questsOpen || !next) return <>◇ {tr("quests")} {questList.filter((q) => q.done).length}/{questList.length}</>;
+            return (
+              <>
+                <span className="q">◇ {tr(next.text)}</span> <em>{questProgress(next)}</em>
+              </>
+            );
+          })()}
         </button>
         {questsOpen && (
           <ul>
             {questList.map((q) => (
-              <li key={q.text} className={q.done ? tr("done") : ""}>
+              <li key={q.text} className={q.done ? "done" : ""}>
                 <span>{q.done ? "✓" : "◇"}</span> {tr(q.text)}
                 <em>
-                  {q.done ? "done" : q.kind === "walk" ? `${q.count}/${q.goal} m` : q.kind === "dark" ? `${q.count}/${q.goal} s` : `${q.count}/${q.goal}`} · +{q.reward} ◈
+                  {q.done ? tr("done") : questProgress(q)} · +{q.reward} ◈
                 </em>
               </li>
             ))}
-            <li className="hint">{tr("new quests every day · the same for everyone")}</li>
+            <li className="hint">
+              {questsRef.current!.firstNight() ? tr("your first night · then new quests every day") : tr("new quests every day · the same for everyone")}
+            </li>
+            <li className="hint">{tr("tomorrow: new quests and a gift from the dark king")}</li>
           </ul>
         )}
       </div>

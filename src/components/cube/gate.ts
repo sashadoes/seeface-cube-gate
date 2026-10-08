@@ -1,7 +1,7 @@
 // The gate: the cube page is the way into the 3D labyrinth.
 // Two ways in (never explained on screen):
 //   · play: every spin, tap, touch or key press counts, and after a random
-//     10–20 of them (new number every visit, ~15 on average) the gate opens.
+//     8–12 of them (new number every visit, ~10 on average) the gate opens.
 //   · or the code 1 9 9 4 opens it at once: spun in (digits count across the
 //     4-digit line resets, symbol faces are skipped) or typed on a keyboard.
 // The room glitches, the cube rushes at you, a light tears open with the logo
@@ -11,7 +11,9 @@ import { track } from "../../analytics";
 import "./Gate.scss";
 
 const GATE_CODE = "1994";
-const ACTIONS_TO_ENTER = 10 + Math.floor(Math.random() * 11); // 10–20
+// was 10–20: on 2026-10-08, 9 of 47 spinners left before it opened, 4 of them
+// after 12+ spins. 8–12 lets everyone who keeps playing in.
+const ACTIONS_TO_ENTER = 8 + Math.floor(Math.random() * 5); // 8–12
 let opening = false;
 let digits = "";
 let typed = "";

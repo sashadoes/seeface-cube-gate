@@ -1,7 +1,11 @@
 // Daily quests: three a day, the same three for everyone (picked from the UTC
 // date), so people can talk about them. Doing one pays ◈; doing all three
 // pays a bonus. Progress for today is kept in this browser.
-export type QuestKind = "walk" | "shards" | "level" | "meet" | "say" | "emote" | "snap" | "relic" | "trade" | "dark" | "treasure" | "wish" | "jump" | "flood" | "place" | "darkroom";
+// A newcomer first gets the "first night": three easy quests that show what
+// there is to do (a helper, spending ◈ at a TV, a place). Once those are done,
+// the daily three open. (Play data 2026-10-08: only 4 of 34 who entered the
+// labyrinth ever finished a quest, and those 4 stayed ~6 min instead of ~2.6.)
+export type QuestKind = "walk" | "shards" | "level" | "meet" | "say" | "emote" | "snap" | "relic" | "trade" | "dark" | "treasure" | "wish" | "jump" | "flood" | "place" | "darkroom" | "helper" | "order";
 
 type QuestDef = { kind: QuestKind; goal: number; text: string; reward: number };
 
@@ -25,8 +29,15 @@ const POOL: QuestDef[] = [
   { kind: "darkroom", goal: 1, text: "find the secret dark room", reward: 20 },
 ];
 
+const FIRST: QuestDef[] = [
+  { kind: "helper", goal: 1, text: "touch a little helper", reward: 3 },
+  { kind: "order", goal: 1, text: "order from an After Life™ TV", reward: 6 },
+  { kind: "place", goal: 1, text: "find a place (museum, theater, mall…)", reward: 5 },
+];
+
 export const ALL_DONE_BONUS = 10;
 const KEY = "seeface-quests";
+const FIRST_KEY = "seeface-quests-first";
 
 export type QuestView = { kind: QuestKind; text: string; count: number; goal: number; done: boolean; reward: number };
 
@@ -51,19 +62,28 @@ function pick(day: number) {
 
 type Saved = { day: number; counts: number[]; done: boolean[]; bonus: boolean };
 
+const fresh = (day: number): Saved => ({ day, counts: [0, 0, 0], done: [false, false, false], bonus: false });
+
 export function createQuests() {
   let day = today();
   let idx = pick(day);
-  let s: Saved = { day, counts: [0, 0, 0], done: [false, false, false], bonus: false };
+  let s = fresh(day);
+  // the first night: kept until all three are done (no day rollover)
+  let first: Saved | null = fresh(0);
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "null") as Saved | null;
     if (raw && raw.day === day) s = raw;
+    const f = JSON.parse(localStorage.getItem(FIRST_KEY) ?? "null") as Saved | null;
+    // anyone who already did daily quests before this existed skips the first night
+    if (f) first = f.bonus ? null : f;
+    else if (raw) first = null;
   } catch {
     // ignore
   }
   const save = () => {
     try {
       localStorage.setItem(KEY, JSON.stringify(s));
+      localStorage.setItem(FIRST_KEY, JSON.stringify(first ?? { ...fresh(0), bonus: true }));
     } catch {
       // ignore
     }
@@ -74,37 +94,45 @@ export function createQuests() {
     if (today() === day) return;
     day = today();
     idx = pick(day);
-    s = { day, counts: [0, 0, 0], done: [false, false, false], bonus: false };
+    s = fresh(day);
     save();
   }
+  // what's on the list right now: the first night, or today's three
+  const active = () => (first ? { defs: FIRST, st: first } : { defs: idx.map((i) => POOL[i]), st: s });
 
   return {
+    /** true while the newcomer's first-night quests are on */
+    firstNight: () => first !== null,
     list(): QuestView[] {
       rollover();
-      return idx.map((i, k) => ({ ...POOL[i], count: Math.min(POOL[i].goal, Math.floor(s.counts[k])), done: s.done[k] }));
+      const { defs, st } = active();
+      return defs.map((q, k) => ({ ...q, count: Math.min(q.goal, Math.floor(st.counts[k])), done: st.done[k] }));
     },
     /** something happened; returns what got completed (to pay out and announce) */
-    bump(kind: QuestKind, n = 1): { quest: QuestView | null; allDone: boolean } {
+    bump(kind: QuestKind, n = 1): { quest: QuestView | null; allDone: boolean; firstNight: boolean } {
       rollover();
+      const { defs, st } = active();
+      const wasFirst = first !== null;
       let quest: QuestView | null = null;
-      idx.forEach((i, k) => {
-        if (POOL[i].kind !== kind || s.done[k]) return;
-        s.counts[k] += n;
-        if (s.counts[k] >= POOL[i].goal) {
-          s.done[k] = true;
-          quest = { ...POOL[i], count: POOL[i].goal, done: true };
+      defs.forEach((q, k) => {
+        if (q.kind !== kind || st.done[k]) return;
+        st.counts[k] += n;
+        if (st.counts[k] >= q.goal) {
+          st.done[k] = true;
+          quest = { ...q, count: q.goal, done: true };
         }
       });
       let allDone = false;
-      if (quest && s.done.every(Boolean) && !s.bonus) {
-        s.bonus = true;
+      if (quest && st.done.every(Boolean) && !st.bonus) {
+        st.bonus = true;
         allDone = true;
+        if (wasFirst) first = null; // the daily three open now
       }
       // only write when something visible changed (walk/dark bump every frame)
       if (quest || (kind !== "walk" && kind !== "dark")) save();
       else if (Math.random() < 0.02) save();
       if (quest) listeners.forEach((f) => f());
-      return { quest, allDone };
+      return { quest, allDone, firstNight: wasFirst };
     },
     onChange(fn: () => void) {
       listeners.add(fn);

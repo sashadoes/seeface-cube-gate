@@ -360,5 +360,16 @@
 "⚠ fire": "⚠ tűz",
 "⚠ the flood is coming": "⚠ közeledik az árvíz",
 "⚠ the plague is coming": "⚠ közeledik a pestis",
-"✉ a note from @{from}": "✉ üzenet @{from} felhasználótól"
+"✉ a note from @{from}": "✉ üzenet @{from} felhasználótól",
+"come back tomorrow. he'll bring more.": "gyere vissza holnap. többet hoz.",
+"the dark king remembers you · day {n} · +{gift} ◈": "a sötét király emlékszik rád · {n}. nap · +{gift} ◈",
+"spend your ◈": "költsd el a ◈-t",
+"order from an After Life™ TV": "rendelj egy After Life™ tévéből",
+"the open market": "a nyitott piac",
+"touch a little helper": "érints meg egy kis segítőt",
+"find a place (museum, theater, mall…)": "találj egy helyet (múzeum, színház, pláza…)",
+"first night done · +{n} ◈ · today's quests are open": "az első éjszaka kész · +{n} ◈ · a mai küldetések nyitva",
+"your first night · then new quests every day": "az első éjszakád · utána minden nap új küldetések",
+"tomorrow: new quests and a gift from the dark king": "holnap: új küldetések és ajándék a sötét királytól",
+"After Life™ TV": "After Life™ tévé"
 }

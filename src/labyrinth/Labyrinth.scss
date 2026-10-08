@@ -427,9 +427,67 @@
 
 // ---------------------------------------------------------------- blood dollars + wishes
 .lab-blood {
+  all: unset;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  padding: 6px 4px; // a bigger tap target, same look
   font-size: 19px;
   color: #ff5a4a;
   text-shadow: 0 0 10px rgba(255, 40, 30, 0.6);
+
+  // after the dark king's gift: a slow glow until the player looks at what ◈ buys
+  &.hint {
+    animation: lab-blood-hint 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes lab-blood-hint {
+  50% {
+    text-shadow: 0 0 18px rgba(255, 90, 60, 1), 0 0 34px rgba(255, 60, 40, 0.7);
+    transform: scale(1.12);
+  }
+}
+
+// what ◈ buys: one column of choices in the wish panel's look
+.lab-spend-list {
+  display: grid;
+  gap: 10px;
+  width: min(320px, calc(100vw - 32px));
+
+  button {
+    all: unset;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 12px;
+    border: 1px solid rgba(255, 120, 100, 0.35);
+    background: rgba(255, 255, 255, 0.03);
+    touch-action: manipulation;
+
+    &:active {
+      background: rgba(255, 90, 74, 0.15);
+    }
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .g {
+      font-size: 22px;
+      color: #ff8a7a;
+      text-align: center;
+    }
+    .l {
+      font-style: italic;
+    }
+    em {
+      font-style: normal;
+      font-size: 13px;
+      color: #ff8a7a;
+    }
+  }
 }
 
 .lab-btn.wish {
@@ -1169,7 +1227,26 @@
 .lab-quests-chip {
   all: unset;
   cursor: pointer;
+  display: inline-flex;
+  gap: 0.35em;
+  align-items: baseline;
+  // room for the radio chip on its left, also on a 375 px phone
+  max-width: min(260px, calc(100vw - 120px));
+  box-sizing: border-box;
+  white-space: nowrap;
+  vertical-align: top;
   padding: 3px 10px;
+
+  .q {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  em {
+    flex: none;
+    font-style: normal;
+    font-size: 12px;
+    opacity: 0.75;
+  }
   border-radius: 12px;
   border: 1px solid rgba(255, 230, 184, 0.3);
   color: #ffe6b8;

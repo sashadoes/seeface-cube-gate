@@ -84,6 +84,38 @@ function drawScreen(tv: TV, t: number, seed: number) {
   tv.screen.needsUpdate = true;
 }
 
+/** where the TV of cell (i, j) stands (against a wall, facing the corridor), or null if that cell has none */
+function tvSpot(i: number, j: number): [boolean, number, number, number] | null {
+  if (roomOf(i, j) || placeOf(i, j) || rnd(i, j, 140) > 0.05) return null;
+  const sides: [boolean, number, number, number][] = [
+    [wallEast(i, j), (i + 1) * CELL - 0.55, (j + 0.5) * CELL, -Math.PI / 2],
+    [wallEast(i - 1, j), i * CELL + 0.55, (j + 0.5) * CELL, Math.PI / 2],
+    [wallSouth(i, j), (i + 0.5) * CELL, (j + 1) * CELL - 0.55, Math.PI],
+    [wallSouth(i, j - 1), (i + 0.5) * CELL, j * CELL + 0.55, 0],
+  ];
+  return sides.find((x) => x[0]) ?? null;
+}
+
+/** the nearest After Life™ TV (straight-line), searched in growing squares; a spot just in front of it */
+export function nearestTV(px: number, pz: number, maxCells = 30): { x: number; z: number } | null {
+  const ci = Math.floor(px / CELL), cj = Math.floor(pz / CELL);
+  let best: { x: number; z: number } | null = null, bd = Infinity;
+  for (let r = 0; r <= maxCells; r++) {
+    // a ring r cells out can't beat a find closer than (r - 1) cells
+    if (best && bd < (r - 1) * CELL) break;
+    for (let i = ci - r; i <= ci + r; i++)
+      for (let j = cj - r; j <= cj + r; j++) {
+        if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) !== r) continue;
+        const s = tvSpot(i, j);
+        if (!s) continue;
+        const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL;
+        const d = Math.hypot(x - px, z - pz);
+        if (d < bd) (bd = d), (best = { x, z });
+      }
+  }
+  return best;
+}
+
 export function createAfterlife() {
   const group = new THREE.Group();
   const tvs = Array.from({ length: 5 }, () => {
@@ -102,15 +134,7 @@ export function createAfterlife() {
     let k = 0;
     for (let i = ci - 6; i <= ci + 6 && k < tvs.length; i++)
       for (let j = cj - 6; j <= cj + 6 && k < tvs.length; j++) {
-        if (roomOf(i, j) || placeOf(i, j) || rnd(i, j, 140) > 0.05) continue;
-        // stand it against a wall of this cell, facing into the corridor
-        const sides: [boolean, number, number, number][] = [
-          [wallEast(i, j), (i + 1) * CELL - 0.55, (j + 0.5) * CELL, -Math.PI / 2],
-          [wallEast(i - 1, j), i * CELL + 0.55, (j + 0.5) * CELL, Math.PI / 2],
-          [wallSouth(i, j), (i + 0.5) * CELL, (j + 1) * CELL - 0.55, Math.PI],
-          [wallSouth(i, j - 1), (i + 0.5) * CELL, j * CELL + 0.55, 0],
-        ];
-        const s = sides.find((x) => x[0]);
+        const s = tvSpot(i, j);
         if (!s) continue;
         const tv = tvs[k++];
         tv.group.position.set(s[1], 0, s[2]);
