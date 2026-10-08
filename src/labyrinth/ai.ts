@@ -8,6 +8,7 @@
 // the maze near the entrance, positioned by the clock (no server needed).
 import * as THREE from "three";
 import { CELL, roomCentre, rnd, wallEast, wallSouth } from "./maze";
+import { release } from "./gpu";
 
 type Topic = "hi" | "help" | "love" | "die";
 type Persona = { idle: string[]; replies: Record<Topic, string[]>; fallback: string[] };
@@ -245,7 +246,7 @@ export function createAi() {
   });
 
   function say(b: (typeof bots)[number], text: string) {
-    if (b.bubble) b.holder.remove(b.bubble);
+    release(b.bubble);
     b.bubble = textSprite(text, "#e9f6ff");
     b.bubble.position.y = 3.45;
     b.holder.add(b.bubble);

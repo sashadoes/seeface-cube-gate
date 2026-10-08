@@ -34,6 +34,7 @@ import { createSound } from "./sound";
 import { currentEvent, EVENTS, type EventKind } from "./events";
 import { makeSnapshot, shareSnapshot } from "./snapshot";
 import { relicMesh } from "./props";
+import { release, sweep } from "./gpu";
 
 const PLACE_NAMES: Record<string, string> = {
   monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
@@ -89,6 +90,17 @@ const PROTECTED = 120; // seconds a newcomer can't be knifed
 const FOV = 72;
 
 type Hud = { event: EventKind | null; holding: boolean; level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null; meet?: { nick: string; d: number; a: number } | null };
+
+/** keeps the old HUD object when nothing on screen would change (React then skips the re-render) */
+function sameHud(prev: Hud, next: Hud): Hud {
+  for (const k in next) {
+    const a = prev[k as keyof Hud], b = next[k as keyof Hud];
+    if (a === b) continue;
+    if (k === "meet" && a && b && JSON.stringify(a) === JSON.stringify(b)) continue;
+    return next;
+  }
+  return prev;
+}
 
 function readBest() {
   try {
@@ -649,7 +661,8 @@ function Game({ nick }: { nick: string }) {
 
   useEffect(() => {
     const el = host.current!;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    // sharp (retina) screens don't need antialiasing: it costs 4× the pixel work for an edge nobody can see
+    const renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 1.5, powerPreference: "high-performance" });
     // phones: lighter rendering so it stays smooth
     const pixelRatio = (q: Settings["quality"]) => (q === "low" ? 0.75 : q === "high" ? Math.min(window.devicePixelRatio, 2) : Math.min(window.devicePixelRatio, isPhone ? 1.25 : 1.5));
     renderer.setPixelRatio(pixelRatio(settings().quality));
@@ -657,6 +670,12 @@ function Game({ nick }: { nick: string }) {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
     el.appendChild(renderer.domElement);
+    // the graphics chip can drop the page (out of memory, driver reset, too many tabs):
+    // instead of a frozen black screen, come back where you were (the spot is saved every 5 s)
+    renderer.domElement.addEventListener("webglcontextlost", (e) => {
+      e.preventDefault();
+      setTimeout(() => location.reload(), 1500);
+    });
 
     const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 80);
     const world = createWorld();
@@ -975,11 +994,12 @@ function Game({ nick }: { nick: string }) {
     }
     dropRef.current = () => {
       if (!held || !heldObj) return;
-      camera.remove(heldObj);
+      release(heldObj);
       const fx = -Math.sin(input.yaw), fz = -Math.cos(input.yaw);
       const o = relicMesh(held.colour, held.shape);
       o.position.set(pos.x + fx * 1.1, 0.25, pos.z + fz * 1.1);
       dropped.add(o);
+      if (dropped.children.length > 24) release(dropped.children[0]);
       held = null;
       heldObj = null;
       track("relic-dropped");
@@ -1024,7 +1044,7 @@ function Game({ nick }: { nick: string }) {
       delete eventOverlay.dataset.kind;
       if (k === "choir") sound.choir(false);
       if (k === "popqueen") sound.showtune(0);
-      rainCards.splice(0).forEach((c) => rainGroup.remove(c));
+      rainCards.splice(0).forEach(release);
     }
 
     strikeRef.current = () => {
@@ -1353,7 +1373,8 @@ function Game({ nick }: { nick: string }) {
         sayRef.current(tr("quest done: {text} · +{reward} ◈", { text: tr(r.quest.text), reward: r.quest.reward }));
         sound.chime();
         track(`quest-${r.quest.kind}`);
-        setQuestList(questsRef.current!.list());
+        const ql = questsRef.current!.list();
+        setQuestList((prev) => (JSON.stringify(prev) === JSON.stringify(ql) ? prev : ql));
       }
       if (r.allDone) {
         earn(ALL_DONE_BONUS, "quests-all");
@@ -1477,6 +1498,11 @@ function Game({ nick }: { nick: string }) {
     let floodGrace = 0; // seconds the water can't knock you again
 
     const frame = (now: number) => {
+      // at most 60–72 frames a second: 120/144 Hz screens would otherwise make the graphics chip work twice as hard
+      if (now - last < 1000 / 75) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const t = now / 1000;
@@ -1813,7 +1839,8 @@ function Game({ nick }: { nick: string }) {
       questTick -= dt;
       if (questTick <= 0) {
         questTick = 1;
-        setQuestList(questsRef.current!.list());
+        const ql = questsRef.current!.list();
+        setQuestList((prev) => (JSON.stringify(prev) === JSON.stringify(ql) ? prev : ql));
       }
       if (tw) track(`twist-${tw}`);
       if (mirrorT > 0) {
@@ -1847,7 +1874,7 @@ function Game({ nick }: { nick: string }) {
       if (kAct) {
         if (kAct.light) light = Math.min(100, light + kAct.light);
         if (kAct.takeRelic && held && heldObj) {
-          camera.remove(heldObj);
+          release(heldObj);
           held = null;
           heldObj = null;
         }
@@ -1978,10 +2005,13 @@ function Game({ nick }: { nick: string }) {
       if (hudTimer <= 0 || isNear !== wasNear) {
         hudTimer = 0.1;
         wasNear = isNear;
+        // rounded, and only when something visible changed: re-rendering the whole HUD 10× a second costs every frame
+        const mi = meetInfo();
+        const meet = mi && { ...mi, a: Math.round(mi.a * 50) / 50 };
         setHud((prev) =>
           prev.dead
-            ? { ...prev, online: presence.online() }
-            : { event: eventKind, holding: !!held, level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null, meet: meetInfo() }
+            ? prev.online === presence.online() ? prev : { ...prev, online: presence.online() }
+            : sameHud(prev, { event: eventKind, holding: !!held, level: levelAtX(pos.x), light: Math.round(light), stamina: Math.round(stamina), shards, depth, danger: Math.round(lastDanger * 50) / 50, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null, meet })
         );
       }
 
@@ -2198,6 +2228,7 @@ function Game({ nick }: { nick: string }) {
       fx.setDanger(alive ? lastDanger : 0);
       fx.update(dt, t, { x: pos.x, z: pos.z, moving: Math.hypot(vel.x, vel.z) > 0.6, sky, zoneTint: world.zone().panel });
       perf.frame(dt, camera);
+      sweep(world.scene);
       immersive.update(dt, perf.info().scale, alive ? lastDanger : 0);
       fx.render();
       clipper.frame(renderer.domElement); // share video (only while recording)

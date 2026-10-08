@@ -9,6 +9,7 @@
 //   mourner      – shares her light when yours is weak
 import * as THREE from "three";
 import { CELL, free, placeAt, roomCentre } from "./maze";
+import { release } from "./gpu";
 
 export type KeeperKind = "cartographer" | "collector" | "jester" | "mourner";
 
@@ -214,7 +215,7 @@ export function createKeepers(): Keepers {
   let order = Math.floor(Math.random() * ORDER.length);
 
   function say(text: string) {
-    if (bubble) holder.remove(bubble);
+    release(bubble);
     bubble = textSprite(text, "#fff6e2", "italic 30px 'Times New Roman', serif");
     bubble.position.y = 3.25;
     holder.add(bubble);
@@ -234,7 +235,7 @@ export function createKeepers(): Keepers {
       (body.material as THREE.SpriteMaterial).map = tex;
       (body.material as THREE.SpriteMaterial).needsUpdate = true;
       light.color.setHex(KEEPERS[kind].light);
-      if (label) holder.remove(label);
+      release(label);
       label = textSprite(`✶ ${KEEPERS[kind].name}`, KEEPERS[kind].halo, "italic 30px 'Times New Roman', serif", 384);
       label.position.y = 2.85;
       holder.add(label);
@@ -331,7 +332,7 @@ export function createKeepers(): Keepers {
     if (leaving && fade < 0.02) {
       holder.visible = false;
       kind = null;
-      if (bubble) holder.remove(bubble);
+      release(bubble);
       bubble = null;
       nextAt = 70 + Math.random() * 70;
     }

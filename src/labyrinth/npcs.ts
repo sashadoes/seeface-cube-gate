@@ -11,6 +11,7 @@ import cast from "../../server/npc/cast.json";
 import { apiBase } from "../api";
 import { bodyTexture, textSprite } from "./ai";
 import { CELL, placeAt, roomCentre, roomOf, placeOf, safeSpot, wallEast, wallSouth } from "./maze";
+import { release } from "./gpu";
 
 export type NpcId = keyof typeof cast.characters;
 export type ShopItem = { id: string; label: string; price: number; does: string };
@@ -264,7 +265,7 @@ export function createNpcs() {
   let busy = false;
 
   function bubble(p: (typeof people)[number], text: string) {
-    if (p.bubble) p.holder.remove(p.bubble);
+    release(p.bubble);
     p.bubble = textSprite(text.length > 90 ? text.slice(0, 88) + "…" : text, "#e9f6ff");
     p.bubble.position.y = p.id === "vend" ? 2.85 : 3.65;
     p.holder.add(p.bubble);

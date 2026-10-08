@@ -15,6 +15,7 @@ import { relicMesh } from "./props";
 import { zoneAt, zoneWallMaterial } from "./zones";
 import { beam, shipSilhouette } from "./ship";
 import { newsTower } from "./bignord";
+import { release } from "./gpu";
 
 export const PLACE_NAMES: Record<PlaceKind, string> = {
   open: "the open",
@@ -1006,12 +1007,8 @@ export function createPlaces() {
       }
     for (const [key, b] of built)
       if (!want.has(key)) {
-        group.remove(b.group);
         b.cleanup?.();
-        b.group.traverse((o) => {
-          const m = o as THREE.Mesh;
-          m.geometry?.dispose();
-        });
+        release(b.group);
         built.delete(key);
       }
   }

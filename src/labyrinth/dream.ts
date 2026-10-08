@@ -12,6 +12,7 @@ import { CELL, free, inShip } from "./maze";
 import type { Sound } from "./sound";
 import { track } from "../analytics";
 import menu from "./dream-menu.json";
+import { release } from "./gpu";
 
 type Shape = (typeof menu.shapes)[number];
 export type DreamGift = "blood1" | "blood3" | "light" | "float" | "colours" | "nothing";
@@ -148,7 +149,7 @@ export function createDream(sound: Sound, overlay: HTMLElement) {
   }
 
   function clear() {
-    for (const b of built.values()) group.remove(b.obj);
+    for (const b of built.values()) release(b.obj);
     built.clear();
     lastScan = -1;
   }
@@ -194,7 +195,7 @@ export function createDream(sound: Sound, overlay: HTMLElement) {
       }
     for (const [key, b] of built)
       if (!keep.has(key)) {
-        group.remove(b.obj);
+        release(b.obj);
         built.delete(key);
       }
   }

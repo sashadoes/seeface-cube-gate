@@ -8,6 +8,7 @@
 // in the same hour sees the same props in the same places.
 import * as THREE from "three";
 import { CELL, WALL_H, inShip, roomOf, rnd, wallEast, wallSouth, placeOf } from "./maze";
+import { release } from "./gpu";
 
 const RADIUS = 6; // cells around the player that get props
 export type Pickup = { key: string; kind: "money" | "knife" | "relic"; x: number; z: number; obj: THREE.Object3D; colour?: number; shape?: number };
@@ -390,7 +391,7 @@ export function createProps(): Props {
       }
     for (const [key, p] of cells)
       if (!keep.has(key)) {
-        group.remove(p.obj);
+        release(p.obj);
         cells.delete(key);
       }
   }
@@ -402,7 +403,7 @@ export function createProps(): Props {
     if (key !== lastCell) {
       if (h !== hour) {
         // a new hour: the labyrinth rearranges itself
-        for (const p of cells.values()) group.remove(p.obj);
+        for (const p of cells.values()) release(p.obj);
         cells.clear();
         hour = h;
       }
@@ -433,7 +434,7 @@ export function createProps(): Props {
 
   function take(pk: Pickup) {
     taken.add(pk.key);
-    pk.obj.parent?.remove(pk.obj);
+    release(pk.obj);
     for (const p of cells.values()) p.pickups = p.pickups.filter((x) => x !== pk);
   }
 

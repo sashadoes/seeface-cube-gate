@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import { zoneAt, type ZoneKind } from "./zones";
 import { CELL, WALL_H, inShip, placeAt, placeOf, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
+import { releaseChildren } from "./gpu";
 
 type Art = { tex: THREE.Texture; color: THREE.Color; ready: boolean };
 const cache = new Map<string, Art>();
@@ -228,7 +229,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
     list.sort((a, b) => a.d - b.d);
     rooms.forEach((r, k) => {
       if (!list[k]) {
-        r.g.clear();
+        releaseChildren(r.g);
         r.g.userData.key = "";
         r.light.intensity = 0;
         return;
@@ -237,7 +238,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
       const override = seedFor(I, J);
       const key = `${I}:${J}:${override ?? ""}`;
       if (r.g.userData.key === key) return;
-      r.g.clear();
+      releaseChildren(r.g);
       r.g.userData.key = key;
       const c = roomCentre(I, J);
       r.g.position.set(c.x, 0, c.z);

@@ -7,6 +7,7 @@ import { CELL, WALL_H, hasPanel, inShip, placeAt, roomCentre, roomOf, wallEast, 
 import type { Weather } from "../marks/weather";
 import { createRelief } from "./relief";
 import { WALL_VARIANTS, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, type ZoneDef } from "./zones";
+import { release } from "./gpu";
 
 const VIEW = 7; // cells around the visitor that exist
 const MAX_WALLS = (VIEW * 2 + 2) ** 2 * 2;
@@ -171,7 +172,7 @@ export function createWorld(): World {
     const tint = w.kind === "storm" || w.kind === "rain" ? 0xc9d8ff : w.isDay ? 0xfff0dc : 0xd9e2ff;
     panelMat.emissive.setHex(tint);
     panelLights.forEach((l) => l.color.setHex(tint));
-    if (precip) scene.remove(precip);
+    release(precip);
     precip = null;
     if (["rain", "drizzle", "storm", "snow"].includes(w.kind)) {
       const n = w.kind === "snow" ? 900 : w.kind === "drizzle" ? 500 : 1400;
