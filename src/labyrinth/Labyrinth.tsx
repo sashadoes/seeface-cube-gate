@@ -2081,7 +2081,7 @@ function Game({ nick }: { nick: string }) {
         wasAtMarket = nowAtMarket;
         setAtMarket(nowAtMarket);
       }
-      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && pl.inside?.kind !== "bazaar" && !inShip(pos.x, pos.z));
+      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && pl.inside?.kind !== "bazaar" && pl.inside?.kind !== "love" && !inShip(pos.x, pos.z));
       // the ritual: stand in the gold circle by the altar for 5 seconds
       if (pl.atAltar && alive) {
         if (ritualT === 0) sayRef.current(tr("stand still… the ritual has begun"));
@@ -2148,7 +2148,7 @@ function Game({ nick }: { nick: string }) {
       if (heldObj) heldObj.rotation.y += dt * 1.5;
 
       // light & effects; under open skies (and in the ship) the eye sees much further
-      const sky = inPlace?.kind === "open" || inPlace?.kind === "ritual" || inPlace?.kind === "bazaar" || inShip(pos.x, pos.z);
+      const sky = inPlace?.kind === "open" || inPlace?.kind === "ritual" || inPlace?.kind === "bazaar" || inPlace?.kind === "love" || inShip(pos.x, pos.z);
       const far = sky ? 500 : 80;
       if (camera.far !== far) {
         camera.far = far;
