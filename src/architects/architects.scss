@@ -1,0 +1,272 @@
+// The Architects: invite, join, terms, chamber, admin.
+// The site's global CSS locks the page (no scroll, no select) for the cube;
+// these pages scroll and select like a normal document.
+.arch {
+  --ink: #e9e4da;
+  --dim: #8d877c;
+  --line: rgba(233, 228, 218, 0.16);
+  --glow: #b9a4ff;
+  --bg: #050507;
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  -webkit-user-select: text;
+  user-select: text;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Times New Roman", Times, serif;
+  line-height: 1.55;
+  font-size: 18px;
+
+  a {
+    color: var(--ink);
+  }
+  h1,
+  h2,
+  h3 {
+    font-weight: normal;
+    font-style: italic;
+    letter-spacing: 0.01em;
+  }
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  // iOS zooms into inputs under 16px
+  input,
+  textarea {
+    font-size: 17px;
+  }
+}
+
+.arch-wrap {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: max(28px, env(safe-area-inset-top)) 22px calc(60px + env(safe-area-inset-bottom));
+}
+
+.arch-small {
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+// ---------------------------------------------------------------- invite
+.arch-hero {
+  min-height: 92dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  h1 {
+    font-size: clamp(34px, 9vw, 58px);
+    line-height: 1.08;
+    margin: 18px 0 22px;
+  }
+  .arch-counter {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    color: var(--glow);
+    b {
+      font-weight: normal;
+      font-size: 22px;
+      color: var(--ink);
+    }
+  }
+  .arch-scroll {
+    position: absolute;
+    bottom: 18px;
+    left: 0;
+    color: var(--dim);
+    font-size: 13px;
+    animation: arch-breathe 3.2s ease-in-out infinite;
+  }
+}
+.arch-hero::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  background:
+    radial-gradient(40% 30% at 70% 30%, rgba(120, 90, 255, 0.16), transparent 70%),
+    radial-gradient(35% 25% at 20% 75%, rgba(255, 220, 170, 0.07), transparent 70%);
+  animation: arch-drift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes arch-drift {
+  to {
+    transform: translate3d(-4%, 3%, 0) scale(1.08);
+  }
+}
+@keyframes arch-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.arch-section {
+  border-top: 1px solid var(--line);
+  padding: 34px 0 6px;
+  h2 {
+    font-size: 26px;
+    margin: 0 0 14px;
+  }
+}
+.arch-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: s;
+  li {
+    counter-increment: s;
+    padding: 12px 0 12px 46px;
+    position: relative;
+    &::before {
+      content: "0" counter(s);
+      position: absolute;
+      left: 0;
+      top: 14px;
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 13px;
+      color: var(--glow);
+    }
+    b {
+      font-weight: normal;
+      font-style: italic;
+      font-size: 21px;
+      display: block;
+    }
+    span {
+      color: var(--dim);
+    }
+  }
+}
+.arch-list {
+  padding-left: 18px;
+  li {
+    margin: 8px 0;
+  }
+  li::marker {
+    color: var(--glow);
+  }
+}
+
+.arch-cta {
+  display: inline-block;
+  margin: 26px 0 8px;
+  padding: 16px 28px;
+  min-height: 52px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  text-decoration: none;
+  font-style: italic;
+  font-size: 21px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background 0.3s,
+    color 0.3s,
+    box-shadow 0.3s;
+  &:hover,
+  &:focus-visible {
+    background: var(--ink);
+    color: var(--bg);
+    box-shadow: 0 0 40px rgba(185, 164, 255, 0.35);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: wait;
+  }
+}
+
+// ---------------------------------------------------------------- form
+.arch-form {
+  label {
+    display: block;
+    margin: 22px 0 6px;
+    color: var(--dim);
+    font-size: 15px;
+  }
+  input[type="text"],
+  input[type="email"],
+  input[type="url"],
+  textarea,
+  select {
+    width: 100%;
+    box-sizing: border-box;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 2px;
+    outline: none;
+    border-radius: 0;
+    &:focus {
+      border-bottom-color: var(--glow);
+    }
+  }
+  textarea {
+    resize: vertical;
+    min-height: 64px;
+  }
+  .arch-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    button {
+      border: 1px solid var(--line);
+      background: transparent;
+      padding: 9px 14px;
+      min-height: 40px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 16px;
+      &[aria-pressed="true"] {
+        border-color: var(--glow);
+        background: rgba(185, 164, 255, 0.14);
+      }
+    }
+  }
+  .arch-check {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    color: var(--ink);
+    input {
+      width: 22px;
+      height: 22px;
+      margin-top: 3px;
+      accent-color: #b9a4ff;
+      flex: none;
+    }
+  }
+  .arch-error {
+    color: #ffb4a8;
+    font-size: 15px;
+    min-height: 1.4em;
+    margin-top: 14px;
+  }
+}
+
+// ---------------------------------------------------------------- terms
+.arch-terms {
+  font-size: 17px;
+  .todo {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 13px;
+    color: #ffcf7a;
+    border: 1px dashed #ffcf7a;
+    padding: 10px 12px;
+  }
+}

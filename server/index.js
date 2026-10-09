@@ -25,6 +25,8 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { npcReady, talk } from "./npc/talk.mjs";
+import { openStore } from "./architects/store.mjs";
+import { mountArchitects } from "./architects/routes.mjs";
 
 const scrypt = promisify(scryptCb);
 
@@ -43,9 +45,11 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS || "https://seeface.world,https://s
 let players = null; // Mongo collection, or null = local file
 let accounts = null; // Mongo collections for accounts + sessions
 let sessions = null;
+let mongoDb = null; // the Db, shared with the Architects store
 if (process.env.MONGODB_URI) {
   const client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();
+  mongoDb = client.db(process.env.MONGODB_DB || "seeface1");
   players = client.db(process.env.MONGODB_DB || "seeface1").collection("players");
   await players.createIndex({ email: 1 }, { unique: true, partialFilterExpression: { email: { $type: "string" } } });
   await players.createIndex({ nick: 1 });
@@ -251,7 +255,9 @@ app.use((_req, res, next) => {
 });
 // the characters' route carries a short conversation, so it gets a bigger body limit
 const json2kb = express.json({ limit: "2kb" });
-app.use((req, res, next) => (req.path === "/api/npc/talk" ? next() : json2kb(req, res, next)));
+// the Architects' routes (application, chamber, uploads, admin) bring their own body parsers
+const OWN_BODY = /^\/api\/(npc\/talk$|architects\/|chamber(\/|$)|admin\/architects|rooms\/)/;
+app.use((req, res, next) => (OWN_BODY.test(req.path) ? next() : json2kb(req, res, next)));
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -546,6 +552,16 @@ app.get("/api/stats", async (req, res) => {
     console.error("stats failed", e.message);
     res.status(500).json({ ok: false });
   }
+});
+
+// ------------------------------------------------------------------ the Architects (rooms built in the Creation Chamber)
+const architectsDb = await openStore(mongoDb);
+mountArchitects(app, {
+  db: architectsDb,
+  auth,
+  limiter,
+  SITE,
+  accounts: { freeNick: nickFromIg, create: (doc) => store.createAccount(doc), newSession: (n) => store.newSession(n), cleanProgress },
 });
 
 // unknown routes and any error (bad JSON, too big, a crash in a handler): short JSON, never a stack trace

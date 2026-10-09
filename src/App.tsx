@@ -3,7 +3,7 @@
 import Cube from "./components/cube/Cube";
 import MusicToggle from "./components/music/MusicToggle";
 import OnlineCounter from "./components/online/OnlineCounter";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from "react";
 import { hasEntered } from "./labyrinth/resume";
 
 // the marks mode (and its 3D engine) is only downloaded on /marks
@@ -12,6 +12,15 @@ const Labyrinth = lazy(() => import("./labyrinth/Labyrinth"));
 const Privacy = lazy(() => import("./components/privacy/Privacy"));
 const Watch = lazy(() => import("./watch/Watch"));
 const Artists = lazy(() => import("./components/artists/Artists"));
+// The Architects: invite → application → Creation Chamber → admin review
+const ArchInvite = lazy(() => import("./architects/Invite"));
+const ArchJoin = lazy(() => import("./architects/Join"));
+const ArchTerms = lazy(() => import("./architects/Terms"));
+const ARCH_PAGES: Record<string, LazyExoticComponent<ComponentType>> = {
+  "/architects": ArchInvite,
+  "/architects/join": ArchJoin,
+  "/architects/terms": ArchTerms,
+};
 
 const path = location.pathname.replace(/\/+$/, "");
 
@@ -24,6 +33,14 @@ const isMarks = path === "/marks";
 const isLabyrinth = path === "/labyrinth";
 
 export default function App() {
+  const ArchPage = ARCH_PAGES[path];
+  if (ArchPage) {
+    return (
+      <Suspense fallback={null}>
+        <ArchPage />
+      </Suspense>
+    );
+  }
   // the owner's live stats + map (unlisted; see watch/Watch.tsx)
   if (path === "/the-eye") {
     return (
