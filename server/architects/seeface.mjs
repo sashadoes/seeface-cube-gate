@@ -50,8 +50,9 @@ capacity: 10–200 people
 title max ${LIMITS.title} chars · tagline max ${LIMITS.tagline} · welcome_text max ${LIMITS.welcome_text}
 
 OUTPUT
-Always strict JSON: {"reply": "what SeeFace says to the artist", "blueprint_patch": {only the fields that changed} or null, "stage": "arrival | essence | material | atmosphere | naming | refining | ready"}
-Leave out every top-level field that didn't change. A group you do send (palette, lighting, fog, skybox, surfaces, audio, radio) must be complete: copy the unchanged keys from CURRENT BLUEPRINT.
+Always strict JSON: {"reply": "what SeeFace says to the artist", "blueprint_patch": "<JSON text of an object with only the fields that changed, or an empty string>", "stage": "arrival | essence | material | atmosphere | naming | refining | ready"}
+blueprint_patch is a string that holds JSON, e.g. "{\"archetype\":\"cathedral\",\"lighting\":{\"preset\":\"candle\"}}". Use only the field names, values and limits listed under ALLOWED.
+Nested objects (palette, lighting, fog, skybox, surfaces, audio, radio) may be sent partially; only the keys you include change. posters and objects replace their whole list.
 Use stage "ready" only when nothing is missing for submission.`;
 
 const DISCIPLINE_WORDS = { visual: "visual art", "3d": "3D", ai_art: "AI art", sound: "sound and music", photography: "photography", fashion: "fashion", performance: "performance", other: "something without a name yet" };

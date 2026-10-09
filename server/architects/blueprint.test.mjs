@@ -132,3 +132,16 @@ test("the answer schema stays within the API's limit of 24 optional fields", asy
   };
   walkObjects(TURN_SCHEMA);
 });
+
+test("the patch arrives as JSON text: objects pass, empty / null / broken / non-objects become null", async () => {
+  const { readPatch } = await import("./blueprint.mjs");
+  assert.deepEqual(readPatch('{"title":"Salt Chapel","palette":{"primary":"#111111"}}'), { title: "Salt Chapel", palette: { primary: "#111111" } });
+  assert.deepEqual(readPatch({ title: "x" }), { title: "x" }); // the scripted stand-in passes an object
+  for (const bad of ["", "null", "{broken", "[1,2]", '"text"', null, undefined]) assert.equal(readPatch(bad), null);
+});
+
+test("the answer schema is three flat fields (anything deeper made the API reject it as too complex)", async () => {
+  const { TURN_SCHEMA } = await import("./blueprint.mjs");
+  assert.deepEqual(Object.keys(TURN_SCHEMA.properties), ["reply", "blueprint_patch", "stage"]);
+  for (const p of Object.values(TURN_SCHEMA.properties)) assert.equal(p.type, "string");
+});

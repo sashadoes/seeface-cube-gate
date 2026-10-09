@@ -202,38 +202,28 @@ export const MISSING_WORDS = {
   welcome_text: "the words visitors read when they enter",
 };
 
-// The JSON schema the model must answer in (structured outputs). Top-level patch fields are
-// optional ("only the fields that changed"); a nested group (palette, lighting, …) is sent whole,
-// because the API allows at most 24 optional fields in a schema. Structured outputs also need
-// additionalProperties: false everywhere and can't express ranges or lengths, so cleanPatch
-// still checks all of it.
-const obj = (properties) => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
-const str = { type: "string" };
-const num = { type: "number" };
-const PATCH_SCHEMA = { ...obj({
-  title: str,
-  tagline: str,
-  archetype: { type: "string", enum: ARCHETYPES },
-  mood: { type: "array", items: str },
-  palette: obj({ primary: str, secondary: str, accent: str, fog: str }),
-  lighting: obj({ preset: { type: "string", enum: LIGHTING }, intensity: num }),
-  fog: obj({ density: num }),
-  skybox: obj({ asset_id: { type: ["string", "null"] }, preset: { anyOf: [{ type: "string", enum: SKY_PRESETS }, { type: "null" }] } }),
-  surfaces: obj({ walls: str, floor: str }),
-  posters: { type: "array", items: { type: "object", additionalProperties: false, required: ["asset_id", "slot", "caption"], properties: { asset_id: str, slot: { type: "integer" }, caption: str } } },
-  objects: { type: "array", items: { type: "object", additionalProperties: false, required: ["type", "count", "placement"], properties: { type: { type: "string", enum: OBJECTS }, count: { type: "integer" }, placement: { type: "string", enum: PLACEMENTS } } } },
-  audio: obj({ ambient_asset_id: { type: ["string", "null"] }, preset: { anyOf: [{ type: "string", enum: AUDIO_PRESETS }, { type: "null" }] }, volume: num }),
-  radio: obj({ enabled: { type: "boolean" }, mode: { type: "string", enum: RADIO_MODES } }),
-  welcome_text: str,
-  capacity: { type: "integer" },
-}), required: [] };
+// The JSON schema the model must answer in (structured outputs). Deliberately flat: a full
+// schema for the patch was rejected by the API ("too many optional parameters", then "Schema is
+// too complex"), so the patch travels as JSON text and cleanPatch checks every field instead.
 export const TURN_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["reply", "blueprint_patch", "stage"],
   properties: {
     reply: { type: "string", description: "what SeeFace says to the artist, 1-3 sentences" },
-    blueprint_patch: { anyOf: [PATCH_SCHEMA, { type: "null" }], description: "only the blueprint fields that changed, or null" },
+    blueprint_patch: { type: "string", description: 'a JSON object with only the blueprint fields that changed, e.g. {"archetype":"cathedral","mood":["hushed"]}; an empty string when nothing changed' },
     stage: { type: "string", enum: ["arrival", "essence", "material", "atmosphere", "naming", "refining", "ready"] },
   },
 };
+
+/** The model's blueprint_patch (JSON text; the scripted stand-in passes an object) → an object or null. */
+export function readPatch(raw) {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+}

@@ -9,7 +9,7 @@
 // CHAMBER_DAILY_CAP    model calls per UTC day for everyone together (default 5000)
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { applyPatch, cleanPatch, missingForSubmit, MISSING_WORDS, TURN_SCHEMA, ARCHETYPES } from "./blueprint.mjs";
+import { applyPatch, cleanPatch, missingForSubmit, MISSING_WORDS, TURN_SCHEMA, ARCHETYPES, readPatch } from "./blueprint.mjs";
 import { SEEFACE_PROMPT, contextBlock, greeting } from "./seeface.mjs";
 import { ReplyStream } from "./stream.mjs";
 
@@ -95,7 +95,9 @@ export function mountChamber(app, { db, auth, described }) {
       const assets = await db.assets.find({ room_id: room.id }, { sort: { created_at: 1 } });
       const history = (await db.messages.find({ room_id: room.id }, { sort: { created_at: 1 } })).slice(-40);
       const out = client && spend() ? await askSeeFace({ a, room, assets, history, left: PER_DAY - usage.n, send }) : scripted(text, room, assets);
-      const { patch, rejected } = cleanPatch(out.blueprint_patch, assets);
+      const raw = readPatch(out.blueprint_patch);
+      if (out.blueprint_patch && !raw && typeof out.blueprint_patch === "string") console.warn(`chamber ${room.id}: unreadable patch ${out.blueprint_patch.slice(0, 200)}`);
+      const { patch, rejected } = cleanPatch(raw, assets);
       if (rejected.length) console.warn(`chamber ${room.id}: rejected patch fields ${rejected.join(", ")}`);
       const blueprint = applyPatch(room.blueprint, patch);
       const stage = STAGES.includes(out.stage) ? out.stage : room.stage;
@@ -132,7 +134,7 @@ export function mountChamber(app, { db, auth, described }) {
 async function askSeeFace({ a, room, assets, history, left, send }) {
   const messages = [];
   for (const m of history) {
-    if (m.role === "seeface") messages.push({ role: "assistant", content: JSON.stringify({ reply: m.text, blueprint_patch: null, stage: room.stage }) });
+    if (m.role === "seeface") messages.push({ role: "assistant", content: JSON.stringify({ reply: m.text, blueprint_patch: "", stage: room.stage }) });
     else {
       const shared = (m.asset_ids ?? []).map((id) => assets.find((x) => x.id === id)).filter(Boolean);
       messages.push({ role: "user", content: shared.length ? `${m.text}\n[shared: ${shared.map((x) => `${x.type} ${x.id} "${x.name}"`).join(", ")}]` : m.text });
