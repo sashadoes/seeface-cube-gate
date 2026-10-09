@@ -27,17 +27,19 @@ const when = (s: string | null) => (s ? new Date(s).toLocaleString() : "—");
 
 export default function Admin() {
   const [key, setKey] = useState(read);
-  const [draftKey, setDraftKey] = useState("");
+  const [draftKey, setDraftKey] = useState(read); // pre-filled, so "try again" is one click
   const [status, setStatus] = useState("submitted");
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [denied, setDenied] = useState(false);
+  // "" = fine, "key" = the server refused the key, "offline" = the server couldn't be reached
+  const [denied, setDenied] = useState<"" | "key" | "offline">("");
   const [open, setOpen] = useState<Detail | null>(null);
 
   async function list() {
     if (!key) return;
     const r = await adminCall<{ rooms: Row[] }>(key, "GET", status === "all" ? "" : `?status=${status}`);
-    if (r.status === 404 || r.status === 0) return setDenied(true);
-    setDenied(false);
+    if (r.status === 404) return setDenied("key");
+    if (r.status === 0 || !r.ok) return setDenied("offline");
+    setDenied("");
     setRows(r.rooms);
   }
   useEffect(() => {
@@ -54,7 +56,8 @@ export default function Admin() {
       <main className="arch">
         <div className="arch-wrap arch-form" style={{ paddingTop: 70 }}>
           <h1>architects · review</h1>
-          {denied && key && <p className="arch-error">That key wasn't accepted (or the API is offline).</p>}
+          {denied === "key" && key && <p className="arch-error">That key isn't right. Copy the value of ADMIN_KEY from Render → Environment (not the name).</p>}
+          {denied === "offline" && <p className="arch-error">The server can't be reached right now. Try again in a minute.</p>}
           <label htmlFor="ak">admin key (the server's ADMIN_KEY; kept in this browser only)</label>
           <input id="ak" type="text" autoComplete="off" value={draftKey} onChange={(e) => setDraftKey(e.target.value)} />
           <button
@@ -65,7 +68,7 @@ export default function Admin() {
               } catch {
                 // this visit only
               }
-              setDenied(false);
+              setDenied("");
               setKey(draftKey.trim());
             }}
           >
@@ -92,7 +95,7 @@ export default function Admin() {
           </nav>
         </header>
         {!rows ? (
-          <p>…</p>
+          <p className="ad-dim">opening the desk… (a sleeping server can take up to a minute to wake)</p>
         ) : !rows.length ? (
           <p className="ad-dim">Nothing here.</p>
         ) : (
