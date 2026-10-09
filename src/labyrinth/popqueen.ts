@@ -8,6 +8,7 @@
 // snapshot up close makes her shriek "no photos!" and drop ◈.
 import * as THREE from "three";
 import { CELL, free, roomOf } from "./maze";
+import { release } from "./gpu";
 
 const W = 256, H = 720;
 
@@ -200,7 +201,7 @@ export function createPopQueen() {
   let on = false, fade = 0, gone = false, talk = 2, bubble: THREE.Sprite | null = null, bubbleT = 0, cooldown = 0;
 
   function say(text: string) {
-    if (bubble) holder.remove(bubble);
+    release(bubble);
     bubble = lineSprite(text);
     holder.add(bubble);
     bubbleT = 3.5;

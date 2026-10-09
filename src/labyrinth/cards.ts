@@ -8,6 +8,10 @@ import { PLACE_NAMES } from "./places";
 import { LEVELS, levelAtX } from "./zones";
 
 export const TELEPORT_COST = 1;
+/** a teleport takes this long: the transit screen, while the destination fully loads
+ *  (if it isn't loaded by then the wait goes on, up to TELEPORT_MAX_EXTRA_MS more) */
+export const TELEPORT_DURATION_MS = 15_000;
+export const TELEPORT_MAX_EXTRA_MS = 30_000;
 export const INCOGNITO_COST = 2;
 export const MAX_CARDS = 3;
 export const RECHARGE_S = 180;

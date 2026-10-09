@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Howl } from "howler";
 import { createWorld } from "./world";
@@ -13,7 +13,8 @@ import { ALL_DONE_BONUS, createQuests, type QuestKind, type QuestView } from "./
 import { EMOTES, type Emote } from "./net";
 import { demonOf, demonTexture } from "./demons";
 import { createRadio } from "./radio";
-import { shareCard, type RunResult } from "./card";
+import type { RunResult } from "./card";
+import { makeSnapshot, shareSnapshot } from "./snapshot";
 import { createPresence, type Presence } from "./net";
 import { createOthers } from "./others";
 import { createArt } from "./art";
@@ -22,9 +23,10 @@ import { cleanNick, savedNick, saveNick } from "./nick";
 import { apiReady, registerPlayer } from "../api";
 import { noteLevel, noteRun, readProgress } from "../progress";
 import { accountsReady, currentAccount, deleteAccount, finishInstagram, instagramReady, instagramUrl, login, logout, refresh, register, type Account, type AuthError } from "../account";
-import LabMap, { type MapSource, type Trail } from "./LabMap";
+import type { MapSource, Trail } from "./LabMap";
 import Radar from "./Radar";
-import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, MAX_CARDS, TELEPORT_COST } from "./cards";
+import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, MAX_CARDS, TELEPORT_COST, TELEPORT_DURATION_MS, TELEPORT_MAX_EXTRA_MS } from "./cards";
+import Transit from "./Transit";
 import { onOnline } from "../online";
 import { createProps } from "./props";
 import { createDream } from "./dream";
@@ -32,8 +34,8 @@ import { createRifts } from "./rifts";
 import { LEVELS, levelAtX } from "./zones";
 import { createSound } from "./sound";
 import { currentEvent, EVENTS, type EventKind } from "./events";
-import { makeSnapshot, shareSnapshot } from "./snapshot";
 import { relicMesh } from "./props";
+import { release, sweep } from "./gpu";
 
 const PLACE_NAMES: Record<string, string> = {
   monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
@@ -66,10 +68,21 @@ import { createBignord } from "./bignord";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
 import { DEFAULTS, hasSavedSettings, onSettings, setSettings, settings, type Settings } from "./settings";
-import { createPerf, detectTier } from "./perf";
+import { createPerf, decideTier, describeDevice } from "./perf";
+import { PROFILES, profile, type Tier } from "./tiers";
+import { readGraphics, saveGraphics } from "./graphics";
+import { createPerfMetrics } from "./perfMetrics";
+import type { createPerfOverlay } from "./perfOverlay";
+import type { CheckState } from "./GraphicsCheck";
+import { TIER_NOTES } from "./tierNotes";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
+
+// opened on demand, so they don't weigh on the first frame
+const LabMap = lazy(() => import("./LabMap"));
+const GraphicsCheck = lazy(() => import("./GraphicsCheck"));
+const loadCard = () => import("./card");
 
 // /labyrinth: survive the infinite seeface1 maze.
 //   your lantern dies in the dark · working lights recharge it · rooms are safe
@@ -89,6 +102,17 @@ const PROTECTED = 120; // seconds a newcomer can't be knifed
 const FOV = 72;
 
 type Hud = { event: EventKind | null; holding: boolean; level: number; light: number; stamina: number; shards: number; depth: number; danger: number; near: boolean; online: number; met: boolean; blood: number; knife: boolean; dead: RunResult | null; killedBy: string | null; meet?: { nick: string; d: number; a: number } | null };
+
+/** keeps the old HUD object when nothing on screen would change (React then skips the re-render) */
+function sameHud(prev: Hud, next: Hud): Hud {
+  for (const k in next) {
+    const a = prev[k as keyof Hud], b = next[k as keyof Hud];
+    if (a === b) continue;
+    if (k === "meet" && a && b && JSON.stringify(a) === JSON.stringify(b)) continue;
+    return next;
+  }
+  return prev;
+}
 
 function readBest() {
   try {
@@ -643,28 +667,50 @@ function Game({ nick }: { nick: string }) {
   const snapRef = useRef<() => void>(() => {});
   const dropRef = useRef<() => void>(() => {});
   const [snapState, setSnapState] = useState<"" | "busy" | "done">("");
+  const [transit, setTransit] = useState<number | null>(null); // teleport progress 0–1
+  const [gfxCheck, setGfxCheck] = useState<CheckState | null>(null); // the device check screen
+  const gfxCheckRef = useRef<() => void>(() => {});
+  const gfxPickRef = useRef<(tier: Tier, how: "recommended" | "manual") => void>(() => {});
   const [hud, setHud] = useState<Hud>({ event: null, holding: false, level: 0, light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
   const strikeRef = useRef<() => void>(() => {});
   const [shareState, setShareState] = useState<"" | "busy" | "done">("");
 
   useEffect(() => {
     const el = host.current!;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    // phones: lighter rendering so it stays smooth
-    const pixelRatio = (q: Settings["quality"]) => (q === "low" ? 0.75 : q === "high" ? Math.min(window.devicePixelRatio, 2) : Math.min(window.devicePixelRatio, isPhone ? 1.25 : 1.5));
+    // sharp (retina) screens don't need antialiasing: it costs 4× the pixel work for an edge nobody can see
+    const renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 1.5, powerPreference: "high-performance" });
+    // sharpness by tier (tiers.ts); low is a fixed 0.75 on every screen
+    const pixelRatio = (q: Settings["quality"]) => {
+      const cap = PROFILES[q].pixelCap[isPhone ? "phone" : "desktop"];
+      return q === "low" ? cap : Math.min(window.devicePixelRatio, cap);
+    };
     renderer.setPixelRatio(pixelRatio(settings().quality));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
     el.appendChild(renderer.domElement);
+    // the graphics chip can drop the page (out of memory, driver reset, too many tabs):
+    // instead of a frozen black screen, come back where you were (the spot is saved every 5 s)
+    renderer.domElement.addEventListener("webglcontextlost", (e) => {
+      e.preventDefault();
+      setTimeout(() => location.reload(), 1500);
+    });
 
     const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 80);
     const world = createWorld();
     const fx = createFx(renderer, world.scene, camera, myVibe());
     const stopVibe = trackVibe();
     const perf = createPerf(renderer, world.scene, (pr) => fx.setPixelRatio(pr));
-    // first visit: pick a quality that suits this device
-    if (!hasSavedSettings()) setSettings({ quality: detectTier(renderer) });
+    // first visit: a guess right away, then the device check screen (graphics.ts) picks for real
+    const device = describeDevice(renderer);
+    if (!hasSavedSettings()) setSettings({ quality: device.hint });
+    // measuring: anonymous metrics always; the overlay only with ?perf
+    renderer.info.autoReset = false; // count every pass of a frame (bloom, film…), reset per frame
+    const metrics = createPerfMetrics(device);
+    let overlay: ReturnType<typeof createPerfOverlay> | null = null;
+    let overlayAt = 0, overlayFrames = 0;
+    if (new URLSearchParams(location.search).has("perf"))
+      void import("./perfOverlay").then(({ createPerfOverlay }) => (overlay = createPerfOverlay(renderer, world.scene)));
     const hunter = createHunter();
     const residents = createResidents();
     const keepers = createKeepers();
@@ -975,11 +1021,12 @@ function Game({ nick }: { nick: string }) {
     }
     dropRef.current = () => {
       if (!held || !heldObj) return;
-      camera.remove(heldObj);
+      release(heldObj);
       const fx = -Math.sin(input.yaw), fz = -Math.cos(input.yaw);
       const o = relicMesh(held.colour, held.shape);
       o.position.set(pos.x + fx * 1.1, 0.25, pos.z + fz * 1.1);
       dropped.add(o);
+      if (dropped.children.length > 24) release(dropped.children[0]);
       held = null;
       heldObj = null;
       track("relic-dropped");
@@ -1024,7 +1071,7 @@ function Game({ nick }: { nick: string }) {
       delete eventOverlay.dataset.kind;
       if (k === "choir") sound.choir(false);
       if (k === "popqueen") sound.showtune(0);
-      rainCards.splice(0).forEach((c) => rainGroup.remove(c));
+      rainCards.splice(0).forEach(release);
     }
 
     strikeRef.current = () => {
@@ -1222,16 +1269,66 @@ function Game({ nick }: { nick: string }) {
 
     // settings: volumes, graphics, what's shown
     const sfx: [Howl, number][] = [[spinSfx, 0.5], [shardSfx, 0.6], [shiftSfx, 0.7], [caughtSfx, 0.8], [signalSfx, 0.35], [meetSfx, 0.5]];
+    let checking = false; // the device check is measuring
+    let fpsCap = profile().fps;
+    // idle: no touch / key / mouse for a while → fewer frames (cooler, less battery)
+    let lastInput = performance.now();
+    const poke = () => (lastInput = performance.now());
+    const inputEvents = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"] as const;
+    inputEvents.forEach((e) => window.addEventListener(e, poke, { passive: true }));
     const offSettings = onSettings((st) => {
       sound.setVolumes(st);
       radio.setVolume(st.radio * st.master);
       sfx.forEach(([h, base]) => h.volume(base * st.effects * st.master));
-      perf.setQuality(pixelRatio(st.quality), st.quality);
+      const pf = profile(st.quality);
+      if (!checking) perf.setQuality(pixelRatio(st.quality), st.quality);
+      fpsCap = pf.fps;
       world.setFlashes(st.flashes);
       others.setShow(st.showNames, st.showChat);
+      others.setMax(pf.maxPlayers);
       el.dataset.calm = st.flashes ? "" : "1";
-      fx.setEnabled(st.glow && st.quality !== "low");
-      immersive.setAllowed(st.quality === "high");
+      if (!checking) fx.setEnabled(st.glow && pf.post);
+      immersive.setAllowed(pf.shadows);
+    });
+
+    // ---------------------------------------------------------------- the device check (first visit)
+    // ~2.5 s on the HIGH look (not saved) measuring the real frame rate, then a
+    // suggestion; the world keeps running behind the dimmed screen.
+    const runCheck = async () => {
+      if (checking) return;
+      checking = true;
+      setGfxCheck({ phase: "checking", device: device.label });
+      await new Promise((r) => setTimeout(r, 900)); // let the first shaders compile
+      perf.setQuality(pixelRatio("high"), "high");
+      fx.setEnabled(settings().glow);
+      const fps = await perf.bench(2500);
+      checking = false;
+      const st = settings();
+      perf.setQuality(pixelRatio(st.quality), st.quality);
+      fx.setEnabled(st.glow && profile(st.quality).post);
+      const recommended = decideTier(device, fps);
+      setGfxCheck({ phase: "result", device: device.label, recommended, fps: Math.round(fps) });
+      track(`gfx-check-${recommended}`);
+    };
+    gfxCheckRef.current = () => void runCheck();
+    gfxPickRef.current = (tier, how) => {
+      setGfxCheck((c) => {
+        if (c?.phase === "result") saveGraphics({ device: c.device, recommended: c.recommended, fps: c.fps, chosen: how, at: Date.now() });
+        return null;
+      });
+      setSettings({ quality: tier });
+      track(`gfx-${how}-${tier}`);
+    };
+    const checkTimer = readGraphics() ? 0 : window.setTimeout(runCheck, 1200);
+
+    // safety net: still too slow at the lowest sharpness → one tier down, and say so
+    perf.onStruggle(() => {
+      const q = settings().quality;
+      if (q === "low" || checking || trip) return;
+      const next: Tier = q === "high" ? "medium" : "low";
+      setSettings({ quality: next });
+      sayRef.current(tr("graphics lowered to {tier} to keep it smooth · ⚙ settings → graphics to change", { tier: tr(next) }), true);
+      track(`gfx-auto-${next}`);
     });
 
     const hazards = createHazards(sound.ctx, sound.ambienceOut);
@@ -1353,7 +1450,8 @@ function Game({ nick }: { nick: string }) {
         sayRef.current(tr("quest done: {text} · +{reward} ◈", { text: tr(r.quest.text), reward: r.quest.reward }));
         sound.chime();
         track(`quest-${r.quest.kind}`);
-        setQuestList(questsRef.current!.list());
+        const ql = questsRef.current!.list();
+        setQuestList((prev) => (JSON.stringify(prev) === JSON.stringify(ql) ? prev : ql));
       }
       if (r.allDone) {
         earn(ALL_DONE_BONUS, "quests-all");
@@ -1401,6 +1499,7 @@ function Game({ nick }: { nick: string }) {
         }
       }
     };
+    let trip: { from: { x: number; z: number }; spot: { x: number; z: number }; incognito: boolean; start: number; loaded: boolean; shown: number } | null = null;
     const teleport = (x: number, z: number, incognito: boolean): string | null => {
       const cost = incognito ? INCOGNITO_COST : TELEPORT_COST;
       if (!alive) return tr("not now");
@@ -1413,6 +1512,30 @@ function Game({ nick }: { nick: string }) {
       addCards(-cost);
       const from = { x: pos.x, z: pos.z };
       pillar(from.x, from.z);
+      // in transit: frozen and out of reach (no hazards, knives, rifts, pickups) until arrival
+      alive = false;
+      vel.x = vel.z = 0;
+      sound.chime();
+      el.classList.remove("rift");
+      void el.offsetWidth;
+      el.classList.add("rift");
+      el.style.setProperty("--rift", "#c8b8ff");
+      // closing the tab mid-trip still lands you there next time (the card is spent)
+      saveResume({ x: spot.x, z: spot.z, yaw: +input.yaw.toFixed(3), light: Math.round(light), shards, depth, metres: Math.round(metres), place: whereName(spot.x, spot.z) });
+      presence.peek(spot.x, spot.z);
+      const tr0 = { from, spot, incognito, start: performance.now(), loaded: false, shown: -1 };
+      world.prepare(spot.x, spot.z).then(() => (tr0.loaded = true));
+      trip = tr0;
+      setTransit(0);
+      track("teleport-start");
+      return null;
+    };
+    // the transit is over: the destination is loaded (and 15 s have passed)
+    const arrive = (tr0: NonNullable<typeof trip>, waited: number) => {
+      const { from, spot, incognito } = tr0;
+      trip = null;
+      setTransit(null);
+      alive = true;
       pos.x = spot.x;
       pos.z = spot.z;
       vel.x = vel.z = 0;
@@ -1435,8 +1558,11 @@ function Game({ nick }: { nick: string }) {
         trails.push({ nick, fx: from.x, fz: from.z, tx: spot.x, tz: spot.z, at: performance.now(), mine: true });
       }
       track(incognito ? "teleport-incognito" : "teleport");
+      // how long people really wait (15 s = loaded in time; more = the device/network was slow)
+      track(`teleport-wait-${waited <= TELEPORT_DURATION_MS + 500 ? "15s" : waited < 25_000 ? "25s" : "slow"}${tr0.loaded ? "" : "-unloaded"}`);
       sayRef.current(incognito ? tr("you arrived unseen") : tr("you arrived · everyone saw where"), true);
-      return null;
+      // the place you left: its textures leave the graphics chip soon after
+      setTimeout(() => world.parkNow(), 1500);
     };
     // someone else teleported: everyone on the same level is told, and sees it on the map
     let lastTpNotice = 0;
@@ -1477,7 +1603,17 @@ function Game({ nick }: { nick: string }) {
     let floodGrace = 0; // seconds the water can't knock you again
 
     const frame = (now: number) => {
-      const dt = Math.min((now - last) / 1000, 0.05);
+      // frame cap: 60–72 fps (120/144 Hz screens would double the GPU work), 30 on low;
+      // idle (no input) 30 s → 20 fps, 2 min → 10 fps; walking or touching wakes it at once
+      if (input.move.x || input.move.z) lastInput = now;
+      const idle = now - lastInput;
+      const minFrame = idle > 120_000 ? 100 : idle > 30_000 ? 50 : fpsCap === 30 ? 1000 / 36 : 1000 / 75;
+      if (now - last < minFrame) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      const dtReal = Math.min((now - last) / 1000, 0.5);
+      const dt = Math.min(dtReal, 0.05);
       last = now;
       const t = now / 1000;
 
@@ -1813,7 +1949,8 @@ function Game({ nick }: { nick: string }) {
       questTick -= dt;
       if (questTick <= 0) {
         questTick = 1;
-        setQuestList(questsRef.current!.list());
+        const ql = questsRef.current!.list();
+        setQuestList((prev) => (JSON.stringify(prev) === JSON.stringify(ql) ? prev : ql));
       }
       if (tw) track(`twist-${tw}`);
       if (mirrorT > 0) {
@@ -1847,7 +1984,7 @@ function Game({ nick }: { nick: string }) {
       if (kAct) {
         if (kAct.light) light = Math.min(100, light + kAct.light);
         if (kAct.takeRelic && held && heldObj) {
-          camera.remove(heldObj);
+          release(heldObj);
           held = null;
           heldObj = null;
         }
@@ -1978,10 +2115,13 @@ function Game({ nick }: { nick: string }) {
       if (hudTimer <= 0 || isNear !== wasNear) {
         hudTimer = 0.1;
         wasNear = isNear;
+        // rounded, and only when something visible changed: re-rendering the whole HUD 10× a second costs every frame
+        const mi = meetInfo();
+        const meet = mi && { ...mi, a: Math.round(mi.a * 50) / 50 };
         setHud((prev) =>
           prev.dead
-            ? { ...prev, online: presence.online() }
-            : { event: eventKind, holding: !!held, level: levelAtX(pos.x), light, stamina, shards, depth, danger: lastDanger, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null, meet: meetInfo() }
+            ? prev.online === presence.online() ? prev : { ...prev, online: presence.online() }
+            : sameHud(prev, { event: eventKind, holding: !!held, level: levelAtX(pos.x), light: Math.round(light), stamina: Math.round(stamina), shards, depth, danger: Math.round(lastDanger * 50) / 50, near: isNear, online: presence.online(), met: metSomeone, blood, knife: hasKnife, dead: null, killedBy: null, meet })
         );
       }
 
@@ -2197,9 +2337,37 @@ function Game({ nick }: { nick: string }) {
       }
       fx.setDanger(alive ? lastDanger : 0);
       fx.update(dt, t, { x: pos.x, z: pos.z, moving: Math.hypot(vel.x, vel.z) > 0.6, sky, zoneTint: world.zone().panel });
-      perf.frame(dt, camera);
+      if (idle < 30_000) perf.frame(dtReal, camera); // idle frames are slow on purpose: don't let them count
+      sweep(world.scene);
       immersive.update(dt, perf.info().scale, alive ? lastDanger : 0);
-      fx.render();
+      renderer.info.reset();
+      if (trip) {
+        // ---------------- teleport transit: the screen covers everything, so nothing is drawn
+        const waited = performance.now() - trip.start;
+        const time = Math.min(1, waited / TELEPORT_DURATION_MS);
+        // time carries the bar to 90%; the last 10% is the destination actually loading.
+        // Past 15 s and still loading: it keeps creeping towards (never reaching) the end.
+        const over = Math.max(0, waited - TELEPORT_DURATION_MS) / 1000;
+        const p = trip.loaded ? time : Math.min(time * 0.9, 0.9) + (time >= 1 ? 0.09 * (1 - Math.exp(-over / 6)) : 0);
+        const shown = Math.floor(p * 200);
+        if (shown !== trip.shown) {
+          trip.shown = shown;
+          setTransit(p);
+        }
+        if ((time >= 1 && trip.loaded) || waited > TELEPORT_DURATION_MS + TELEPORT_MAX_EXTRA_MS) arrive(trip, waited);
+      } else {
+        fx.render();
+        metrics.frame(dtReal, idle < 30_000, settings().quality);
+      }
+      overlayFrames++;
+      if (overlay && now - overlayAt > 500) {
+        const fps = Math.round((overlayFrames * 1000) / (now - overlayAt));
+        overlayAt = now;
+        overlayFrames = 0;
+        const st = perf.takeStats();
+        const pi = perf.info();
+        overlay.show({ ...st, fps, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, tier: settings().quality, fpsCap: idle > 120_000 ? 10 : idle > 30_000 ? 20 : pi.fpsCap, pixelRatio: renderer.getPixelRatio(), scale: pi.scale, idle: idle > 30_000, zones: world.zoneInfo() });
+      }
       clipper.frame(renderer.domElement); // share video (only while recording)
 
       // snapshot: grab the frame right after it's drawn
@@ -2239,6 +2407,9 @@ function Game({ nick }: { nick: string }) {
       stopVibe();
       stations.stop();
       offSettings();
+      overlay?.dispose();
+      clearTimeout(checkTimer);
+      inputEvents.forEach((e) => window.removeEventListener(e, poke));
       clearInterval(rememberTimer);
       window.removeEventListener("pagehide", remember);
       document.removeEventListener("visibilitychange", rememberHidden);
@@ -2257,7 +2428,7 @@ function Game({ nick }: { nick: string }) {
   const share = async () => {
     if (!hud.dead || shareState === "busy") return;
     setShareState("busy");
-    const how = await shareCard(hud.dead);
+    const how = await (await loadCard()).shareCard(hud.dead);
     track(`share-card-${how}`);
     setShareState("done");
   };
@@ -3035,6 +3206,20 @@ function Game({ nick }: { nick: string }) {
                       <option value="high">{tr("high (sharpest)")}</option>
                     </select>
                   </label>
+                  <p className="note">{tr(TIER_NOTES[st.quality])}</p>
+                  {(() => {
+                    const g = readGraphics();
+                    return g ? <p className="note">{tr("recommended for {device}: {tier}", { device: tr(g.device), tier: tr(g.recommended) })}</p> : null;
+                  })()}
+                  <button
+                    className="lab-settings-link"
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      gfxCheckRef.current();
+                    }}
+                  >
+                    {tr("check my device again")}
+                  </button>
                   <label className="slider">
                     <span>{tr("field of view")}</span>
                     <input type="range" min={60} max={90} step={1} value={st.fov} onChange={(e) => setSettings({ fov: Number(e.target.value) })} />
@@ -3178,7 +3363,17 @@ function Game({ nick }: { nick: string }) {
         )}
       </div>
 
-      {mapOpen && mapRef.current && <LabMap source={mapRef.current} nick={nick} cards={cards} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} />}
+      {transit !== null && <Transit progress={transit} />}
+
+      {gfxCheck && (
+        <Suspense fallback={null}>
+          <div onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
+            <GraphicsCheck state={gfxCheck} current={settings().quality} onPick={(tier, how) => gfxPickRef.current(tier, how)} />
+          </div>
+        </Suspense>
+      )}
+
+      {mapOpen && mapRef.current && <Suspense fallback={null}><LabMap source={mapRef.current} nick={nick} cards={cards} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} /></Suspense>}
 
       {hud.dead && (
         <div className="lab-dead" onPointerDown={stop} onPointerUp={stop}>

@@ -7,6 +7,7 @@ import { CELL, WALL_H } from "./maze";
 import type { Presence } from "./net";
 import { noteBlood } from "../progress";
 import { noteBloodChange } from "../insight";
+import { release } from "./gpu";
 
 export const WISH_COST = 10;
 const BLOOD_KEY = "seeface-blood";
@@ -208,7 +209,7 @@ export function createWishes(presence: Presence): Wishes {
         if (sc) sc.rotation.y += 0.3 * dt;
         if (w.kind === "lantern") lanterns.push(w);
       } else if (w.obj) {
-        group.remove(w.obj);
+        release(w.obj);
         w.obj = undefined;
       }
     }

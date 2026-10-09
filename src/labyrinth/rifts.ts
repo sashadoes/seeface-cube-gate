@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import { CELL, inShip, placeAt, placeOf, roomCentre, roomOf, rnd, safeSpot, spawn } from "./maze";
 import { LEVELS, LEVEL_OFFSET, levelAtX } from "./zones";
+import { release } from "./gpu";
 
 const REGION = 8; // cells
 const RADIUS = 2; // regions around the player that are checked
@@ -122,7 +123,7 @@ export function createRifts(): Rifts {
       }
     for (const [key, r] of live)
       if (!keep.has(key)) {
-        group.remove(r.obj);
+        release(r.obj);
         live.delete(key);
       }
   }

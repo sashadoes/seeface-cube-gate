@@ -6,11 +6,15 @@ import * as THREE from "three";
 import { CELL, WALL_H, hasPanel, inShip, placeAt, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
 import type { Weather } from "../marks/weather";
 import { createRelief } from "./relief";
-import { WALL_VARIANTS, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, type ZoneDef } from "./zones";
+import { WALL_VARIANTS, textureReady, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, ZONE_CELLS, type ZoneDef } from "./zones";
+import { MAX_VIEW, profile } from "./tiers";
+import { release } from "./gpu";
 
-const VIEW = 7; // cells around the visitor that exist
-const MAX_WALLS = (VIEW * 2 + 2) ** 2 * 2;
-const MAX_PANELS = (VIEW * 2 + 2) ** 2;
+const MAX_WALLS = (MAX_VIEW * 2 + 2) ** 2 * 2;
+const MAX_PANELS = (MAX_VIEW * 2 + 2) ** 2;
+// a location's textures that nothing has shown for this long leave the graphics
+// chip (the picture stays in memory, so coming back re-uploads it in a blink)
+const PARK_AFTER_MS = 20_000;
 
 export type World = {
   scene: THREE.Scene;
@@ -34,6 +38,12 @@ export type World = {
   setWet: (w: number) => void;
   /** 0–1: the static fog at the edge of the labyrinth */
   setEdgeFog: (f: number) => void;
+  /** location textures currently on the graphics chip / known (perf overlay) */
+  zoneInfo: () => { kinds: string[]; resident: number; parked: number };
+  /** load these locations' textures now (teleport destination); resolves when they're ready */
+  prepare: (x: number, z: number) => Promise<void>;
+  /** free every location texture not on screen right now (after a teleport) */
+  parkNow: () => void;
 };
 
 function digitTexture(d: string) {
@@ -85,6 +95,7 @@ export function createWorld(): World {
       m = new THREE.InstancedMesh(wallGeo, zoneWallMaterial(zone, variant), MAX_WALLS);
       m.frustumCulled = false;
       m.count = 0;
+      m.visible = false;
       scene.add(m);
       wallMeshes.set(key, m);
     }
@@ -171,10 +182,10 @@ export function createWorld(): World {
     const tint = w.kind === "storm" || w.kind === "rain" ? 0xc9d8ff : w.isDay ? 0xfff0dc : 0xd9e2ff;
     panelMat.emissive.setHex(tint);
     panelLights.forEach((l) => l.color.setHex(tint));
-    if (precip) scene.remove(precip);
+    release(precip);
     precip = null;
     if (["rain", "drizzle", "storm", "snow"].includes(w.kind)) {
-      const n = w.kind === "snow" ? 900 : w.kind === "drizzle" ? 500 : 1400;
+      const n = Math.round((w.kind === "snow" ? 900 : w.kind === "drizzle" ? 500 : 1400) * profile().particles);
       const pos = new Float32Array(n * 3);
       for (let k = 0; k < n; k++) pos.set([(Math.random() - 0.5) * 24, Math.random() * WALL_H, (Math.random() - 0.5) * 24], k * 3);
       const geo = new THREE.BufferGeometry();
@@ -207,6 +218,56 @@ export function createWorld(): World {
   const flatQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
   let panelSpots: { x: number; z: number; seed: number }[] = [];
 
+  // ---------------------------------------------------------------- location textures
+  // Prefetch: the locations just beyond what you can see get their materials
+  // (= their pictures start downloading and drawing) before you walk in.
+  const prefetched = new Set<string>();
+  function warmZone(zone: ZoneDef) {
+    for (let v = 0; v < WALL_VARIANTS; v++) zoneWallMaterial(zone, v);
+    zoneFloorMaterial(zone);
+  }
+  function prefetchAround(ci: number, cj: number, view: number) {
+    const reach = view + 4; // cells
+    for (let a = 0; a < 8; a++) {
+      const i = Math.floor(ci + Math.cos((a / 8) * Math.PI * 2) * reach);
+      const j = Math.floor(cj + Math.sin((a / 8) * Math.PI * 2) * reach);
+      const zone = zoneOfCell(i, j);
+      if (prefetched.has(zone.kind)) continue;
+      prefetched.add(zone.kind);
+      warmZone(zone);
+    }
+  }
+  const mapsOf = (m: THREE.Material) => {
+    const s = m as THREE.MeshStandardMaterial;
+    return [s.map, s.emissiveMap].filter((t): t is THREE.Texture => !!t);
+  };
+  const parked = new Set<THREE.Texture>();
+  // Unload: free the GPU copy of textures no wall/floor has used for a while
+  function park(now: number, after = PARK_AFTER_MS) {
+    for (const m of wallMeshes.values()) {
+      if (m.visible || now - (m.userData.used ?? 0) < after) continue;
+      for (const t of mapsOf(m.material as THREE.Material)) {
+        if (parked.has(t)) continue;
+        t.dispose(); // three.js uploads it again from the canvas if it's ever drawn
+        parked.add(t);
+      }
+    }
+    for (const [kind, used] of floorUsed) {
+      if (now - used < after || kind === currentZone.kind) continue;
+      for (const t of mapsOf(zoneFloorMaterial(zoneOfKind(kind)!))) {
+        if (parked.has(t)) continue;
+        t.dispose();
+        parked.add(t);
+      }
+    }
+    // anything drawn again is back on the chip
+    for (const m of wallMeshes.values()) if (m.visible) for (const t of mapsOf(m.material as THREE.Material)) parked.delete(t);
+    for (const t of mapsOf(zoneFloorMaterial(currentZone))) parked.delete(t);
+  }
+  const floorUsed = new Map<string, number>();
+  const kindsSeen = new Map<string, ZoneDef>();
+  const zoneOfKind = (k: string) => kindsSeen.get(k);
+
   function rebuild(ci: number, cj: number) {
     const counts = new Map<THREE.InstancedMesh, number>();
     const putWall = (i: number, j: number, side: number, mat: THREE.Matrix4) => {
@@ -219,6 +280,7 @@ export function createWorld(): World {
     };
     let np = 0;
     panelSpots = [];
+    const VIEW = profile().view;
     for (let i = ci - VIEW; i <= ci + VIEW; i++) {
       for (let j = cj - VIEW; j <= cj + VIEW; j++) {
         if (wallEast(i, j)) {
@@ -237,13 +299,19 @@ export function createWorld(): World {
         }
       }
     }
+    const now = performance.now();
     for (const m of wallMeshes.values()) {
       m.count = counts.get(m) ?? 0;
+      // an empty mesh would still bind (and so re-upload) its texture every frame
+      m.visible = m.count > 0;
+      if (m.visible) m.userData.used = now;
       m.instanceMatrix.needsUpdate = true;
     }
     panels.count = np;
     panels.instanceMatrix.needsUpdate = true;
     relief.rebuild(ci, cj, VIEW);
+    prefetchAround(ci, cj, VIEW);
+    park(now);
 
     // cubes: the rooms nearest to the visitor
     const R = 7;
@@ -287,6 +355,8 @@ export function createWorld(): World {
     currentZone = zone;
     const fm = zoneFloorMaterial(zone);
     if (floor.material !== fm) floor.material = fm;
+    kindsSeen.set(zone.kind, zone);
+    floorUsed.set(zone.kind, performance.now());
     fm.map?.offset.set(px / CELL, -pz / CELL);
     // wet floors turn glossy (each zone keeps its own dry look underneath)
     fm.userData.dry ??= { r: fm.roughness, m: fm.metalness };
@@ -376,7 +446,32 @@ export function createWorld(): World {
     depthLevel = depth;
   }
 
-  return { scene, update, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => {
+  function zoneInfo() {
+    let resident = 0;
+    for (const m of wallMeshes.values()) resident += mapsOf(m.material as THREE.Material).filter((t) => !parked.has(t)).length;
+    const kinds = new Set<string>();
+    for (const [key, m] of wallMeshes) if (m.visible) kinds.add(key.split(":")[0]);
+    return { kinds: [...kinds], resident, parked: parked.size };
+  }
+  // Teleport: build the destination's location textures and wait for the pictures
+  function prepare(x: number, z: number) {
+    const ci = Math.floor(x / CELL), cj = Math.floor(z / CELL);
+    const zones = new Map<string, ZoneDef>();
+    for (const [di, dj] of [[0, 0], [-ZONE_CELLS, 0], [ZONE_CELLS, 0], [0, -ZONE_CELLS], [0, ZONE_CELLS]]) {
+      const zn = zoneOfCell(ci + di, cj + dj);
+      zones.set(zn.kind, zn);
+    }
+    const waits: Promise<void>[] = [];
+    for (const zn of zones.values()) {
+      warmZone(zn);
+      kindsSeen.set(zn.kind, zn);
+      for (let v = 0; v < WALL_VARIANTS; v++) waits.push(textureReady(zoneWallMaterial(zn, v).map));
+      waits.push(textureReady(zoneFloorMaterial(zn).map));
+    }
+    return Promise.all(waits).then(() => undefined);
+  }
+
+  return { scene, update, zoneInfo, prepare, parkNow: () => park(performance.now(), 0), setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => {
     wet = w;
     relief.setWet(w);
   }, setFlashes: (on: boolean) => (flashesOn = on), setSpace: (on: boolean) => (space = on), setCeiling: (on: boolean) => {

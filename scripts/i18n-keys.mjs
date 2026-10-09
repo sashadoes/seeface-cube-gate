@@ -10,7 +10,7 @@ const keys = new Set();
 const add = (k) => k && keys.add(k.replace(/\\"/g, '"'));
 
 // literal calls
-for (const f of ["src/labyrinth/Labyrinth.tsx", "src/labyrinth/LabMap.tsx", "src/components/music/MusicToggle.tsx"]) {
+for (const f of ["src/labyrinth/Labyrinth.tsx", "src/labyrinth/LabMap.tsx", "src/components/music/MusicToggle.tsx", "src/labyrinth/GraphicsCheck.tsx", "src/labyrinth/Transit.tsx"]) {
   for (const m of read(f).matchAll(/\btr?\("((?:[^"\\]|\\.)+)"/g)) add(m[1]);
 }
 // quick phrases, settings label pairs, tabs, emotes
@@ -30,6 +30,9 @@ for (const m of read("src/labyrinth/events.ts").matchAll(/name: "([^"]+)"/g)) ad
 for (const m of read("src/labyrinth/music.ts").matchAll(/name: "([^"]+)"/g)) add(m[1]);
 for (const m of read("src/labyrinth/stations.ts").matchAll(/name: "([^"]+)" \}/g)) add(m[1]);
 for (const m of read("src/labyrinth/wishes.ts").matchAll(/label: "([^"]+)"/g)) add(m[1]);
+// graphics tiers (names + what they mean) and the device names the check shows
+for (const m of read("src/labyrinth/tierNotes.ts").matchAll(/(?:low|medium|high): "([^"]+)"/g)) add(m[1]);
+for (const m of read("src/labyrinth/perf.ts").matchAll(/"((?:an?|this) [A-Za-z ]+)"/g)) add(m[1]);
 
 const list = [...keys].sort();
 writeFileSync(new URL("../src/i18n/_keys.json", import.meta.url), JSON.stringify(list, null, 1) + "\n");

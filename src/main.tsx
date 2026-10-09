@@ -4,10 +4,12 @@ import App from "./App";
 import { startEngagement } from "./engagement";
 import { startRetention } from "./retention";
 import { startJournal } from "./insight";
+import { startWarm } from "./warm";
 
 startEngagement();
 startRetention();
 startJournal();
+startWarm();
 
 // No <StrictMode>: the legacy cube code binds global listeners in useEffect
 // without cleanup, so a double-mount would register everything twice.

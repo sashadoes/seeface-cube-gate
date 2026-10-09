@@ -3,7 +3,7 @@
 // own). Only anonymous positions and light signals are sent, never names or
 // text. Anyone can read a public relay, so before launch this moves to our own
 // server (same message shapes).
-import mqtt, { type MqttClient } from "mqtt";
+import type { MqttClient } from "mqtt";
 import { cleanNick } from "./nick";
 import { filterMark } from "../marks/filter";
 
@@ -20,6 +20,15 @@ const SEND_HZ = typeof matchMedia !== "undefined" && matchMedia("(pointer: coars
 const AREA_M = 64;
 const BEACON_MS = 5000;
 const FAR_STALE_MS = 16000;
+// who is sending, for the owner's eye page: "r" = a real visitor on the live
+// site, "d" = a dev build / preview (someone testing, often Claude), "b" = an
+// automated browser. Old clients send nothing. Honest label, never shown in game.
+const SENDER: "r" | "d" | "b" =
+  typeof navigator !== "undefined" && (navigator.webdriver || /Headless/i.test(navigator.userAgent))
+    ? "b"
+    : !import.meta.env.DEV && typeof location !== "undefined" && /(^|\.)seeface1?\.world$/.test(location.hostname)
+      ? "r"
+      : "d";
 const areaOf = (x: number, z: number) => `${Math.floor(x / AREA_M)}_${Math.floor(z / AREA_M)}`;
 const areasAround = (x: number, z: number) => {
   const ax = Math.floor(x / AREA_M), az = Math.floor(z / AREA_M);
@@ -75,6 +84,8 @@ export type Presence = {
   /** tell everyone you teleported (not sent when travelling incognito) */
   teleported: (from: { x: number; z: number }, to: { x: number; z: number }, nick: string) => void;
   onTeleport: (fn: (t: Teleport) => void) => void;
+  /** start listening to the people around (x, z) before you get there (teleport) */
+  peek: (x: number, z: number) => void;
   close: () => void;
 };
 
@@ -103,7 +114,12 @@ export function createPresence(myId?: string): Presence {
   let lastSend = 0;
   let pending: { x: number; z: number; yaw: number; light: number; nick: string; held?: number } | null = null;
 
-  function connect() {
+  let closed = false;
+  // the relay library (~105 kB gzip) loads after the world is already on screen
+  const lib = import("mqtt").then((m) => m.default);
+  async function connect() {
+    const mqtt = await lib;
+    if (closed) return;
     client = mqtt.connect(RELAYS[relay], {
       clientId: `sf1-${me}-${Math.random().toString(36).slice(2, 6)}`,
       connectTimeout: 6000,
@@ -223,7 +239,7 @@ export function createPresence(myId?: string): Presence {
       }
     });
   }
-  connect();
+  void connect();
 
   // forget people who stopped sending
   const sweep = setInterval(() => {
@@ -252,7 +268,7 @@ export function createPresence(myId?: string): Presence {
     if (!pending || !client?.connected) return;
     const { x, z, yaw, light, nick, held } = pending;
     follow(x, z);
-    client.publish(`${ROOT}/pos/${areaOf(x, z)}/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0 }));
+    client.publish(`${ROOT}/pos/${areaOf(x, z)}/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0, k: SENDER }));
     if (Date.now() - lastBeacon > BEACON_MS) {
       lastBeacon = Date.now();
       client.publish(`${ROOT}/where/${me}`, JSON.stringify({ x: Math.round(x), z: Math.round(z), n: nick }));
@@ -325,6 +341,14 @@ export function createPresence(myId?: string): Presence {
       lastTp = Date.now();
       client?.publish(`${ROOT}/tp/${me}`, JSON.stringify({ fx: Math.round(from.x), fz: Math.round(from.z), tx: Math.round(to.x), tz: Math.round(to.z), n: nick }));
     },
+    peek(x, z) {
+      if (!client?.connected) return;
+      // added on top of the current areas; arriving there drops the old ones (follow)
+      const add = areasAround(x, z).filter((k) => !subscribedAreas.has(k));
+      if (!add.length) return;
+      client.subscribe(add.map((k) => `${ROOT}/pos/${k}/+`));
+      for (const k of add) subscribedAreas.add(k);
+    },
     onTeleport(fn) {
       tpFns.push(fn);
     },
@@ -335,6 +359,7 @@ export function createPresence(myId?: string): Presence {
       worldFns.push(fn);
     },
     close() {
+      closed = true;
       clearInterval(sweep);
       client?.publish(`${ROOT}/bye/${me}`, "1");
       client?.end();

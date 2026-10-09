@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import type { Emote, Peer, Presence } from "./net";
 import { DEMONS, demonOf, demonTexture } from "./demons";
+import { release } from "./gpu";
 
 function glowTexture() {
   const c = document.createElement("canvas");
@@ -79,6 +80,8 @@ export type Others = {
   say: (id: string, text: string) => void;
   /** settings: show nicknames / speech bubbles above people */
   setShow: (names: boolean, chat: boolean) => void;
+  /** graphics tier: draw at most this many people (the nearest); the rest stay on the map */
+  setMax: (n: number) => void;
   emote: (id: string, kind: Emote) => void;
   update: (dt: number, t: number, px: number, pz: number) => { nearest: number; count: number };
 };
@@ -87,6 +90,7 @@ export function createOthers(presence: Presence): Others {
   const group = new THREE.Group();
   const glowTex = glowTexture();
   const views = new Map<string, View>();
+  let maxShown = Infinity;
   let showNames = true, showChat = true;
 
   function viewFor(p: Peer): View {
@@ -129,7 +133,7 @@ export function createOthers(presence: Presence): Others {
     let nearest = Infinity;
     for (const [id, v] of views) {
       if (!presence.peers.has(id)) {
-        group.remove(v.group);
+        release(v.group);
         views.delete(id);
       }
     }
@@ -147,7 +151,7 @@ export function createOthers(presence: Presence): Others {
         v.held.rotation.set(t * 1.2, t * 1.7, 0);
       }
       if (p.nick !== v.nick) {
-        v.group.remove(v.label);
+        release(v.label);
         v.label = nameSprite(p.nick);
         v.group.add(v.label);
         v.nick = p.nick;
@@ -161,7 +165,7 @@ export function createOthers(presence: Presence): Others {
         v.bubbleLife -= dt;
         (v.bubble.material as THREE.SpriteMaterial).opacity = showChat ? Math.max(0, Math.min(1, v.bubbleLife)) * Math.max(0, Math.min(1, (24 - d) / 8)) : 0;
         if (v.bubbleLife <= 0) {
-          v.group.remove(v.bubble);
+          release(v.bubble);
           v.bubble = null;
         }
       }
@@ -188,6 +192,7 @@ export function createOthers(presence: Presence): Others {
     }
     // real lanterns for the nearest four
     const near = [...views.values()].sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz));
+    near.forEach((v, k) => (v.group.visible = k < maxShown));
     pool.forEach((l, k) => {
       const v = near[k];
       if (!v) return (l.intensity = 0);
@@ -201,6 +206,9 @@ export function createOthers(presence: Presence): Others {
   return {
     group,
     update,
+    setMax(n) {
+      maxShown = n;
+    },
     setShow(names, chat) {
       showNames = names;
       showChat = chat;
@@ -208,7 +216,7 @@ export function createOthers(presence: Presence): Others {
     say(id, text) {
       const v = views.get(id);
       if (!v) return;
-      if (v.bubble) v.group.remove(v.bubble);
+      release(v.bubble);
       v.bubble = bubbleSprite(text);
       v.bubbleLife = 7;
       v.group.add(v.bubble);
