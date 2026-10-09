@@ -26,7 +26,7 @@ for (const f of assets) if (/^Labyrinth-.*\.css$/.test(f)) core.add(f);
 for (const f of assets) if (/^mqtt\.esm-.*\.js$/.test(f)) await follow(f);
 
 // the entrance (monogram halls) wall + floor images, exactly as zones.ts asks for them
-const pics = [0, 1, 2, 3].map((v) => `monogram-wall-${v}`).concat("monogram-floor-0").map((s) => `https://picsum.photos/seed/seeface1-${s}/512?grayscale`);
+const pics = [0, 1, 2, 3].map((v) => `monogram-wall-${v}`).concat("monogram-floor-0").flatMap((s) => [32, 512].map((px) => `https://picsum.photos/seed/seeface1-${s}/${px}?grayscale`));
 
 const sounds = (await readdir("public/sounds")).map((f) => `/sounds/${f}`);
 const WARM = [...[...core].map((f) => `/assets/${f}`), "/imgs/seeface-logo-transparent.png", ...sounds, ...pics];

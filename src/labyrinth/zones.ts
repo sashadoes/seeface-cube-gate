@@ -5,6 +5,7 @@
 // on the same infinite maze; a secret level is one zone everywhere.
 import * as THREE from "three";
 import { CELL, rnd } from "./maze";
+import { profile } from "./tiers";
 
 export const ZONE_CELLS = 10;
 export const LEVEL_OFFSET = 100_000; // metres between the surface and each secret level
@@ -187,7 +188,7 @@ function archivePage(g: CanvasRenderingContext2D, s: number, seed: number) {
  * brightness; sometimes the logo faintly on top. Tint comes from the material.
  */
 export function monoTexture(zone: ZoneDef, variant: number, opts: { floor?: boolean } = {}) {
-  const s = 512;
+  const s = profile().texture; // 256 on low: a quarter of the graphics memory
   const c = document.createElement("canvas");
   c.width = c.height = s;
   const g = c.getContext("2d")!;
@@ -196,12 +197,29 @@ export function monoTexture(zone: ZoneDef, variant: number, opts: { floor?: bool
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
+  t.anisotropy = profile().anisotropy;
 
   const seed = `${zone.kind}-${opts.floor ? "floor" : "wall"}-${variant}`;
+  const url = (px: number) => `https://picsum.photos/seed/seeface1-${seed}/${px}?grayscale`;
+  // progressive: a tiny blurry copy (~1 kB) shows at once, the full image replaces it
+  let full = false;
+  let done = () => {};
+  // resolves when the full picture is drawn, or it failed (the grey stays): never hangs
+  t.userData.ready = new Promise<void>((res) => (done = res));
+  const tiny = new Image();
+  tiny.crossOrigin = "anonymous";
+  tiny.onload = () => {
+    if (full) return;
+    g.filter = `grayscale(1) contrast(${zone.contrast}) brightness(${zone.bright * (opts.floor ? 0.75 : 1)}) blur(${s / 64}px)`;
+    g.drawImage(tiny, 0, 0, s, s);
+    g.filter = "none";
+    t.needsUpdate = true;
+  };
+  tiny.src = url(32);
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.onload = async () => {
+    full = true;
     g.filter = `grayscale(1) contrast(${zone.contrast}) brightness(${zone.bright * (opts.floor ? 0.75 : 1)})`;
     g.drawImage(img, 0, 0, s, s);
     g.filter = "none";
@@ -224,10 +242,15 @@ export function monoTexture(zone: ZoneDef, variant: number, opts: { floor?: bool
       g.globalAlpha = 1;
     }
     t.needsUpdate = true;
+    done();
   };
-  img.src = `https://picsum.photos/seed/seeface1-${seed}/512?grayscale`;
+  img.onerror = () => done();
+  img.src = url(512); // always 512: the same file the Service Worker keeps for every tier
   return t;
 }
+
+/** Resolves once a location texture's full picture is in (see monoTexture). */
+export const textureReady = (t: THREE.Texture | null | undefined): Promise<void> => (t?.userData.ready as Promise<void> | undefined) ?? Promise.resolve();
 
 /** Material for a zone's wall variant (built on first use). */
 const wallCache = new Map<string, THREE.MeshStandardMaterial>();
