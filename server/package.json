@@ -6,7 +6,8 @@
   "description": "Small API for seeface1: stores labyrinth sign-ups (nickname + optional email with consent) in MongoDB.",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "test": "node --test architects/*.test.mjs"
   },
   "engines": {
     "node": ">=20"

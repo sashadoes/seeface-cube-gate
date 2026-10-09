@@ -10,6 +10,11 @@ const pages = {
   artists: { title: "seeface1 · artists", description: "The agreement artists accept when they hang their work in the seeface1 labyrinth.", index: true },
   marks: { title: "seeface1 · marks", description: "seeface1 marks.", index: false },
   "the-eye": { title: "the eye", description: "", index: false },
+  architects: { title: "seeface1 · the Architects", description: "The labyrinth is choosing its first 100 Architects. Build a permanent room from your work, host shows, keep your IP.", index: true },
+  "architects/join": { title: "seeface1 · answer the call", description: "Apply to become one of the first 100 Architects of the seeface1 labyrinth.", index: true },
+  "architects/terms": { title: "seeface1 · Architect Terms", description: "The Architect Terms for seeface1 rooms.", index: true },
+  chamber: { title: "the Creation Chamber", description: "", index: false },
+  "admin/architects": { title: "architects · review", description: "", index: false },
 };
 
 const page = (path, p) =>

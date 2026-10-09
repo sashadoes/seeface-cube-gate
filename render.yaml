@@ -34,3 +34,17 @@ services:
         value: "3000" # Claude calls per day for all players together
       - key: ADMIN_KEY
         generateValue: true # copy it from Render → Environment to read /api/stats
+      # The Architects (/architects → /chamber → /admin/architects). ADMIN_KEY above also opens the review desk.
+      - key: CHAMBER_DAILY_LIMIT
+        value: "150" # SeeFace messages per Architect per day
+      - key: CHAMBER_DAILY_CAP
+        value: "5000" # SeeFace calls per day for everyone together
+      # email (sign-in links, "your door is open"): a Resend key + a sender on a verified domain; without them emails are only logged
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      # voice fallback for browsers without speech recognition (e.g. Instagram's in-app browser on iPhone):
+      # any OpenAI-compatible /audio/transcriptions endpoint; audio is never stored
+      - key: TRANSCRIBE_API_KEY
+        sync: false
