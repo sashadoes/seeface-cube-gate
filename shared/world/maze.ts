@@ -396,3 +396,28 @@ export function reachable(fromI: number, fromJ: number, toI: number, toJ: number
   }
   return false;
 }
+
+/** how many walls (solid or secret, they look the same and sound the same) a straight line crosses; capped */
+export function wallsBetween(x0: number, z0: number, x1: number, z1: number, cap = 4) {
+  let [i, j] = cellOf(x0, z0);
+  const [ti, tj] = cellOf(x1, z1);
+  const dx = x1 - x0, dz = z1 - z0;
+  const si = Math.sign(dx), sj = Math.sign(dz);
+  const tdx = dx !== 0 ? Math.abs(CELL / dx) : Infinity, tdz = dz !== 0 ? Math.abs(CELL / dz) : Infinity;
+  let tmx = dx !== 0 ? ((si > 0 ? (i + 1) * CELL - x0 : x0 - i * CELL) / Math.abs(dx)) : Infinity;
+  let tmz = dz !== 0 ? ((sj > 0 ? (j + 1) * CELL - z0 : z0 - j * CELL) / Math.abs(dz)) : Infinity;
+  let n = 0, guard = 0;
+  while ((i !== ti || j !== tj) && guard++ < 64) {
+    if (tmx < tmz) {
+      if (wallE(si > 0 ? i : i - 1, j).wall) n++;
+      i += si;
+      tmx += tdx;
+    } else {
+      if (wallS(i, sj > 0 ? j : j - 1).wall) n++;
+      j += sj;
+      tmz += tdz;
+    }
+    if (n >= cap) return cap;
+  }
+  return n;
+}

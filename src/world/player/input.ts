@@ -9,6 +9,8 @@ export type Input = {
   consumeJump: () => boolean;
   talkKey: boolean;
   onTalkKey: (fn: (down: boolean) => void) => void;
+  /** a quick tap/click on the world; return true to consume it (e.g. it hit a person) */
+  onTap: (fn: (x: number, y: number) => boolean) => void;
   stick: { active: boolean; ox: number; oy: number; x: number; y: number };
   dispose: () => void;
 };
@@ -20,6 +22,7 @@ export function createInput(el: HTMLElement): Input {
   const move = { x: 0, y: 0 };
   const stick = { active: false, ox: 0, oy: 0, x: 0, y: 0 };
   let talkFn: (down: boolean) => void = () => {};
+  let tapFn: (x: number, y: number) => boolean = () => false;
   const inp: Input = {
     move,
     look,
@@ -31,6 +34,7 @@ export function createInput(el: HTMLElement): Input {
       return j;
     },
     onTalkKey: (fn) => (talkFn = fn),
+    onTap: (fn) => (tapFn = fn),
     dispose: () => {},
   };
 
@@ -101,7 +105,7 @@ export function createInput(el: HTMLElement): Input {
     if (!p) return;
     ptrs.delete(e.pointerId);
     const quick = performance.now() - p.t < 260 && p.moved < 14;
-    if (quick && e.pointerType === "touch") jumpQueued = true;
+    if (quick && !tapFn(e.clientX, e.clientY) && e.pointerType === "touch") jumpQueued = true;
     if (p.role === "stick") {
       Object.assign(stick, { active: false, x: 0, y: 0 });
       move.x = move.y = 0;

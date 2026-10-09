@@ -59,3 +59,17 @@ describe("labyrinth", () => {
     throw new Error("no wall found");
   });
 });
+
+import { wallsBetween, wallS as wS } from "../../shared/world/maze.ts";
+describe("occlusion", () => {
+  it("counts zero walls inside one cell and one across a wall", () => {
+    expect(wallsBetween(SPAWN.x, SPAWN.z, SPAWN.x + 0.5, SPAWN.z + 0.5)).toBe(0);
+    const [si, sj] = cellOf(SPAWN.x, SPAWN.z);
+    for (let i = si - 8; i < si + 8; i++)
+      for (let j = sj - 8; j < sj + 8; j++)
+        if (wS(i, j).wall && !wS(i, j - 1).wall && !wS(i, j + 1).wall) {
+          expect(wallsBetween((i + 0.5) * CELL, (j + 0.5) * CELL, (i + 0.5) * CELL, (j + 1.5) * CELL)).toBe(1);
+          return;
+        }
+  });
+});
