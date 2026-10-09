@@ -16,8 +16,12 @@ const whenIdle = (fn: () => void) => {
   else addEventListener("load", go, { once: true });
 };
 
+// the Architects' pages (invite, chamber, review, rooms) never preload the labyrinth:
+// artists arrive from Instagram, often on mobile data, and the chamber needs the bandwidth
+const NO_WARM = /^\/(the-eye|architects|chamber|admin|room)(\/|$)/;
+
 export function startWarm() {
-  if (!import.meta.env.PROD || !("serviceWorker" in navigator) || location.pathname.startsWith("/the-eye")) return;
+  if (!import.meta.env.PROD || !("serviceWorker" in navigator) || NO_WARM.test(location.pathname)) return;
   whenIdle(async () => {
     try {
       await navigator.serviceWorker.register("/sw.js");
