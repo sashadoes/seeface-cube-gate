@@ -1,0 +1,103 @@
+.room-preview {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  &.walking {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+  }
+}
+.room-canvas {
+  position: absolute;
+  inset: 0;
+}
+.room-hint,
+.room-keys {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  text-align: center;
+  font-style: italic;
+  color: rgba(233, 228, 218, 0.6);
+  font-size: 14px;
+  pointer-events: none;
+}
+.room-keys {
+  bottom: max(14px, env(safe-area-inset-bottom));
+  font-family: ui-monospace, Menlo, monospace;
+  font-style: normal;
+  font-size: 12px;
+}
+.room-exit {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+  width: 46px;
+  height: 46px;
+  border-radius: 23px;
+  border: 1px solid rgba(233, 228, 218, 0.4);
+  background: rgba(0, 0, 0, 0.45);
+  color: #e9e4da;
+  font-size: 18px;
+  cursor: pointer;
+}
+.room-welcome {
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  transform: translateX(-50%);
+  width: min(86vw, 520px);
+  text-align: center;
+  color: #e9e4da;
+  text-shadow: 0 0 24px #000, 0 0 6px #000;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  pointer-events: none;
+  h2 {
+    font-weight: normal;
+    font-style: italic;
+    font-size: clamp(28px, 7vw, 44px);
+    margin: 0 0 12px;
+  }
+  p {
+    font-size: 19px;
+    font-style: italic;
+    margin: 0;
+    text-align: center;
+  }
+  &.on {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.room-stick {
+  position: absolute;
+  left: max(24px, env(safe-area-inset-left));
+  bottom: max(28px, env(safe-area-inset-bottom));
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  border: 1px solid rgba(233, 228, 218, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  touch-action: none;
+  display: grid;
+  place-items: center;
+  span {
+    width: 46px;
+    height: 46px;
+    border-radius: 23px;
+    background: rgba(233, 228, 218, 0.55);
+  }
+}
+.room-fail {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: #8d877c;
+  font-style: italic;
+}
