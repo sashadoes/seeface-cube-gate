@@ -20,7 +20,7 @@ export type VoiceAdapter = {
   dispose: () => void;
 };
 
-type Conn = { pc: RTCPeerConnection; link: Link; sender: RTCRtpSender | null; makingOffer: boolean; ignoreOffer: boolean; stream: MediaStream | null };
+type Conn = { pc: RTCPeerConnection; link: Link; sender: RTCRtpSender | null; stream: MediaStream | null };
 
 export function createMeshVoice(net: WorldNet, ice: () => RTCIceServer[]): VoiceAdapter {
   const conns = new Map<string, Conn>();
@@ -37,39 +37,41 @@ export function createMeshVoice(net: WorldNet, ice: () => RTCIceServer[]): Voice
 
   function attach(c: Conn) {
     const track = micOn && c.link.theyHearMe ? mic?.getAudioTracks()[0] ?? null : null;
-    void c.sender?.replaceTrack(track);
+    if (c.sender && c.sender.track !== track) void c.sender.replaceTrack(track);
+  }
+
+  // One audio m-line per pair, no glare: the initiator (smaller id, decided by the server) creates
+  // the transceiver and offers; the other side answers on the transceiver that offer created.
+  async function offer(c: Conn) {
+    try {
+      await c.pc.setLocalDescription(await c.pc.createOffer());
+      net.send({ t: "signal", to: c.link.peer, data: { sdp: c.pc.localDescription } });
+    } catch (e) {
+      console.warn("voice: offer failed", e);
+    }
   }
 
   function open(link: Link) {
     const pc = new RTCPeerConnection({ iceServers: ice() });
-    const c: Conn = { pc, link, sender: null, makingOffer: false, ignoreOffer: false, stream: null };
+    const c: Conn = { pc, link, sender: null, stream: null };
     conns.set(link.peer, c);
-    // one audio transceiver per link; direction follows who may hear whom
-    const tr = pc.addTransceiver("audio", { direction: "sendrecv" });
-    c.sender = tr.sender;
-    attach(c);
     pc.ontrack = (e) => {
-      if (!c.link.hearThem) return;
       const stream = e.streams[0] ?? new MediaStream([e.track]);
       c.stream = stream;
-      onVoice({ peer: link.peer, stream, kind: c.link.kind });
+      if (c.link.hearThem) onVoice({ peer: link.peer, stream, kind: c.link.kind });
     };
     pc.onicecandidate = (e) => e.candidate && net.send({ t: "signal", to: link.peer, data: { ice: e.candidate.toJSON() } });
-    // "perfect negotiation": the initiator is impolite, the other side yields on glare
-    pc.onnegotiationneeded = async () => {
-      try {
-        c.makingOffer = true;
-        await pc.setLocalDescription();
-        net.send({ t: "signal", to: link.peer, data: { sdp: pc.localDescription } });
-      } catch (e) {
-        console.warn("voice: offer failed", e);
-      } finally {
-        c.makingOffer = false;
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" && c.link.initiator) {
+        pc.restartIce();
+        void offer(c);
       }
     };
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed") pc.restartIce();
-    };
+    if (link.initiator) {
+      c.sender = pc.addTransceiver("audio", { direction: "sendrecv" }).sender;
+      attach(c);
+      void offer(c);
+    }
     return c;
   }
 
@@ -81,32 +83,34 @@ export function createMeshVoice(net: WorldNet, ice: () => RTCIceServer[]): Voice
     onGone(peer);
   }
 
+  const pendingIce = new Map<string, RTCIceCandidateInit[]>();
   net.on("signal", async (m) => {
-    let c = conns.get(m.from);
+    const c = conns.get(m.from);
     if (!c) return; // the server only relays for links we have; ignore stragglers
     const data = m.data as { sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit };
     const pc = c.pc;
     try {
       if (data.sdp) {
-        const collision = data.sdp.type === "offer" && (c.makingOffer || pc.signalingState !== "stable");
-        c.ignoreOffer = c.link.initiator && collision;
-        if (c.ignoreOffer) return;
         await pc.setRemoteDescription(data.sdp);
         if (data.sdp.type === "offer") {
-          await pc.setLocalDescription();
+          const tr = pc.getTransceivers()[0];
+          if (tr) {
+            tr.direction = "sendrecv";
+            c.sender = tr.sender;
+            attach(c);
+          }
+          await pc.setLocalDescription(await pc.createAnswer());
           net.send({ t: "signal", to: m.from, data: { sdp: pc.localDescription } });
         }
+        for (const cand of pendingIce.get(m.from) ?? []) await pc.addIceCandidate(cand).catch(() => {});
+        pendingIce.delete(m.from);
       } else if (data.ice) {
-        try {
-          await pc.addIceCandidate(data.ice);
-        } catch (e) {
-          if (!c.ignoreOffer) throw e;
-        }
+        if (!pc.remoteDescription) pendingIce.set(m.from, [...(pendingIce.get(m.from) ?? []), data.ice]);
+        else await pc.addIceCandidate(data.ice).catch(() => {});
       }
     } catch (e) {
       console.warn("voice: signal failed", e);
     }
-    c = undefined;
   });
 
   return {

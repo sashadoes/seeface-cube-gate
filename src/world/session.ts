@@ -173,7 +173,7 @@ export function startSession(game: Game) {
   });
 
   // positions at 8 Hz, audio + avatars every frame
-  let sendAcc = 0, lastT = 0;
+  let sendAcc = 0, lastT = 0, lastTalkSent = 0;
   game.on("frame", (t) => {
     const dt = Math.min(0.1, t - lastT);
     lastT = t;
@@ -184,6 +184,11 @@ export function startSession(game: Game) {
       net.send({ t: "pos", x: p.x, y: p.y, z: p.z, f: p.facing, falling: game.falling() });
     }
     const st = ui.get();
+    // keep the server's "live" state fresh while the mic is open (it drops stale talk after 15 s)
+    if (st.live && performance.now() - lastTalkSent > 5000) {
+      lastTalkSent = performance.now();
+      net.send({ t: "talk", on: true, whisper: st.live === "whisper" });
+    }
     others.animate(t, dt, (id) => voices.level(id), game.body, { muted: new Set(st.mutes), follows: new Set(st.follows) }, () => getAudio().sfx2.boop());
     const myRoom = st.room;
     voices.update({ x: p.x, y: Math.max(0, p.y), z: p.z, yaw: game.input.look.yaw, room: myRoom, acoustic: myRoom ? roomById(myRoom)?.acoustic ?? null : null }, others.poses());
@@ -228,6 +233,7 @@ export function startSession(game: Game) {
       a.ctx.createMediaStreamSource(v.micStream()!).connect(micAnalyser);
     }
     net.send({ t: "talk", on, whisper });
+    lastTalkSent = performance.now();
     ui.set({ live: on ? (whisper ? "whisper" : "talk") : false, ...(on ? {} : { locked: false }) });
     if (on) {
       funnel("spoke");

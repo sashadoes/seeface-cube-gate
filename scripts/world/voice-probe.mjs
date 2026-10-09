@@ -24,4 +24,5 @@ await B.evaluate(() => window.__world.session.talk(true));
 const heard = await A.waitForFunction(() => window.__world.ui.get().heardVoice, null, { timeout: 20000 }).then(() => true, () => false);
 const out = await A.evaluate(() => ({ voices: window.__world.session.voices.count(), act: window.__world.session.voices.activity(), rooms: window.__world.ui.get().rooms.find((r) => r.id === "night-shift") }));
 console.log(JSON.stringify({ heard, msToHear: Date.now() - t0, ...out }));
+if (process.argv[3]) { await A.evaluate(() => { const g = window.__world.game; g.input.look.pitch = 0.5; }); await A.waitForTimeout(800); await A.screenshot({ path: process.argv[3] }); }
 await browser.close();
