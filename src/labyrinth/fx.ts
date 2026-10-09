@@ -9,6 +9,7 @@
 //   · aurora ribbons waving in the sky (the open, the hall, the ship)
 // Off on "low" quality or when "glow & effects" is switched off in settings.
 import * as THREE from "three";
+import { profile } from "./tiers";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
@@ -199,6 +200,7 @@ export function createFx(renderer: THREE.WebGLRenderer, scene: THREE.Scene, came
       if (vibe.signal) film.uniforms.signal.value = Math.min(1, Math.max(danger * 0.7, dropT > 0 ? 0.6 + Math.random() * 0.4 : 0));
       // motes follow you, drifting and twinkling
       motes.position.set(me.x, 0, me.z);
+      mg.setDrawRange(0, Math.round(MOTES * profile().particles)); // fewer on lower tiers
       const a = mg.getAttribute("position") as THREE.BufferAttribute;
       const arr = a.array as Float32Array;
       for (let k = 0; k < MOTES; k++) {

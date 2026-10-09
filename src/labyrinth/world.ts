@@ -185,7 +185,7 @@ export function createWorld(): World {
     release(precip);
     precip = null;
     if (["rain", "drizzle", "storm", "snow"].includes(w.kind)) {
-      const n = w.kind === "snow" ? 900 : w.kind === "drizzle" ? 500 : 1400;
+      const n = Math.round((w.kind === "snow" ? 900 : w.kind === "drizzle" ? 500 : 1400) * profile().particles);
       const pos = new Float32Array(n * 3);
       for (let k = 0; k < n; k++) pos.set([(Math.random() - 0.5) * 24, Math.random() * WALL_H, (Math.random() - 0.5) * 24], k * 3);
       const geo = new THREE.BufferGeometry();

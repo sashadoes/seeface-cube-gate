@@ -13,6 +13,7 @@ import type { Sound } from "./sound";
 import { track } from "../analytics";
 import menu from "./dream-menu.json";
 import { release } from "./gpu";
+import { profile } from "./tiers";
 
 type Shape = (typeof menu.shapes)[number];
 export type DreamGift = "blood1" | "blood3" | "light" | "float" | "colours" | "nothing";
@@ -288,6 +289,7 @@ export function createDream(sound: Sound, overlay: HTMLElement) {
       if (pz - pPos[k + 2] > BOX) pPos[k + 2] += BOX * 2;
     }
     pGeo.attributes.position.needsUpdate = true;
+    pGeo.setDrawRange(0, Math.round(N * profile().particles)); // fewer on lower tiers
     if (kind === "stars" || kind === "glitter") pMat.opacity = 0.6 + Math.sin(t * 6) * 0.4;
     else pMat.opacity = 1;
   }

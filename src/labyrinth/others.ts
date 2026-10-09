@@ -80,6 +80,8 @@ export type Others = {
   say: (id: string, text: string) => void;
   /** settings: show nicknames / speech bubbles above people */
   setShow: (names: boolean, chat: boolean) => void;
+  /** graphics tier: draw at most this many people (the nearest); the rest stay on the map */
+  setMax: (n: number) => void;
   emote: (id: string, kind: Emote) => void;
   update: (dt: number, t: number, px: number, pz: number) => { nearest: number; count: number };
 };
@@ -88,6 +90,7 @@ export function createOthers(presence: Presence): Others {
   const group = new THREE.Group();
   const glowTex = glowTexture();
   const views = new Map<string, View>();
+  let maxShown = Infinity;
   let showNames = true, showChat = true;
 
   function viewFor(p: Peer): View {
@@ -189,6 +192,7 @@ export function createOthers(presence: Presence): Others {
     }
     // real lanterns for the nearest four
     const near = [...views.values()].sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz));
+    near.forEach((v, k) => (v.group.visible = k < maxShown));
     pool.forEach((l, k) => {
       const v = near[k];
       if (!v) return (l.intensity = 0);
@@ -202,6 +206,9 @@ export function createOthers(presence: Presence): Others {
   return {
     group,
     update,
+    setMax(n) {
+      maxShown = n;
+    },
     setShow(names, chat) {
       showNames = names;
       showChat = chat;

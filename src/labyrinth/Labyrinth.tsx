@@ -68,13 +68,18 @@ import { createBignord } from "./bignord";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
 import { DEFAULTS, hasSavedSettings, onSettings, setSettings, settings, type Settings } from "./settings";
-import { createPerf, detectTier } from "./perf";
+import { createPerf, decideTier, describeDevice } from "./perf";
+import { PROFILES, profile, type Tier } from "./tiers";
+import { readGraphics, saveGraphics } from "./graphics";
+import type { CheckState } from "./GraphicsCheck";
+import { TIER_NOTES } from "./tierNotes";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
 
 // opened on demand, so they don't weigh on the first frame
 const LabMap = lazy(() => import("./LabMap"));
+const GraphicsCheck = lazy(() => import("./GraphicsCheck"));
 const loadCard = () => import("./card");
 
 // /labyrinth: survive the infinite seeface1 maze.
@@ -661,6 +666,9 @@ function Game({ nick }: { nick: string }) {
   const dropRef = useRef<() => void>(() => {});
   const [snapState, setSnapState] = useState<"" | "busy" | "done">("");
   const [transit, setTransit] = useState<number | null>(null); // teleport progress 0–1
+  const [gfxCheck, setGfxCheck] = useState<CheckState | null>(null); // the device check screen
+  const gfxCheckRef = useRef<() => void>(() => {});
+  const gfxPickRef = useRef<(tier: Tier, how: "recommended" | "manual") => void>(() => {});
   const [hud, setHud] = useState<Hud>({ event: null, holding: false, level: 0, light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
   const strikeRef = useRef<() => void>(() => {});
   const [shareState, setShareState] = useState<"" | "busy" | "done">("");
@@ -669,8 +677,11 @@ function Game({ nick }: { nick: string }) {
     const el = host.current!;
     // sharp (retina) screens don't need antialiasing: it costs 4× the pixel work for an edge nobody can see
     const renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 1.5, powerPreference: "high-performance" });
-    // phones: lighter rendering so it stays smooth
-    const pixelRatio = (q: Settings["quality"]) => (q === "low" ? 0.75 : q === "high" ? Math.min(window.devicePixelRatio, 2) : Math.min(window.devicePixelRatio, isPhone ? 1.25 : 1.5));
+    // sharpness by tier (tiers.ts); low is a fixed 0.75 on every screen
+    const pixelRatio = (q: Settings["quality"]) => {
+      const cap = PROFILES[q].pixelCap[isPhone ? "phone" : "desktop"];
+      return q === "low" ? cap : Math.min(window.devicePixelRatio, cap);
+    };
     renderer.setPixelRatio(pixelRatio(settings().quality));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -688,8 +699,9 @@ function Game({ nick }: { nick: string }) {
     const fx = createFx(renderer, world.scene, camera, myVibe());
     const stopVibe = trackVibe();
     const perf = createPerf(renderer, world.scene, (pr) => fx.setPixelRatio(pr));
-    // first visit: pick a quality that suits this device
-    if (!hasSavedSettings()) setSettings({ quality: detectTier(renderer) });
+    // first visit: a guess right away, then the device check screen (graphics.ts) picks for real
+    const device = describeDevice(renderer);
+    if (!hasSavedSettings()) setSettings({ quality: device.hint });
     const hunter = createHunter();
     const residents = createResidents();
     const keepers = createKeepers();
@@ -1248,16 +1260,66 @@ function Game({ nick }: { nick: string }) {
 
     // settings: volumes, graphics, what's shown
     const sfx: [Howl, number][] = [[spinSfx, 0.5], [shardSfx, 0.6], [shiftSfx, 0.7], [caughtSfx, 0.8], [signalSfx, 0.35], [meetSfx, 0.5]];
+    let checking = false; // the device check is measuring
+    let fpsCap = profile().fps;
+    // idle: no touch / key / mouse for a while → fewer frames (cooler, less battery)
+    let lastInput = performance.now();
+    const poke = () => (lastInput = performance.now());
+    const inputEvents = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"] as const;
+    inputEvents.forEach((e) => window.addEventListener(e, poke, { passive: true }));
     const offSettings = onSettings((st) => {
       sound.setVolumes(st);
       radio.setVolume(st.radio * st.master);
       sfx.forEach(([h, base]) => h.volume(base * st.effects * st.master));
-      perf.setQuality(pixelRatio(st.quality), st.quality);
+      const pf = profile(st.quality);
+      if (!checking) perf.setQuality(pixelRatio(st.quality), st.quality);
+      fpsCap = pf.fps;
       world.setFlashes(st.flashes);
       others.setShow(st.showNames, st.showChat);
+      others.setMax(pf.maxPlayers);
       el.dataset.calm = st.flashes ? "" : "1";
-      fx.setEnabled(st.glow && st.quality !== "low");
-      immersive.setAllowed(st.quality === "high");
+      if (!checking) fx.setEnabled(st.glow && pf.post);
+      immersive.setAllowed(pf.shadows);
+    });
+
+    // ---------------------------------------------------------------- the device check (first visit)
+    // ~2.5 s on the HIGH look (not saved) measuring the real frame rate, then a
+    // suggestion; the world keeps running behind the dimmed screen.
+    const runCheck = async () => {
+      if (checking) return;
+      checking = true;
+      setGfxCheck({ phase: "checking", device: device.label });
+      await new Promise((r) => setTimeout(r, 900)); // let the first shaders compile
+      perf.setQuality(pixelRatio("high"), "high");
+      fx.setEnabled(settings().glow);
+      const fps = await perf.bench(2500);
+      checking = false;
+      const st = settings();
+      perf.setQuality(pixelRatio(st.quality), st.quality);
+      fx.setEnabled(st.glow && profile(st.quality).post);
+      const recommended = decideTier(device, fps);
+      setGfxCheck({ phase: "result", device: device.label, recommended, fps: Math.round(fps) });
+      track(`gfx-check-${recommended}`);
+    };
+    gfxCheckRef.current = () => void runCheck();
+    gfxPickRef.current = (tier, how) => {
+      setGfxCheck((c) => {
+        if (c?.phase === "result") saveGraphics({ device: c.device, recommended: c.recommended, fps: c.fps, chosen: how, at: Date.now() });
+        return null;
+      });
+      setSettings({ quality: tier });
+      track(`gfx-${how}-${tier}`);
+    };
+    const checkTimer = readGraphics() ? 0 : window.setTimeout(runCheck, 1200);
+
+    // safety net: still too slow at the lowest sharpness → one tier down, and say so
+    perf.onStruggle(() => {
+      const q = settings().quality;
+      if (q === "low" || checking || trip) return;
+      const next: Tier = q === "high" ? "medium" : "low";
+      setSettings({ quality: next });
+      sayRef.current(tr("graphics lowered to {tier} to keep it smooth · ⚙ settings → graphics to change", { tier: tr(next) }), true);
+      track(`gfx-auto-${next}`);
     });
 
     const hazards = createHazards(sound.ctx, sound.ambienceOut);
@@ -1532,12 +1594,17 @@ function Game({ nick }: { nick: string }) {
     let floodGrace = 0; // seconds the water can't knock you again
 
     const frame = (now: number) => {
-      // at most 60–72 frames a second: 120/144 Hz screens would otherwise make the graphics chip work twice as hard
-      if (now - last < 1000 / 75) {
+      // frame cap: 60–72 fps (120/144 Hz screens would double the GPU work), 30 on low;
+      // idle (no input) 30 s → 20 fps, 2 min → 10 fps; walking or touching wakes it at once
+      if (input.move.x || input.move.z) lastInput = now;
+      const idle = now - lastInput;
+      const minFrame = idle > 120_000 ? 100 : idle > 30_000 ? 50 : fpsCap === 30 ? 1000 / 36 : 1000 / 75;
+      if (now - last < minFrame) {
         raf = requestAnimationFrame(frame);
         return;
       }
-      const dt = Math.min((now - last) / 1000, 0.05);
+      const dtReal = Math.min((now - last) / 1000, 0.5);
+      const dt = Math.min(dtReal, 0.05);
       last = now;
       const t = now / 1000;
 
@@ -2261,7 +2328,7 @@ function Game({ nick }: { nick: string }) {
       }
       fx.setDanger(alive ? lastDanger : 0);
       fx.update(dt, t, { x: pos.x, z: pos.z, moving: Math.hypot(vel.x, vel.z) > 0.6, sky, zoneTint: world.zone().panel });
-      perf.frame(dt, camera);
+      if (idle < 30_000) perf.frame(dtReal, camera); // idle frames are slow on purpose: don't let them count
       sweep(world.scene);
       immersive.update(dt, perf.info().scale, alive ? lastDanger : 0);
       if (trip) {
@@ -2318,6 +2385,8 @@ function Game({ nick }: { nick: string }) {
       stopVibe();
       stations.stop();
       offSettings();
+      clearTimeout(checkTimer);
+      inputEvents.forEach((e) => window.removeEventListener(e, poke));
       clearInterval(rememberTimer);
       window.removeEventListener("pagehide", remember);
       document.removeEventListener("visibilitychange", rememberHidden);
@@ -3114,6 +3183,20 @@ function Game({ nick }: { nick: string }) {
                       <option value="high">{tr("high (sharpest)")}</option>
                     </select>
                   </label>
+                  <p className="note">{tr(TIER_NOTES[st.quality])}</p>
+                  {(() => {
+                    const g = readGraphics();
+                    return g ? <p className="note">{tr("recommended for {device}: {tier}", { device: tr(g.device), tier: tr(g.recommended) })}</p> : null;
+                  })()}
+                  <button
+                    className="lab-settings-link"
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      gfxCheckRef.current();
+                    }}
+                  >
+                    {tr("check my device again")}
+                  </button>
                   <label className="slider">
                     <span>{tr("field of view")}</span>
                     <input type="range" min={60} max={90} step={1} value={st.fov} onChange={(e) => setSettings({ fov: Number(e.target.value) })} />
@@ -3258,6 +3341,14 @@ function Game({ nick }: { nick: string }) {
       </div>
 
       {transit !== null && <Transit progress={transit} />}
+
+      {gfxCheck && (
+        <Suspense fallback={null}>
+          <div onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
+            <GraphicsCheck state={gfxCheck} current={settings().quality} onPick={(tier, how) => gfxPickRef.current(tier, how)} />
+          </div>
+        </Suspense>
+      )}
 
       {mapOpen && mapRef.current && <Suspense fallback={null}><LabMap source={mapRef.current} nick={nick} cards={cards} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} /></Suspense>}
 

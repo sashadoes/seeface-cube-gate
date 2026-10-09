@@ -1577,6 +1577,15 @@
     color: #6f6a5c;
   }
 
+  .lab-settings-link {
+    all: unset;
+    cursor: pointer;
+    justify-self: start;
+    font: italic 14px "Times New Roman", serif;
+    color: #cfc6b8;
+    border-bottom: 1px solid rgba(207, 198, 184, 0.35);
+  }
+
   .keys {
     display: grid;
     grid-template-columns: 1fr 1fr;
