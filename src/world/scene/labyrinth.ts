@@ -24,6 +24,8 @@ export type Labyrinth = {
   rooms: () => RoomPlace[];
   /** open a hole under (x, z) — for radio jumps and the onboarding drop; null closes it */
   portal: (at: { x: number; z: number; r: number } | null) => void;
+  /** owned rooms (plots) that exist right now, so they get a sign + light like curated rooms */
+  setOwned: (rooms: { id: string; name: string }[]) => void;
   fog: { color: THREE.Color; density: number };
   drawInfo: () => { walls: number; chunks: string };
 };
@@ -86,6 +88,10 @@ export function createLabyrinth(): Labyrinth {
   let visibleRooms: RoomPlace[] = [];
   let visibleWells: Well[] = [];
   let builtKey = "";
+  const ownedInfo = new Map<string, string>();
+  const OWNED_THEME = { floor: 0x1a1426, wall: 0x2c2440, light: 0xffd8a0, neon: 0xffd36e };
+  const themeOf = (id: string) => roomById(id)?.theme ?? (ownedInfo.has(id) ? OWNED_THEME : null);
+  const titleOf = (id: string) => roomById(id)?.name ?? ownedInfo.get(id) ?? "";
   let wallCount = 0;
 
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
@@ -101,8 +107,8 @@ export function createLabyrinth(): Labyrinth {
       if (li < 0 || lj < 0 || li >= CH || lj >= CH) return null;
       const ri = c.roomAt[lj * CH + li];
       if (ri < 0) return null;
-      const def = roomById(c.rooms[ri].id);
-      return def ? new THREE.Color(def.theme.wall) : new THREE.Color(0x2a2630);
+      const th = themeOf(c.rooms[ri].id);
+      return th ? new THREE.Color(th.wall) : new THREE.Color(0x2a2630);
     };
     const DEFAULT_TINT = new THREE.Color(0x5a5468);
     for (const c of chunks) {
@@ -180,19 +186,18 @@ export function createLabyrinth(): Labyrinth {
 
     // rooms: floor tint + signs
     floorUniforms.uRooms.value.forEach((v, i) => v.set(0, 0, 0, 0));
-    const near = visibleRooms.filter((r) => roomById(r.id));
+    const near = visibleRooms.filter((r) => themeOf(r.id));
     near.slice(0, MAX_ROOMS).forEach((r, i) => {
       const b = roomGeometry(r).bounds;
       floorUniforms.uRooms.value[i].set(b.x0, b.z0, b.x1, b.z1);
-      floorUniforms.uRoomCol.value[i].set(roomById(r.id)!.theme.floor).multiplyScalar(3.2);
+      floorUniforms.uRoomCol.value[i].set(themeOf(r.id)!.floor).multiplyScalar(3.2);
     });
     const keep = new Set<string>();
     for (const r of near) {
       keep.add(r.id);
       if (!signs.has(r.id)) {
-        const def = roomById(r.id)!;
         const g = roomGeometry(r);
-        const sign = makeSign(def.name, def.theme.neon);
+        const sign = makeSign(titleOf(r.id), themeOf(r.id)!.neon);
         sign.mesh.position.set(g.door.x - g.door.nx * 0.05, WALL_H + 0.75, g.door.z - g.door.nz * 0.05);
         sign.mesh.rotation.y = Math.atan2(g.door.nx, g.door.nz);
         group.add(sign.mesh);
@@ -229,10 +234,11 @@ export function createLabyrinth(): Labyrinth {
   function refreshDoors() {
     doorList.length = 0;
     for (const r of visibleRooms) {
-      const def = roomById(r.id);
+      const th = themeOf(r.id);
+      if (!th) continue; // unclaimed plots stay dark
       const g = roomGeometry(r);
-      doorList.push({ x: g.door.x - g.door.nx * 1.2, z: g.door.z - g.door.nz * 1.2, col: new THREE.Color(def?.theme.light ?? 0x806040), id: r.id });
-      doorList.push({ x: g.center.x, z: g.center.z, col: new THREE.Color(def?.theme.light ?? 0x806040), id: r.id + "#in" });
+      doorList.push({ x: g.door.x - g.door.nx * 1.2, z: g.door.z - g.door.nz * 1.2, col: new THREE.Color(th.light), id: r.id });
+      doorList.push({ x: g.center.x, z: g.center.z, col: new THREE.Color(th.light), id: r.id + "#in" });
     }
   }
 
@@ -242,6 +248,20 @@ export function createLabyrinth(): Labyrinth {
 
   return {
     group,
+    setOwned(list) {
+      const key = list.map((r) => r.id + r.name).join("|");
+      if (key === [...ownedInfo].map(([id, n]) => id + n).join("|")) return;
+      ownedInfo.clear();
+      list.forEach((r) => ownedInfo.set(r.id, r.name));
+      // names may have changed: drop owned signs and rebuild
+      for (const [id, sign] of signs)
+        if (id.startsWith("plot:")) {
+          group.remove(sign.mesh);
+          sign.dispose();
+          signs.delete(id);
+        }
+      builtKey = "";
+    },
     portal(at) {
       const v = floorUniforms.uWells.value[MAX_WELLS - 1];
       if (!at) {

@@ -1,6 +1,7 @@
 // Ties the pieces together: world server ⇄ game ⇄ voice ⇄ spatial audio ⇄ UI state.
 import { useSyncExternalStore } from "react";
 import type { AgeState, RoomSummary, Role, ServerMsg } from "../../shared/world/protocol.ts";
+import type { OwnedRoom } from "../../shared/world/ledger.ts";
 import { roomById } from "../../shared/world/rooms.ts";
 import type { Game } from "./engine/game.ts";
 import type { BlobKind } from "./avatar/blob.ts";
@@ -41,6 +42,9 @@ export type UiState = {
   reactions: { emoji: string; at: number; id: number }[];
   heardVoice: boolean;
   roomAudio: boolean;
+  myRoom: OwnedRoom | null;
+  editing: boolean;
+  gifts: { emoji: string; from: string; to: string; at: number; id: number }[];
 };
 
 function createStore<T extends object>(init: T) {
@@ -102,6 +106,9 @@ export const ui = createStore<UiState>({
   reactions: [],
   heardVoice: false,
   roomAudio: true,
+  myRoom: null,
+  editing: false,
+  gifts: [],
 });
 export const useUi = <K extends keyof UiState>(k: K) => useSyncExternalStore(ui.subscribe, () => ui.get()[k]);
 
@@ -117,6 +124,7 @@ export function startSession(game: Game) {
   let ice: RTCIceServer[] = [];
   let previewPeers: string[] = [];
   let firstVoiceAt = 0;
+  let jumped = false;
   const notice = (text: string) => ui.set({ notice: { text, at: Date.now() } });
 
   // my own voice level (for my ring)
@@ -153,7 +161,23 @@ export function startSession(game: Game) {
     ui.set({ rooms: m.rooms });
     for (const r of m.rooms) game.lab.setRoomStatus(r.id, { people: r.people, speaking: r.speaking, transcribed: r.transcribed, variant: r.variant });
     scape.setCrowd(m.rooms);
+    game.setOwnedRooms(m.rooms.filter((r) => r.id.startsWith("plot:")).map((r) => ({ id: r.id, name: r.name, decor: r.decor ?? [] })));
   });
+  net.on("myRoom", (m) => ui.set({ myRoom: m.room }));
+  net.on("gift", (m) => {
+    ui.set({ gifts: [...ui.get().gifts.filter((g) => Date.now() - g.at < 3000), { emoji: m.emoji, from: m.fromName, to: m.toName, at: Date.now(), id: ++reactionId }] });
+    // a rising sparkling chime + whoosh overhead, for the whole room
+    getAudio().sfx2.chime();
+    getAudio().sfx2.whoosh(0.8);
+    const to = m.to === ui.get().me ? game.position() : others.poses().get(m.to);
+    const from = m.from === ui.get().me ? game.position() : others.poses().get(m.from);
+    if (to && from) game.flyGift(m.emoji, from, to);
+  });
+  // invite links drop you straight into the room; mock payments complete on return (dev only)
+  const params = new URLSearchParams(location.search);
+  const inviteCode = params.get("invite");
+  if (inviteCode) net.on("welcome", () => net.send({ t: "invite", code: inviteCode }));
+  if (params.get("paid")) setTimeout(() => (funnel("purchased"), notice("thank you. your coins are on their way.")), 1500);
   net.on("links", (m) => {
     ui.set({ room: m.room, canSpeak: m.canSpeak, stage: m.stage, role: m.role });
     if (!m.canSpeak && ui.get().live) talk(false);
@@ -326,7 +350,12 @@ export function startSession(game: Game) {
       game.setBlob(blob as BlobKind);
       net.send({ t: "profile", name, blob });
     },
-    jumpTo: (room: string) => net.send({ t: "fallTo", room }),
+    jumpTo(room: string) {
+      jumped = true;
+      net.send({ t: "fallTo", room });
+    },
+    /** the player already chose where to go (the auto-drop must never override that) */
+    hasJumped: () => jumped,
     preview(room: string | null) {
       net.send({ t: "preview", room });
       // previews are heard even with the room radio off
@@ -341,6 +370,46 @@ export function startSession(game: Game) {
     spinQuest: () => !ui.get().quests.spinRadio && net.send({ t: "quest", id: "spin-radio" }),
     pick: (ndc: { x: number; y: number }) => others.pick(ndc, game.camera),
     firstVoiceAt: () => firstVoiceAt,
+    buyRoom: () => net.send({ t: "buyRoom" }),
+    roomEdit: (p: { name?: string; topic?: string; public?: boolean }) => net.send({ t: "roomEdit", ...p }),
+    decorBuy: (kind: string) => net.send({ t: "decorBuy", kind }),
+    decorMove: (index: number, x: number, z: number, rot: number) => net.send({ t: "decorMove", index, x, z, rot }),
+    decorRemove: (index: number) => net.send({ t: "decorRemove", index }),
+    gift: (to: string, gift: string) => net.send({ t: "gift", to, gift, key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }),
+    /** editing your room: drag decor around on the floor (owner only; the server clamps it inside) */
+    setEditing(on: boolean) {
+      ui.set({ editing: on });
+      if (!on) return game.input.onDrag(null);
+      let grabbed: { index: number; rot: number } | null = null;
+      game.input.onDrag({
+        down: (x, y) => {
+          const mine = ui.get().myRoom;
+          const f = game.floorAt(x, y);
+          if (!mine || !f || ui.get().room !== mine.id) return false;
+          const d = game.props.nearest(mine.id, f.x, f.z);
+          if (!d) return false;
+          grabbed = { index: d.index, rot: d.rot };
+          return true;
+        },
+        move: (x, y) => {
+          const mine = ui.get().myRoom;
+          const f = game.floorAt(x, y);
+          if (!grabbed || !mine || !f) return;
+          // move it locally right away; the server confirms (and clamps) on release
+          const decor = mine.decor.map((d, i) => (i === grabbed!.index ? { ...d, x: f.x, z: f.z } : d));
+          ui.set({ myRoom: { ...mine, decor } });
+          game.setOwnedRooms(ui.get().rooms.filter((r) => r.id.startsWith("plot:")).map((r) => ({ id: r.id, name: r.name, decor: r.id === mine.id ? decor : r.decor ?? [] })));
+        },
+        up: () => {
+          const mine = ui.get().myRoom;
+          if (grabbed && mine) {
+            const d = mine.decor[grabbed.index];
+            net.send({ t: "decorMove", index: grabbed.index, x: d.x, z: d.z, rot: d.rot });
+          }
+          grabbed = null;
+        },
+      });
+    },
     /** HTTP calls to the world server, signed with our session token */
     async api<T>(path: string, body?: unknown): Promise<T | null> {
       try {

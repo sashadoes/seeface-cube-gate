@@ -1,0 +1,26 @@
+// Dev probe: buy coins (mock), own a room, add decor, fall into it, screenshot with ME open.
+import { chromium, devices } from "@playwright/test";
+const shot = process.argv[2];
+const b = await chromium.launch({ channel: "chrome", args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
+const p = await (await b.newContext({ ...devices["Pixel 7"] })).newPage();
+p.on("pageerror", (e) => console.log("pageerror", e.message));
+await p.goto("http://localhost:5311/world/?flags=-onboarding");
+await p.waitForFunction(() => window.__world?.ui.get().connected);
+for (let i = 0; i < 2; i++) await p.evaluate(async () => { const r = await window.__world.session.api("/pay/checkout", { pack: "small" }); await window.__world.session.api("/pay/mock-complete", { id: new URL(r.url).searchParams.get("mockpay") }); });
+await p.waitForFunction(() => window.__world.ui.get().coins >= 500);
+await p.evaluate(() => window.__world.session.buyRoom());
+await p.waitForFunction(() => !!window.__world.ui.get().myRoom);
+for (const k of ["cushion", "tv", "plant", "ball"]) await p.evaluate((k) => window.__world.session.decorBuy(k), k);
+await p.evaluate(() => window.__world.session.roomEdit({ name: "velvet's den", topic: "late night records" }));
+await p.waitForTimeout(500);
+await p.evaluate(() => window.__world.session.jumpTo(window.__world.ui.get().myRoom.id));
+await p.waitForFunction(() => window.__world.ui.get().room?.startsWith("plot:"), null, { timeout: 15000 });
+await p.waitForTimeout(2500);
+await p.evaluate(() => { window.__world.game.input.look.pitch = 0.6; });
+await p.waitForTimeout(800);
+if (shot) await p.screenshot({ path: shot.replace(".png", "-world.png") });
+await p.getByTestId("me").click();
+await p.waitForTimeout(400);
+if (shot) await p.screenshot({ path: shot });
+console.log(JSON.stringify(await p.evaluate(() => ({ coins: window.__world.ui.get().coins, room: window.__world.ui.get().room, decor: window.__world.ui.get().myRoom.decor.length, stats: window.__world.stats() }))));
+await b.close();

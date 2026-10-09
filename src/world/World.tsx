@@ -11,6 +11,7 @@ import { Composer } from "./ui/Composer.tsx";
 import { Radio } from "./ui/Radio.tsx";
 import { Onboarding } from "./ui/Onboarding.tsx";
 import { Me } from "./ui/Me.tsx";
+import { MyRoom } from "./ui/MyRoom.tsx";
 import { flag } from "./flags.ts";
 
 const phone = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
@@ -26,6 +27,8 @@ export function World() {
   const [me, setMe] = useState(false);
   const [onboarding, setOnboarding] = useState(() => flag("onboarding") && !seen("sf1w.onboarded"));
   const quests = useUi("quests");
+  const editing = useUi("editing");
+  const gifts = useUi("gifts");
   const room = useUi("room");
   const card = useUi("card");
   const coins = useUi("coins");
@@ -80,7 +83,7 @@ export function World() {
     if (!session || !game || onboarding || dropped.current) return;
     dropped.current = true;
     const go = () => {
-      if (!game.room()) session.jumpTo(session.busiest());
+      if (!game.room() && !game.falling() && !session.hasJumped()) session.jumpTo(session.busiest());
     };
     if (ui.get().rooms.length) setTimeout(go, 300);
     else {
@@ -96,7 +99,7 @@ export function World() {
 
   const showNotice = notice && Date.now() - notice.at < 4000;
   const showHost = host && Date.now() - host.at < 9000;
-  useTicker(!!(showNotice || showHost || reactions.length));
+  useTicker(!!(showNotice || showHost || reactions.length || gifts.length));
 
   return (
     <div className={`w-root ${live ? "is-live" : ""}`}>
@@ -133,7 +136,24 @@ export function World() {
       {session && card && <Card session={session} id={card} onClose={() => ui.set({ card: null })} />}
       {session && composer && <Composer session={session} onClose={() => setComposer(false)} />}
       {session && radio && <Radio session={session} onClose={() => setRadio(false)} />}
-      {session && me && <Me session={session} onClose={() => setMe(false)} />}
+      {session && me && (
+        <Me session={session} onClose={() => setMe(false)}>
+          <MyRoom session={session} onClose={() => setMe(false)} />
+        </Me>
+      )}
+      {session && editing && (
+        <div className="w-editbar">
+          drag your decor around
+          <button onClick={() => session.setEditing(false)}>done</button>
+        </div>
+      )}
+      <div className="w-reactions">
+        {gifts.filter((g) => Date.now() - g.at < 3000).map((g) => (
+          <div key={g.id} className="w-giftline">
+            {g.from} sent {g.to} {g.emoji}
+          </div>
+        ))}
+      </div>
       {session && onboarding && (
         <Onboarding
           session={session}

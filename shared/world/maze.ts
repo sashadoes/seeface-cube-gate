@@ -421,3 +421,10 @@ export function wallsBetween(x0: number, z0: number, x1: number, z1: number, cap
   }
   return n;
 }
+
+/** any room place by id: curated rooms and plots ("plot:cx,cz") */
+export function placeById(id: string): RoomPlace | null {
+  const m = /^plot:(-?\d+),(-?\d+)$/.exec(id);
+  if (m) return chunkAt(Number(m[1]), Number(m[2])).rooms.find((r) => r.id === id) ?? null;
+  return curatedRoomPlace(id);
+}

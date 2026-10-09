@@ -93,6 +93,7 @@ function credit(s: Session | null, user: string, delta: number, reason: Reason, 
 }
 const host = createHost({ send: (room, text) => roomMembers(room).forEach((s) => send(s, { t: "host", room, text, ai: true })), store });
 const economy = createEconomy({ store, sessions, credit, send, ownedRoomState });
+for (const id of Object.keys(store.data.ownedRooms)) ownedRoomState(id);
 
 // ------------------------------------------------------------------ rate limits (token buckets)
 const LIMITS: Record<string, [number, number]> = {
@@ -365,7 +366,7 @@ function onMessage(s: Session, m: ClientMsg) {
       return;
     }
     default:
-      economy.onMessage(s, m as { t: string });
+      economy.onMessage(s, m);
   }
 }
 
@@ -515,7 +516,7 @@ function summaries(): RoomSummary[] {
   for (const r of rooms.values()) {
     if (!r.public && !r.owner) continue;
     const members = [...r.members].map((id) => sessions.get(id)).filter((s): s is Session => !!s);
-    out.push({ id: r.id, name: r.name, topic: host.topicOf(r.id) ?? r.topic, people: members.length, speaking: members.filter((s) => s.talking).map((s) => s.user.name), stage: isStage(r), transcribed: members.some((s) => s.user.transcribe), owner: r.owner ? store.data.users[r.owner]?.name ?? null : null, public: r.public, hostAi: r.hostAi, variant: host.variantOf(r.id) });
+    out.push({ id: r.id, name: r.name, topic: host.topicOf(r.id) ?? r.topic, people: members.length, speaking: members.filter((s) => s.talking).map((s) => s.user.name), stage: isStage(r), transcribed: members.some((s) => s.user.transcribe), owner: r.owner ? store.data.users[r.owner]?.name ?? null : null, public: r.public, hostAi: r.hostAi, variant: host.variantOf(r.id), ...(store.data.ownedRooms[r.id] ? { decor: store.data.ownedRooms[r.id].decor } : {}) });
   }
   return out;
 }

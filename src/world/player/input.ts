@@ -11,6 +11,8 @@ export type Input = {
   onTalkKey: (fn: (down: boolean) => void) => void;
   /** a quick tap/click on the world; return true to consume it (e.g. it hit a person) */
   onTap: (fn: (x: number, y: number) => boolean) => void;
+  /** take over a pointer for dragging something in the world (decor editing); down returns true to capture */
+  onDrag: (h: { down: (x: number, y: number) => boolean; move: (x: number, y: number) => void; up: () => void } | null) => void;
   stick: { active: boolean; ox: number; oy: number; x: number; y: number };
   dispose: () => void;
 };
@@ -23,6 +25,7 @@ export function createInput(el: HTMLElement): Input {
   const stick = { active: false, ox: 0, oy: 0, x: 0, y: 0 };
   let talkFn: (down: boolean) => void = () => {};
   let tapFn: (x: number, y: number) => boolean = () => false;
+  let dragH: { down: (x: number, y: number) => boolean; move: (x: number, y: number) => void; up: () => void } | null = null;
   const inp: Input = {
     move,
     look,
@@ -35,6 +38,7 @@ export function createInput(el: HTMLElement): Input {
     },
     onTalkKey: (fn) => (talkFn = fn),
     onTap: (fn) => (tapFn = fn),
+    onDrag: (h) => (dragH = h),
     dispose: () => {},
   };
 
@@ -61,12 +65,16 @@ export function createInput(el: HTMLElement): Input {
   };
 
   // pointers: one stick pointer, one look pointer; taps = jump
-  type P = { id: number; role: "stick" | "look"; sx: number; sy: number; lx: number; ly: number; t: number; moved: number };
+  type P = { id: number; role: "stick" | "look" | "drag"; sx: number; sy: number; lx: number; ly: number; t: number; moved: number };
   const ptrs = new Map<number, P>();
   const STICK_R = 56;
   const down = (e: PointerEvent) => {
     if ((e.target as HTMLElement).closest("button, .w-overlay, input")) return;
     el.setPointerCapture?.(e.pointerId);
+    if (dragH?.down(e.clientX, e.clientY)) {
+      ptrs.set(e.pointerId, { id: e.pointerId, role: "drag", sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), moved: 99 });
+      return;
+    }
     const touch = e.pointerType === "touch";
     const hasStick = [...ptrs.values()].some((p) => p.role === "stick");
     const role: P["role"] = touch && !hasStick && e.clientX < innerWidth * 0.55 ? "stick" : "look";
@@ -80,6 +88,10 @@ export function createInput(el: HTMLElement): Input {
     p.moved += Math.abs(dx) + Math.abs(dy);
     p.lx = e.clientX;
     p.ly = e.clientY;
+    if (p.role === "drag") {
+      dragH?.move(e.clientX, e.clientY);
+      return;
+    }
     if (p.role === "look") {
       const k = e.pointerType === "touch" ? 0.0065 : 0.0045;
       look.yaw -= dx * k;
@@ -104,6 +116,10 @@ export function createInput(el: HTMLElement): Input {
     const p = ptrs.get(e.pointerId);
     if (!p) return;
     ptrs.delete(e.pointerId);
+    if (p.role === "drag") {
+      dragH?.up();
+      return;
+    }
     const quick = performance.now() - p.t < 260 && p.moved < 14;
     if (quick && !tapFn(e.clientX, e.clientY) && e.pointerType === "touch") jumpQueued = true;
     if (p.role === "stick") {

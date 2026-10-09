@@ -1,8 +1,9 @@
 // The game: renderer, scene, third-person camera, the player's body + blob, falling through
 // holes, and the frame loop with dynamic resolution. React only talks to it through this API.
 import * as THREE from "three";
-import { CELL, WELL_R, curatedRoomPlace, districtAt, roomAtPoint, roomGeometry, SPAWN, type Well } from "../../../shared/world/maze.ts";
+import { CELL, WELL_R, curatedRoomPlace, placeById, districtAt, roomAtPoint, roomGeometry, SPAWN, type Well } from "../../../shared/world/maze.ts";
 import { createLabyrinth } from "../scene/labyrinth.ts";
+import { createProps, type Decor } from "../scene/props.ts";
 import { createBlob, type BlobKind } from "../avatar/blob.ts";
 import { createBody, dropAt, step, type StepEvent } from "../player/controller.ts";
 import { createInput } from "../player/input.ts";
@@ -30,7 +31,30 @@ export function createGame(canvas: HTMLCanvasElement, opts: { blob: BlobKind; ph
   const scene = new THREE.Scene();
   const lab = createLabyrinth();
   scene.background = lab.fog.color;
+  scene.fog = new THREE.FogExp2(lab.fog.color, lab.fog.density);
   scene.add(lab.group);
+  scene.add(new THREE.HemisphereLight(0x9a94c8, 0x1a1420, 1.1));
+  const props = createProps(scene);
+  let ownedDecor = new Map<string, Decor[]>();
+  let propsKey = "";
+  // gifts fly over the room in an arc from giver to receiver
+  const flights: { sprite: THREE.Sprite; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
+  const emojiTex = new Map<string, THREE.CanvasTexture>();
+  const texFor = (emoji: string) => {
+    let tx = emojiTex.get(emoji);
+    if (!tx) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 128;
+      const g = c.getContext("2d")!;
+      g.font = "96px serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(emoji, 64, 70);
+      tx = new THREE.CanvasTexture(c);
+      emojiTex.set(emoji, tx);
+    }
+    return tx;
+  };
 
   const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 140);
   const input = createInput(canvas);
@@ -49,7 +73,7 @@ export function createGame(canvas: HTMLCanvasElement, opts: { blob: BlobKind; ph
   let currentRoom: string | null = null;
 
   const destinationOf = (roomId: string) => {
-    const p = curatedRoomPlace(roomId) ?? curatedRoomPlace("first-words")!;
+    const p = placeById(roomId) ?? curatedRoomPlace("first-words")!;
     const g = roomGeometry(p);
     const a = Math.random() * Math.PI * 2, r = Math.random() * 2.2;
     return { x: g.center.x + Math.cos(a) * r, z: g.center.z + Math.sin(a) * r, id: p.id };
@@ -65,7 +89,12 @@ export function createGame(canvas: HTMLCanvasElement, opts: { blob: BlobKind; ph
 
   /** drop through a hole that opens right under you (radio JUMP IN, onboarding auto-drop) */
   function fallTo(roomId: string) {
-    if (fall) return;
+    // already falling: just change where you land (never silently drop a jump)
+    if (fall && !fall.landed) {
+      fall.target = roomId;
+      return;
+    }
+    if (fall?.landed) fall = null;
     const portal = { id: "portal", x: body.x, z: body.z, target: roomId };
     lab.portal({ x: body.x, z: body.z, r: 1.6 });
     body.inWell = portal;
@@ -171,6 +200,26 @@ export function createGame(canvas: HTMLCanvasElement, opts: { blob: BlobKind; ph
 
     updateCamera(dt);
     lab.update(body.x, body.z, camera.position, t);
+    const pk = lab.drawInfo().chunks;
+    if (pk !== propsKey) {
+      propsKey = pk;
+      props.set(lab.rooms(), ownedDecor);
+    }
+    props.update(dt, body, () => getAudio().sfx2.boop());
+    for (let i = flights.length - 1; i >= 0; i--) {
+      const f = flights[i];
+      f.t += dt / 1.4;
+      const k = Math.min(1, f.t);
+      f.sprite.position.lerpVectors(f.from, f.to, k);
+      f.sprite.position.y += Math.sin(k * Math.PI) * 5;
+      f.sprite.scale.setScalar(0.7 + Math.sin(k * Math.PI) * 0.8);
+      if (k >= 1) {
+        scene.remove(f.sprite);
+        (f.sprite.material as THREE.SpriteMaterial).dispose();
+        flights.splice(i, 1);
+        me.wobble(0.2);
+      }
+    }
     emit("frame", t);
     renderer.render(scene, camera);
 
@@ -220,6 +269,30 @@ export function createGame(canvas: HTMLCanvasElement, opts: { blob: BlobKind; ph
       return () => (listeners[k] = listeners[k].filter((f) => f !== fn) as never);
     },
     fallTo,
+    props,
+    flyGift(emoji: string, from: { x: number; z: number }, to: { x: number; z: number }) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFor(emoji), transparent: true, depthWrite: false, fog: false }));
+      sprite.renderOrder = 4;
+      scene.add(sprite);
+      flights.push({ sprite, from: new THREE.Vector3(from.x, 1.6, from.z), to: new THREE.Vector3(to.x, 1.4, to.z), t: 0 });
+    },
+    /** decor of owned rooms from the server's room list (everyone sees it) */
+    setOwnedRooms(rooms: { id: string; name: string; decor: Decor[] }[]) {
+      lab.setOwned(rooms.map((r) => ({ id: r.id, name: r.name })));
+      const next = new Map(rooms.map((r) => [r.id, r.decor]));
+      const k = JSON.stringify([...next]);
+      if (k !== JSON.stringify([...ownedDecor])) {
+        ownedDecor = next;
+        propsKey = "";
+      }
+    },
+    /** where on the floor (y = 0) a screen point lands */
+    floorAt(x: number, y: number) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1), camera);
+      const hit = new THREE.Vector3();
+      return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit) ? { x: hit.x, z: hit.z } : null;
+    },
     falling: () => !!fall,
     room: () => currentRoom,
     position: () => ({ x: body.x, y: body.y, z: body.z, facing }),

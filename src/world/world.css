@@ -146,3 +146,13 @@
 .w-dim.small { font-size: 11px; margin-top: 6px; }
 .w-overlay .w-back { width: 100%; margin-bottom: 8px; }
 .w-me-panel { max-height: calc(100dvh - 140px); overflow-y: auto; }
+
+.w-myroom { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.w-in { min-height: 42px; border-radius: 12px; border: 1px solid var(--w-line); background: rgba(0,0,0,.35); color: var(--w-ink); padding: 0 12px; font-size: 15px; }
+.w-decor-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.w-decor-grid button { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px; }
+.w-decor-grid small { color: #ffe7a8; font-size: 12px; }
+.w-editbar { position: absolute; top: calc(var(--w-safe-t) + 4px); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
+  background: rgba(255,214,110,.16); border: 1px solid rgba(255,214,110,.6); color: #ffe7a8; border-radius: 999px; padding: 6px 6px 6px 14px; font-size: 13px; }
+.w-editbar button { border: none; border-radius: 999px; background: #ffd36e; color: #1a1408; padding: 8px 14px; font-weight: 600; }
+.w-giftline { position: absolute; left: 50%; top: 32%; transform: translateX(-50%); font: italic 18px Georgia, serif; color: #ffe7a8; text-shadow: 0 0 12px rgba(255,214,110,.8); animation: w-fade 3s ease forwards; white-space: nowrap; }

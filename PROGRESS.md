@@ -11,3 +11,7 @@ not a phone's, so fps is CPU-bound evidence only. Real mid-range Android and iPh
 | M2 rooms + voice | — | — | — | — | **0.68 s** from mic press to heard (2 real Chrome pages, mesh, localhost; 3/3 runs) |
 | M3 radio | — | — | — | — | preview heard ≤ 1 s after the dial locks (radio probe) |
 | M4 onboarding (e2e) | 249 KB | 1.06 s | 60 / 60 | 18 | **4.5 s** from landing to first real voice (e2e, automated taps; a human reading the 3 cards adds ~10 s) |
+| M5 host + transcripts | — | — | — | — | (server integration tests, no client change in budget) |
+| M6 coins + rooms (final build) | **255 KB** | **1.02 s** | **57 / 60** | **26** | **4.5 s** from landing to first real voice (e2e, 2/2 runs) |
+
+Final build: world JS 91 KB + three.js 145 KB + React (gzip). Measured by `npm run measure` on 2026-10-09.

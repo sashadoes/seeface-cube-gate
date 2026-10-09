@@ -1,4 +1,6 @@
 // WebSocket messages between the world client and the world server. JSON, one object per frame.
+import type { OwnedRoom } from "./ledger.ts";
+
 // The server is authoritative: the client sends intents and positions; the server decides rooms,
 // who hears whom, who may speak, coins and moderation.
 
@@ -32,6 +34,8 @@ export type RoomSummary = {
   hostAi: boolean;
   /** the AI host swaps elements from the room's theme pack as the conversation moves (0-3) */
   variant: number;
+  /** owned rooms: their decor, so everyone sees it */
+  decor?: OwnedRoom["decor"];
 };
 
 /** a voice link the server allows: you may connect audio with this peer */
@@ -60,6 +64,14 @@ export type ClientMsg =
   | { t: "heard" }
   | { t: "quest"; id: "say-hi" | "spin-radio" }
   | { t: "forget" }
+  | { t: "buyRoom" }
+  | { t: "roomEdit"; name?: string; topic?: string; public?: boolean }
+  | { t: "decorBuy"; kind: string }
+  | { t: "decorMove"; index: number; x: number; z: number; rot: number }
+  | { t: "decorRemove"; index: number }
+  | { t: "invite"; code: string }
+  | { t: "gift"; to: string; gift: string; key: string }
+  | { t: "myRoom" }
   | { t: "ping" };
 
 export type ServerMsg =
@@ -75,6 +87,8 @@ export type ServerMsg =
   | { t: "notice"; text: string }
   | { t: "fallTo"; room: string; ok: boolean; reason?: string }
   | { t: "age"; state: AgeState; url?: string }
+  | { t: "myRoom"; room: OwnedRoom | null }
+  | { t: "gift"; from: string; to: string; emoji: string; fromName: string; toName: string }
   | { t: "pong" }
   | { t: "error"; code: string };
 

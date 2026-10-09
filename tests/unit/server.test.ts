@@ -166,3 +166,74 @@ describe("world server", { timeout: 20_000 }, () => {
     b.ws.close();
   });
 });
+
+describe("economy", { timeout: 20_000 }, () => {
+  const post = (path: string, token: string, body: unknown) => fetch(`${HTTP}${path}`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  it("rooms cost 500; packs (mock) credit coins once; decor stays inside; private rooms need the invite", async () => {
+    const o = await client("owner"), f = await client("friend"), x = await client("stranger");
+    o.send({ t: "buyRoom" });
+    await o.wait("notice", (m) => m.text.includes("500"));
+    // buy a pack (mock mode), complete it twice: credited once
+    const r = await post("/pay/checkout", o.token, { pack: "small" }).then((r) => r.json());
+    const id = new URL(r.url).searchParams.get("mockpay")!;
+    await post("/pay/mock-complete", o.token, { id });
+    await post("/pay/mock-complete", o.token, { id });
+    const c = await o.wait("coins", (m) => m.reason === "pack");
+    expect(c.balance).toBe(400);
+    expect(o.msgs.filter((m) => m.t === "coins" && m.reason === "pack").length).toBe(0);
+    // 400 < 500 → second pack, then the room
+    const r2 = await post("/pay/checkout", o.token, { pack: "small" }).then((r) => r.json());
+    await post("/pay/mock-complete", o.token, { id: new URL(r2.url).searchParams.get("mockpay") });
+    await o.wait("coins", (m) => m.reason === "pack");
+    o.send({ t: "buyRoom" });
+    const mine = await o.wait("myRoom", (m) => !!m.room);
+    const room = mine.room!;
+    expect(room.id.startsWith("plot:")).toBe(true);
+    // decor: buy, then try to drag it far outside → clamped into the room
+    o.send({ t: "decorBuy", kind: "plant" });
+    await o.wait("myRoom", (m) => (m.room?.decor.length ?? 0) === 2);
+    o.send({ t: "decorMove", index: 1, x: 99999, z: -99999, rot: 0 });
+    const moved = await o.wait("myRoom", (m) => !!m.room && m.room.decor.length === 2 && m.room.decor[1].x !== room.decor[0].x && Math.abs(m.room.decor[1].x) < 99999);
+    expect(Math.abs(moved.room!.decor[1].x)).toBeLessThan(99999);
+    // private: a stranger can't fall in; the friend with the invite can
+    o.send({ t: "roomEdit", public: false });
+    await o.wait("myRoom", (m) => m.room?.public === false);
+    x.send({ t: "fallTo", room: room.id });
+    const no = await x.wait("fallTo");
+    expect(no.ok).toBe(false);
+    f.send({ t: "invite", code: room.invite });
+    const yes = await f.wait("fallTo");
+    expect(yes.ok).toBe(true);
+    for (const c2 of [o, f, x]) c2.ws.close();
+  });
+
+  it("gifts move coins between people in the same room and everyone there sees it", async () => {
+    const a = await client("giver"), b = await client("taker");
+    await enter(a, "night-shift");
+    await enter(b, "night-shift");
+    a.send({ t: "gift", to: b.id, gift: "moon", key: "k1" });
+    const g = await b.wait("gift");
+    expect(g.emoji).toBe("🌙");
+    const got = await b.wait("coins", (m) => m.reason === "gift-received");
+    expect(got.balance).toBe(120);
+    a.send({ t: "gift", to: b.id, gift: "moon", key: "k1" }); // replay: no double charge
+    await new Promise((r) => setTimeout(r, 300));
+    expect(b.msgs.some((m) => m.t === "coins" && m.reason === "gift-received")).toBe(false);
+    a.ws.close();
+    b.ws.close();
+  });
+});
+
+import { verifyStripe } from "../../server/world/economy.ts";
+import { createHmac } from "node:crypto";
+describe("stripe webhook signature", () => {
+  it("accepts a correct signature and rejects forged or stale ones", () => {
+    const secret = "whsec_test", body = '{"type":"x"}', t = Math.floor(Date.now() / 1000);
+    const sig = createHmac("sha256", secret).update(`${t}.${body}`).digest("hex");
+    expect(verifyStripe(body, `t=${t},v1=${sig}`, secret)).toBe(true);
+    expect(verifyStripe(body + " ", `t=${t},v1=${sig}`, secret)).toBe(false);
+    expect(verifyStripe(body, `t=${t - 3600},v1=${createHmac("sha256", secret).update(`${t - 3600}.${body}`).digest("hex")}`, secret)).toBe(false);
+    expect(verifyStripe(body, `t=${t},v1=deadbeef`, secret)).toBe(false);
+  });
+});

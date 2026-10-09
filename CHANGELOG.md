@@ -1,5 +1,14 @@
 # Changelog — seeface1 world
 
+## M6 — coins, owned rooms, gifts, coin packs (world/m6-coins)
+- Server ledger everywhere: welcome 100, daily +10, listening +2 per 5 min and speaking +1 per minute (only with another human in the room, daily caps), Say hi +20, Spin the radio +10, +50 when a friend you brought is still coming back after 7 days.
+- Own a room for 500: the nearest free plot to the entrance becomes yours, with a name, topic, public/private, an invite link (`/world/?invite=…`) that drops friends straight in (also into private rooms), and a transcript (owner only).
+- Decor (8 kinds, fixed prices): buy in ME, then "arrange my room" and drag pieces across the floor. The server clamps them inside the room, and everyone sees them. Curated rooms show their theme-pack props. Kick balls roll locally and drift home after 8 s.
+- Gifts (✨5 🌙20 ☄️50) to whoever is speaking, from the composer. They're atomic and replay-safe, fly over the room in an arc for everyone, with a rising chime and a whoosh.
+- Coin packs (300 / 900 / 2000 coins, fixed, no random bonuses): Stripe Checkout in TEST mode (the server refuses `sk_live_` keys), credited only by the signature-verified webhook. A dev-only mock checkout runs without keys.
+- Fixes: falling into an owned room landed you in First Words; a jump while already falling was silently ignored (now it redirects the fall); the auto-drop could override a jump you'd already made.
+- Tests: room purchase, pack idempotency, decor clamping, private-room invites, gifts and replay, Stripe signature checks.
+
 ## M5 — AI host, transcripts, Library (world/m5-host)
 - The AI host (always labelled AI, Claude `claude-opus-5-5` with server-side refusal fallbacks and structured JSON output; scripted when there's no key or past `HOST_DAILY_CAP`): greets newcomers by name with the current topic, asks a question after 30 s of silence (never more than once every 90 s), re-tags the topic every ~10 min and shifts the room's theme variant (door light hue), writes the Library verdict when a session ends (2 min empty), and flags abuse in transcribed lines to the moderators' queue.
 - Transcripts: text only, only from speakers with Transcribe me on (captions from anyone else are dropped server-side); room owners read their own room's transcript (90-day retention, purged automatically); curated public rooms have no owner, so nobody reads theirs.
