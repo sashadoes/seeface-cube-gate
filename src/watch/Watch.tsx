@@ -12,7 +12,7 @@ import { DEMONS, demonOf } from "../labyrinth/demons";
 import { cleanNick } from "../labyrinth/nick";
 import { MOD_PUBLIC_KEY, approvalText, type Post } from "../labyrinth/posts";
 import { JOURNAL_TOPIC, type Journal } from "../insight";
-import { validJournal } from "./insights";
+import { statusOf, validJournal } from "./insights";
 import Players from "./Players";
 import "./Watch.scss";
 
@@ -75,7 +75,10 @@ export default function Watch() {
   // posts waiting for approval (moderation)
   const posts = useRef(new Map<string, Post>());
   const approvedIds = useRef(new Set<string>());
-  const clientRef = useRef<ReturnType<typeof mqtt.connect> | null>(null);
+  const clientsRef = useRef<ReturnType<typeof mqtt.connect>[]>([]);
+  // moderation goes to every relay, so players on either one see it
+  const publishAll = (topic: string, payload: string) =>
+    clientsRef.current.forEach((c) => c.connected && c.publish(topic, payload, { retain: true, qos: 1 }));
   const [modKey, setModKey] = useState<{ priv: JsonWebKey; pub: JsonWebKey } | null>(() => {
     try {
       return JSON.parse(localStorage.getItem("seeface-mod-key") ?? "null");
@@ -102,110 +105,112 @@ export default function Watch() {
 
   // ------------------------------------------------------------ listen
   useEffect(() => {
-    let r = 0;
-    let client: ReturnType<typeof mqtt.connect> | null = null;
-    const connect = () => {
-      client = mqtt.connect(RELAYS[r], { clientId: `sf1eye-${Math.random().toString(36).slice(2, 10)}`, connectTimeout: 6000, reconnectPeriod: 4000 });
-      client.on("connect", () => {
-        setRelay(RELAYS[r].replace("wss://", "").split(":")[0]);
-        // listen only: no publish anywhere in this file
-        client!.subscribe([`${SITE}/+`, `${LAB}/pos/#`, `${LAB}/bye/+`, `${LAB}/world/#`, `${JOURNAL_TOPIC}/+`]);
-      });
-      client.on("error", () => {
-        client?.end(true);
-        r = (r + 1) % RELAYS.length;
-        setRelay("reconnecting…");
-        setTimeout(connect, 1500);
-      });
-      client.on("message", (topic, payload) => {
-        const parts = topic.split("/");
-        const now = Date.now();
-        if (topic.startsWith(JOURNAL_TOPIC + "/")) {
-          // a player's play journal (src/insight.ts), retained: arrives for everyone ever seen
-          if (payload.length > 16_000) return;
-          try {
-            const j = JSON.parse(payload.toString());
-            if (!validJournal(j) || j.id !== parts[parts.length - 1]) return;
-            j.nick = cleanNick(j.nick) ?? null;
-            const had = journals.current.get(j.id);
-            if (!had || had.last <= j.last) {
-              journals.current.set(j.id, j);
-              journalsChanged.current = true;
-            }
-          } catch {
-            // ignore garbage
-          }
-          return;
-        }
-        if (topic.startsWith(SITE)) {
-          const id = parts.pop()!;
-          if (id.length > 16) return;
-          if (payload.toString() === "bye") site.current.delete(id);
-          else site.current.set(id, now);
-          return;
-        }
-        if (parts[3] === "world") {
-          const [, , , , kind, id] = parts;
-          if (kind === "post" && id) {
-            try {
-              const d = JSON.parse(payload.toString());
-              if (typeof d.img === "string" && d.img.startsWith("data:image/jpeg;base64,")) posts.current.set(id, { ...d, id, nick: cleanNick(d.nick) ?? "someone" });
-            } catch {
-              posts.current.delete(id); // removed (empty retained message)
-            }
-            return;
-          }
-          if (kind === "ok" && id) {
-            approvedIds.current.add(id);
-            return;
-          }
-          wishes.current += 1;
-          return;
-        }
-        // positions arrive as pos/<area>/<id>; bye as bye/<id>
-        const id = parts[parts.length - 1];
-        if (!id || id.length > 16) return;
-        if (parts[3] === "bye") {
-          const p = players.current.get(id);
-          if (p) p.last = Math.min(p.last, now - STALE_MS);
-          return;
-        }
-        let m: Record<string, unknown>;
+    // Players land on whichever relay answers first (online.ts, net.ts), so the
+    // eye listens to BOTH at once; on one relay it missed everyone on the other.
+    const clients: ReturnType<typeof mqtt.connect>[] = [];
+    const up = new Set<string>();
+    const showRelays = () => setRelay(up.size ? [...up].join(" + ") : "connecting…");
+    const onMessage = (topic: string, payload: { length: number; toString(): string }) => {
+      const parts = topic.split("/");
+      const now = Date.now();
+      if (topic.startsWith(JOURNAL_TOPIC + "/")) {
+        // a player's play journal (src/insight.ts), retained: arrives for everyone ever seen
+        if (payload.length > 16_000) return;
         try {
-          m = JSON.parse(payload.toString());
+          const j = JSON.parse(payload.toString());
+          if (!validJournal(j) || j.id !== parts[parts.length - 1]) return;
+          j.nick = cleanNick(j.nick) ?? null;
+          const had = journals.current.get(j.id);
+          if (!had || had.last <= j.last) {
+            journals.current.set(j.id, j);
+            journalsChanged.current = true;
+          }
         } catch {
+          // ignore garbage
+        }
+        return;
+      }
+      if (topic.startsWith(SITE)) {
+        const id = parts.pop()!;
+        if (id.length > 16) return;
+        if (payload.toString() === "bye") site.current.delete(id);
+        else site.current.set(id, now);
+        return;
+      }
+      if (parts[3] === "world") {
+        const [, , , , kind, id] = parts;
+        if (kind === "post" && id) {
+          try {
+            const d = JSON.parse(payload.toString());
+            if (typeof d.img === "string" && d.img.startsWith("data:image/jpeg;base64,")) posts.current.set(id, { ...d, id, nick: cleanNick(d.nick) ?? "someone" });
+          } catch {
+            posts.current.delete(id); // removed (empty retained message)
+          }
           return;
         }
-        if (typeof m.x !== "number" || typeof m.z !== "number" || !Number.isFinite(m.x) || !Number.isFinite(m.z)) return;
-        const x = m.x, z = m.z;
-        let p = players.current.get(id);
-        if (!p || now - p.last > TRAIL_KEEP_MS) {
-          p = { id, nick: "", x, z, yaw: 0, light: 0, held: 0, first: now, last: now, trail: [], walked: 0 };
-          players.current.set(id, p);
+        if (kind === "ok" && id) {
+          approvedIds.current.add(id);
+          return;
         }
-        const lastPt = p.trail[p.trail.length - 1];
-        const jump = lastPt ? Math.hypot(x - lastPt.x, z - lastPt.z) : 0;
-        if (!lastPt || jump > 0.6 || now - lastPt.t > 3000) {
-          if (lastPt && jump < 50) p.walked += jump; // big jumps are rifts/respawns
-          p.trail.push({ x, z, t: now });
-          if (p.trail.length > 4000) p.trail.splice(0, 1000);
-        }
-        Object.assign(p, {
-          x, z,
-          yaw: typeof m.y === "number" ? m.y : 0,
-          light: typeof m.l === "number" ? m.l : 0,
-          held: typeof m.h === "number" ? m.h : 0,
-          nick: cleanNick(m.n) ?? "wanderer",
-          last: now,
-        });
+        wishes.current += 1;
+        return;
+      }
+      // positions arrive as pos/<area>/<id>; bye as bye/<id>
+      const id = parts[parts.length - 1];
+      if (!id || id.length > 16) return;
+      if (parts[3] === "bye") {
+        const p = players.current.get(id);
+        if (p) p.last = Math.min(p.last, now - STALE_MS);
+        return;
+      }
+      let m: Record<string, unknown>;
+      try {
+        m = JSON.parse(payload.toString());
+      } catch {
+        return;
+      }
+      if (typeof m.x !== "number" || typeof m.z !== "number" || !Number.isFinite(m.x) || !Number.isFinite(m.z)) return;
+      const x = m.x, z = m.z;
+      let p = players.current.get(id);
+      if (!p || now - p.last > TRAIL_KEEP_MS) {
+        p = { id, nick: "", x, z, yaw: 0, light: 0, held: 0, first: now, last: now, trail: [], walked: 0 };
+        players.current.set(id, p);
+      }
+      const lastPt = p.trail[p.trail.length - 1];
+      const jump = lastPt ? Math.hypot(x - lastPt.x, z - lastPt.z) : 0;
+      if (!lastPt || jump > 0.6 || now - lastPt.t > 3000) {
+        if (lastPt && jump < 50) p.walked += jump; // big jumps are rifts/respawns
+        p.trail.push({ x, z, t: now });
+        if (p.trail.length > 4000) p.trail.splice(0, 1000);
+      }
+      Object.assign(p, {
+        x, z,
+        yaw: typeof m.y === "number" ? m.y : 0,
+        light: typeof m.l === "number" ? m.l : 0,
+        held: typeof m.h === "number" ? m.h : 0,
+        nick: cleanNick(m.n) ?? "wanderer",
+        last: now,
       });
     };
-    connect();
-    const keep = setInterval(() => (clientRef.current = client), 500);
-    return () => {
-      clearInterval(keep);
-      client?.end(true);
-    };
+    for (const url of RELAYS) {
+      const name = url.replace("wss://", "").split(":")[0];
+      const client = mqtt.connect(url, { clientId: `sf1eye-${Math.random().toString(36).slice(2, 10)}`, connectTimeout: 6000, reconnectPeriod: 4000 });
+      clients.push(client);
+      client.on("connect", () => {
+        up.add(name);
+        showRelays();
+        // listen only (moderation aside): nothing here is counted as a visitor
+        client.subscribe([`${SITE}/+`, `${LAB}/pos/#`, `${LAB}/bye/+`, `${LAB}/world/#`, `${JOURNAL_TOPIC}/+`]);
+      });
+      client.on("close", () => {
+        up.delete(name);
+        showRelays();
+      });
+      client.on("error", () => {}); // mqtt.js keeps reconnecting on its own
+      client.on("message", onMessage);
+    }
+    clientsRef.current = clients;
+    return () => clients.forEach((c) => c.end(true));
   }, []);
 
   // ------------------------------------------------------------ numbers + history
@@ -432,16 +437,16 @@ export default function Watch() {
     setModKey(v);
   }
   async function approve(p: Post) {
-    if (!modKey || !clientRef.current) return;
+    if (!modKey || !clientsRef.current.some((c) => c.connected)) return;
     const key = await crypto.subtle.importKey("jwk", modKey.priv, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
     const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(approvalText(p))));
-    clientRef.current.publish(`${LAB}/world/ok/${p.id}`, JSON.stringify({ sig: btoa(String.fromCharCode(...sig)) }), { retain: true, qos: 1 });
+    publishAll(`${LAB}/world/ok/${p.id}`, JSON.stringify({ sig: btoa(String.fromCharCode(...sig)) }));
     approvedIds.current.add(p.id);
     setTick((n) => n + 1);
   }
   function remove(p: Post) {
-    clientRef.current?.publish(`${LAB}/world/post/${p.id}`, "", { retain: true, qos: 1 });
-    clientRef.current?.publish(`${LAB}/world/ok/${p.id}`, "", { retain: true, qos: 1 });
+    publishAll(`${LAB}/world/post/${p.id}`, "");
+    publishAll(`${LAB}/world/ok/${p.id}`, "");
     posts.current.delete(p.id);
     setTick((n) => n + 1);
   }
@@ -474,6 +479,10 @@ export default function Watch() {
   const list = [...players.current.values()].sort((a, b) => b.last - a.last);
   const online = list.filter((p) => now - p.last < STALE_MS);
   const siteNow = site.current.size;
+  const today = journalList.filter((j) => statusOf(j, now).endsWith("today"));
+  // GoatCounter opens on whatever dates its URL carries, so always send the last 7 days up to today
+  const day = (d: number) => new Date(now - d * 86_400_000).toLocaleDateString("sv"); // YYYY-MM-DD, local
+  const goat = `https://seeface1.goatcounter.com/?period-start=${day(6)}&period-end=${day(0)}`;
 
   return (
     <main className="eye">
@@ -511,9 +520,21 @@ export default function Watch() {
           </b>
           <span>peak while open</span>
         </div>
+        <div className="eye-stat small" title="devices that played today (their play journals, both relays); live and incl. ad-blocked visitors">
+          <b>
+            {today.length} · {today.filter((j) => statusOf(j, now) === "new today").length} new
+          </b>
+          <span>played today</span>
+        </div>
         <canvas className="eye-spark" ref={spark} title="last 3 hours (only while this page was open): white = site, red = labyrinth" />
-        <a className="eye-link" href="https://seeface1.goatcounter.com" target="_blank" rel="noreferrer">
-          all-time stats ↗
+        <a
+          className="eye-link"
+          href={goat}
+          target="_blank"
+          rel="noreferrer"
+          title="page loads and events, last 7 days up to today. Counts visits, not devices; misses ad-blocked visitors; journals here start 8 Oct"
+        >
+          goatcounter · last 7 days ↗
         </a>
       </header>
 

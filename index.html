@@ -69,6 +69,8 @@
     <link rel="icon" type="image/png" href="/imgs/seeface-logo.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
+    <!-- the owner's /the-eye is not a visit: don't count it -->
+    <script>if (location.pathname.indexOf("/the-eye") === 0) window.goatcounter = { no_onload: true };</script>
     <script data-goatcounter="https://seeface1.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
     <style>
       /* for search engines and screen readers only: visitors never see text */

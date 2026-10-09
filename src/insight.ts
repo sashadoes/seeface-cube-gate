@@ -212,7 +212,9 @@ export function startJournal() {
     d.sess[d.sess.length - 1].ms += dt;
     save();
   }, TICK_MS);
-  setTimeout(share, import.meta.env.DEV ? 3_000 : 15_000);
+  // early, so people who look and leave within seconds are seen on the eye too
+  // (GoatCounter counts them on load; the eye used to wait 15 s and miss them)
+  setTimeout(share, 4_000);
   setInterval(share, SHARE_MS);
   document.addEventListener("visibilitychange", () => document.hidden && share());
   window.addEventListener("pagehide", share);
