@@ -183,6 +183,44 @@
   &.sel {
     background: rgba(255, 230, 184, 0.08);
   }
+
+  &.real {
+    box-shadow: inset 3px 0 0 #7dffa8;
+  }
+
+  &.test,
+  &.bot,
+  &.unknown {
+    opacity: 0.6;
+
+    > i {
+      border-radius: 1px;
+      background: none !important;
+      border: 1px dashed #9a9a9a;
+    }
+  }
+}
+
+.who-real {
+  color: #7dffa8;
+  font-size: 11px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  margin-right: 4px;
+}
+
+.who-test {
+  color: #9a9a9a;
+  font-size: 11px;
+  font-weight: normal;
+  font-style: normal;
+  margin-right: 4px;
+}
+
+.eye-stat em {
+  display: block;
+  font-size: 10px;
+  color: #8f897c;
 }
 
 @media (max-width: 720px) {

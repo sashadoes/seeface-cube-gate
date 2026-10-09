@@ -20,6 +20,15 @@ const SEND_HZ = typeof matchMedia !== "undefined" && matchMedia("(pointer: coars
 const AREA_M = 64;
 const BEACON_MS = 5000;
 const FAR_STALE_MS = 16000;
+// who is sending, for the owner's eye page: "r" = a real visitor on the live
+// site, "d" = a dev build / preview (someone testing, often Claude), "b" = an
+// automated browser. Old clients send nothing. Honest label, never shown in game.
+const SENDER: "r" | "d" | "b" =
+  typeof navigator !== "undefined" && (navigator.webdriver || /Headless/i.test(navigator.userAgent))
+    ? "b"
+    : !import.meta.env.DEV && typeof location !== "undefined" && /(^|\.)seeface1?\.world$/.test(location.hostname)
+      ? "r"
+      : "d";
 const areaOf = (x: number, z: number) => `${Math.floor(x / AREA_M)}_${Math.floor(z / AREA_M)}`;
 const areasAround = (x: number, z: number) => {
   const ax = Math.floor(x / AREA_M), az = Math.floor(z / AREA_M);
@@ -252,7 +261,7 @@ export function createPresence(myId?: string): Presence {
     if (!pending || !client?.connected) return;
     const { x, z, yaw, light, nick, held } = pending;
     follow(x, z);
-    client.publish(`${ROOT}/pos/${areaOf(x, z)}/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0 }));
+    client.publish(`${ROOT}/pos/${areaOf(x, z)}/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0, k: SENDER }));
     if (Date.now() - lastBeacon > BEACON_MS) {
       lastBeacon = Date.now();
       client.publish(`${ROOT}/where/${me}`, JSON.stringify({ x: Math.round(x), z: Math.round(z), n: nick }));

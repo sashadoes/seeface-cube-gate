@@ -27,7 +27,8 @@ const JOURNALS_KEY = "seeface-eye-journals"; // a local copy, in case the relay 
 const JOURNALS_KEEP = 600;
 
 type Pt = { x: number; z: number; t: number };
-type Player = { id: string; nick: string; x: number; z: number; yaw: number; light: number; held: number; first: number; last: number; trail: Pt[]; walked: number };
+type Who = "real" | "test" | "bot" | "unknown";
+type Player = { id: string; who: Who; nick: string; x: number; z: number; yaw: number; light: number; held: number; first: number; last: number; trail: Pt[]; walked: number };
 type Sample = { t: number; site: number; lab: number };
 
 const PLACE: Record<string, string> = {
@@ -39,6 +40,10 @@ const placeOf = (x: number, z: number) => {
   return l > 0 ? `${["", "I", "II", "III"][l]} · ${LEVELS[l].name}` : PLACE[zoneAt(x, z).kind];
 };
 const ago = (ms: number) => (ms < 60_000 ? `${Math.round(ms / 1000)}s` : ms < 3_600_000 ? `${Math.round(ms / 60_000)}m` : `${(ms / 3_600_000).toFixed(1)}h`);
+// net.ts tags each position with who sent it ("k"); old clients send nothing
+const WHO: Record<string, Who> = { r: "real", d: "test", b: "bot" };
+const WHO_LABEL: Record<Who, string> = { real: "real person", test: "test build · dev / claude", bot: "automated browser", unknown: "unverified (old version)" };
+const REAL = "#7dffa8";
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 
 function loadHistory(): Sample[] {
@@ -180,7 +185,7 @@ export default function Watch() {
         const x = m.x, z = m.z;
         let p = players.current.get(id);
         if (!p || now - p.last > TRAIL_KEEP_MS) {
-          p = { id, nick: "", x, z, yaw: 0, light: 0, held: 0, first: now, last: now, trail: [], walked: 0 };
+          p = { id, who: "unknown", nick: "", x, z, yaw: 0, light: 0, held: 0, first: now, last: now, trail: [], walked: 0 };
           players.current.set(id, p);
         }
         const lastPt = p.trail[p.trail.length - 1];
@@ -196,6 +201,7 @@ export default function Watch() {
           light: typeof m.l === "number" ? m.l : 0,
           held: typeof m.h === "number" ? m.h : 0,
           nick: cleanNick(m.n) ?? "wanderer",
+          who: WHO[m.k as string] ?? "unknown",
           last: now,
         });
       });
@@ -344,13 +350,35 @@ export default function Watch() {
         g.globalAlpha = 1;
         const x = sx(p.x), y = sy(p.z);
         if (x < -40 || x > W + 40 || y < -40 || y > H + 40) continue;
-        g.fillStyle = online ? col : "#555";
-        g.shadowColor = col;
-        g.shadowBlur = online ? 14 : 0;
-        g.beginPath();
-        g.arc(x, y, sel ? 7 : 5, 0, Math.PI * 2);
-        g.fill();
-        g.shadowBlur = 0;
+        const real = p.who === "real";
+        const r = sel ? 7 : 5;
+        if (real) {
+          g.fillStyle = online ? col : "#555";
+          g.shadowColor = col;
+          g.shadowBlur = online ? 14 : 0;
+          g.beginPath();
+          g.arc(x, y, r, 0, Math.PI * 2);
+          g.fill();
+          g.shadowBlur = 0;
+          if (online) {
+            // a breathing ring: this one is a person
+            const k = (now % 1600) / 1600;
+            g.strokeStyle = REAL;
+            g.globalAlpha = 1 - k;
+            g.lineWidth = 2;
+            g.beginPath();
+            g.arc(x, y, r + 3 + k * 12, 0, Math.PI * 2);
+            g.stroke();
+            g.globalAlpha = 1;
+          }
+        } else {
+          // tests / bots: a hollow grey square, no glow
+          g.strokeStyle = online ? "#9a9a9a" : "#555";
+          g.lineWidth = 1.5;
+          g.setLineDash([3, 2]);
+          g.strokeRect(x - r, y - r, r * 2, r * 2);
+          g.setLineDash([]);
+        }
         if (online) {
           // facing
           g.strokeStyle = col;
@@ -359,10 +387,26 @@ export default function Watch() {
           g.lineTo(x - Math.sin(p.yaw) * 14, y - Math.cos(p.yaw) * 14);
           g.stroke();
         }
-        g.fillStyle = online ? "#fff6e2" : "#777";
-        g.font = "italic 13px 'Times New Roman', serif";
         g.textAlign = "center";
-        g.fillText(online ? p.nick : `${p.nick} (left)`, x, y - 13); // canvas text: names can't inject HTML
+        const name = online ? p.nick : `${p.nick} (left)`;
+        if (real) {
+          g.fillStyle = online ? "#fff6e2" : "#777";
+          g.font = "bold italic 14px 'Times New Roman', serif";
+          g.fillText(name, x, y - 13); // canvas text: names can't inject HTML
+          // the mark above: a green pin
+          const top = y - 31;
+          g.fillStyle = online ? REAL : "#5a7a62";
+          g.beginPath();
+          g.moveTo(x - 6, top - 8);
+          g.lineTo(x + 6, top - 8);
+          g.lineTo(x, top);
+          g.closePath();
+          g.fill();
+        } else {
+          g.fillStyle = online ? "#8c8c8c" : "#555";
+          g.font = "italic 11px 'Times New Roman', serif";
+          g.fillText(`${p.who === "bot" ? "⚙ bot" : p.who === "test" ? "⚙ test" : "?"} · ${name}`, x, y - 12);
+        }
       }
       raf = requestAnimationFrame(draw);
     };
@@ -471,8 +515,9 @@ export default function Watch() {
   }
 
   const now = Date.now();
-  const list = [...players.current.values()].sort((a, b) => b.last - a.last);
+  const list = [...players.current.values()].sort((a, b) => Number(b.who === "real") - Number(a.who === "real") || b.last - a.last);
   const online = list.filter((p) => now - p.last < STALE_MS);
+  const onlineReal = online.filter((p) => p.who === "real").length;
   const siteNow = site.current.size;
 
   return (
@@ -498,8 +543,11 @@ export default function Watch() {
           <span>on the site now</span>
         </div>
         <div className="eye-stat lab">
-          <b>{online.length}</b>
-          <span>in the labyrinth</span>
+          <b>{onlineReal}</b>
+          <span>
+            real people in the labyrinth
+            {online.length > onlineReal && <em> + {online.length - onlineReal} test / unverified</em>}
+          </span>
         </div>
         <div className="eye-stat">
           <b>{Math.max(0, siteNow - online.length)}</b>
@@ -572,16 +620,18 @@ export default function Watch() {
               </div>
             ))}
           <div className="eye-list-head">
-            players · {online.length} live · {list.length - online.length} recently left · relay {relay}
+            players · {onlineReal} real live · {online.length - onlineReal} test live · {list.length - online.length} recently left · relay {relay}
           </div>
           {list.length === 0 && <div className="eye-empty">nobody in the labyrinth right now</div>}
           {list.map((p) => {
             const live = now - p.last < STALE_MS;
             const d = DEMONS[demonOf(p.id)];
             return (
-              <button key={p.id} className={"eye-row" + (live ? "" : " gone") + (follow === p.id ? " sel" : "")} onClick={() => setFollow(p.id)}>
+              <button key={p.id} className={"eye-row " + p.who + (live ? "" : " gone") + (follow === p.id ? " sel" : "")} onClick={() => setFollow(p.id)} title={WHO_LABEL[p.who]}>
                 <i style={{ background: hex(d.aura) }} />
-                <span className="n">{p.nick}</span>
+                <span className="n">
+                  {p.who === "real" ? <b className="who-real">▼ real</b> : <b className="who-test">{p.who === "unknown" ? "?" : "⚙ " + p.who}</b>} {p.nick}
+                </span>
                 <span className="m">
                   {d.name} · {placeOf(p.x, p.z)}
                   <br />
@@ -596,7 +646,7 @@ export default function Watch() {
               </button>
             );
           })}
-          <div className="eye-foot">wish messages heard: {wishes.current} · keepers are not shown: they're not people</div>
+          <div className="eye-foot">wish messages heard: {wishes.current} · keepers are not shown: they're not people · <b className="who-real">▼ real</b> = a visitor on the live site · ⚙ test = a dev build or preview (often Claude testing) · ? = older game version, can't tell yet</div>
         </aside>
       </section>
     </main>
