@@ -7,10 +7,16 @@
     "dev": "vite",
     "build": "vite build && node scripts/pages.mjs",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck:world": "tsc -p tsconfig.world.json",
+    "world:server": "node --watch server/world/index.ts",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "measure": "node scripts/world/measure.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",
+    "livekit-client": "^2.22.4",
     "mqtt": "^5.16.0",
     "pixi.js": "^8.14.3",
     "react": "^19.2.0",
@@ -19,13 +25,17 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.132.0",
+    "@playwright/test": "1.56",
     "@types/howler": "^2.2.12",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.182.0",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^5.1.0",
     "sass": "^1.93.0",
     "typescript": "^5.9.3",
-    "vite": "^7.2.0"
+    "vite": "^7.2.0",
+    "vitest": "^3.2.7"
   }
 }

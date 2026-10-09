@@ -6,15 +6,17 @@
   "description": "Small API for seeface1: stores labyrinth sign-ups (nickname + optional email with consent) in MongoDB.",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "world": "node world/index.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=23.6"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "mongodb": "^6.21.0"
+    "mongodb": "^6.21.0",
+    "ws": "^8.22.0"
   }
 }

@@ -5,3 +5,9 @@ server/node_modules/
 server/data/
 server/.env
 promo/
+.env
+.env.local
+.env.*.local
+test-results/
+playwright-report/
+server/data-world/
