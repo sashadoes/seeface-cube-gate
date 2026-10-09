@@ -112,3 +112,23 @@ test("the lists are what the renderer builds", () => {
   assert.equal(ARCHETYPES.length, 8);
   assert.ok(OBJECTS.length >= 15 && OBJECTS.length <= 25);
 });
+
+test("the answer schema stays within the API's limit of 24 optional fields", async () => {
+  const { TURN_SCHEMA } = await import("./blueprint.mjs");
+  let optional = 0;
+  const walk = (s) => {
+    if (!s || typeof s !== "object") return;
+    if (s.type === "object" || s.properties) {
+      for (const k of Object.keys(s.properties || {})) if (!(s.required || []).includes(k)) optional++;
+    }
+    for (const v of Object.values(s)) if (v && typeof v === "object") Array.isArray(v) ? v.forEach(walk) : walk(v);
+  };
+  walk(TURN_SCHEMA);
+  assert.ok(optional <= 24, `${optional} optional fields`);
+  const walkObjects = (s) => {
+    if (!s || typeof s !== "object") return;
+    if (s.type === "object") assert.equal(s.additionalProperties, false);
+    for (const v of Object.values(s)) if (v && typeof v === "object") Array.isArray(v) ? v.forEach(walkObjects) : walkObjects(v);
+  };
+  walkObjects(TURN_SCHEMA);
+});

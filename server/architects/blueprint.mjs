@@ -202,13 +202,15 @@ export const MISSING_WORDS = {
   welcome_text: "the words visitors read when they enter",
 };
 
-// The JSON schema the model must answer in (structured outputs). Every patch field is
-// optional ("only the fields that changed"); structured outputs need additionalProperties:
-// false on every object and can't express ranges or lengths, so cleanPatch still checks all of it.
-const obj = (properties) => ({ type: "object", additionalProperties: false, properties });
+// The JSON schema the model must answer in (structured outputs). Top-level patch fields are
+// optional ("only the fields that changed"); a nested group (palette, lighting, …) is sent whole,
+// because the API allows at most 24 optional fields in a schema. Structured outputs also need
+// additionalProperties: false everywhere and can't express ranges or lengths, so cleanPatch
+// still checks all of it.
+const obj = (properties) => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
 const str = { type: "string" };
 const num = { type: "number" };
-const PATCH_SCHEMA = obj({
+const PATCH_SCHEMA = { ...obj({
   title: str,
   tagline: str,
   archetype: { type: "string", enum: ARCHETYPES },
@@ -224,7 +226,7 @@ const PATCH_SCHEMA = obj({
   radio: obj({ enabled: { type: "boolean" }, mode: { type: "string", enum: RADIO_MODES } }),
   welcome_text: str,
   capacity: { type: "integer" },
-});
+}), required: [] };
 export const TURN_SCHEMA = {
   type: "object",
   additionalProperties: false,
