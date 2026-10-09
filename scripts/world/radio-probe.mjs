@@ -1,6 +1,6 @@
 // B talks in a room; A opens the radio at spawn, hears the 3 s preview, then jumps in.
 import { chromium, devices } from "@playwright/test";
-const url = process.argv[2] ?? "http://localhost:5311/world/";
+const url = process.argv[2] ?? "http://localhost:5311/world/?flags=-onboarding";
 const shot = process.argv[3];
 const browser = await chromium.launch({ channel: "chrome", args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
 const mk = async (label) => {

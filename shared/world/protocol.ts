@@ -57,6 +57,7 @@ export type ClientMsg =
   | { t: "preview"; room: string | null }
   | { t: "heard" }
   | { t: "quest"; id: "say-hi" | "spin-radio" }
+  | { t: "forget" }
   | { t: "ping" };
 
 export type ServerMsg =

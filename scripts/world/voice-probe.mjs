@@ -1,6 +1,6 @@
 // Two real browser pages: B speaks into Chrome's fake microphone (a beep), A must hear it.
 import { chromium, devices } from "@playwright/test";
-const url = process.argv[2] ?? "http://localhost:5311/world/";
+const url = process.argv[2] ?? "http://localhost:5311/world/?flags=-onboarding";
 const browser = await chromium.launch({ channel: "chrome", args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
 const mk = async (label) => {
   const ctx = await browser.newContext({ ...devices["Pixel 7"], permissions: ["microphone"] });

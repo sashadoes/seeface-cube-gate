@@ -9,6 +9,9 @@ import { Mic } from "./ui/Mic.tsx";
 import { Card } from "./ui/Card.tsx";
 import { Composer } from "./ui/Composer.tsx";
 import { Radio } from "./ui/Radio.tsx";
+import { Onboarding } from "./ui/Onboarding.tsx";
+import { Me } from "./ui/Me.tsx";
+import { flag } from "./flags.ts";
 
 const phone = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
@@ -20,6 +23,10 @@ export function World() {
   const [flash, setFlash] = useState(false);
   const [composer, setComposer] = useState(false);
   const [radio, setRadio] = useState(false);
+  const [me, setMe] = useState(false);
+  const [onboarding, setOnboarding] = useState(() => flag("onboarding") && !seen("sf1w.onboarded"));
+  const quests = useUi("quests");
+  const room = useUi("room");
   const card = useUi("card");
   const coins = useUi("coins");
   const notice = useUi("notice");
@@ -67,6 +74,26 @@ export function World() {
     };
   }, []);
 
+  // auto-drop: fall into the busiest live room (once the room list has arrived)
+  const dropped = useRef(false);
+  useEffect(() => {
+    if (!session || !game || onboarding || dropped.current) return;
+    dropped.current = true;
+    const go = () => {
+      if (!game.room()) session.jumpTo(session.busiest());
+    };
+    if (ui.get().rooms.length) setTimeout(go, 300);
+    else {
+      const off = ui.subscribe(() => {
+        if (ui.get().rooms.length) {
+          off();
+          setTimeout(go, 300);
+        }
+      });
+      setTimeout(() => (off(), go()), 3500);
+    }
+  }, [session, game, onboarding]);
+
   const showNotice = notice && Date.now() - notice.at < 4000;
   const showHost = host && Date.now() - host.at < 9000;
   useTicker(!!(showNotice || showHost || reactions.length));
@@ -91,7 +118,10 @@ export function World() {
         ))}
       </div>
 
-      <button className="w-btn w-me" aria-label="me" data-testid="me">
+      {!onboarding && room && !quests.sayHi && <div className="w-quest q-mic" data-testid="quest">Say hi · +20</div>}
+      {!onboarding && quests.sayHi && !quests.spinRadio && !radio && <div className="w-quest q-radio" data-testid="quest">Spin the radio · +10</div>}
+
+      <button className="w-btn w-me" aria-label="me" data-testid="me" onClick={() => setMe((m) => !m)}>
         <span className={`w-face blob-${blob}`}>◕‿◕</span>
         <span className="w-coins" data-testid="coins">{coins}</span>
       </button>
@@ -103,10 +133,34 @@ export function World() {
       {session && card && <Card session={session} id={card} onClose={() => ui.set({ card: null })} />}
       {session && composer && <Composer session={session} onClose={() => setComposer(false)} />}
       {session && radio && <Radio session={session} onClose={() => setRadio(false)} />}
-      {game && null}
+      {session && me && <Me session={session} onClose={() => setMe(false)} />}
+      {session && onboarding && (
+        <Onboarding
+          session={session}
+          onDone={() => {
+            mark("sf1w.onboarded");
+            setOnboarding(false);
+          }}
+        />
+      )}
     </div>
   );
 }
+
+const seen = (k: string) => {
+  try {
+    return !!localStorage.getItem(k);
+  } catch {
+    return false;
+  }
+};
+const mark = (k: string) => {
+  try {
+    localStorage.setItem(k, "1");
+  } catch {
+    // private mode
+  }
+};
 
 /** re-render while something time-based is on screen (fades) */
 function useTicker(on: boolean) {

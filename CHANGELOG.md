@@ -1,5 +1,18 @@
 # Changelog — seeface1 world
 
+## M4 — onboarding, age gate, auto-drop, privacy (world/m4-onboarding)
+- 🎧 "Put your headphones on" (that tap unlocks audio and plays the 3-note signature) → a name + one of 6 blobs + the 18+ check → three swipeable one-line cards → an automatic fall into the busiest live room (real counts; rooms with someone speaking first; an empty world drops you into First Words with the AI host).
+- 18+: a dev-only mock button; in production with no vendor the world says honestly that voice isn't open yet (walking still works).
+- Floating quests: "Say hi · +20" (paid by the server only after you really talked or wrote while someone else was in the room), then "Spin the radio · +10" (paid only after a real preview).
+- 👤 ME: coins, Transcribe me (off by default, explained), headphones/speakers, 18+ status, privacy link, "delete my data" (transcript lines, quotes, profile, follows; ledger rows anonymised; owned rooms released).
+- e2e test (Playwright, 2 real browser contexts): land → onboard → fall into busiest room → hear voice → press MIC → the other person hears you.
+- An error boundary, so an overlay crash never blacks out the world.
+
+## M3 — the Radio (world/m3-radio)
+- A big glowing dial over the world. Spin it with a thumb; it ticks between real rooms (haptics), with analogue static and a filter sweep between stations, opens on the busiest room, and shows name, topic, real listener count, who's speaking and TRANSCRIBED.
+- Locking onto a station plays a 3-second live preview (the server links you one way to that room's speakers), heard flat and band-limited like a radio.
+- JUMP IN asks the server, then you fall through a hole that opens under you. "Radio off" mutes the room but you stay.
+
 ## M2 — rooms, voice, MIC, proximity audio (world/m2-voice)
 - `server/world`: our own WebSocket server (no public relay). It decides rooms from positions, who hears whom (room links, corridor proximity links with hysteresis, 3 s radio previews), who may speak (small rooms: everyone; big rooms: raise hand, host or auto-queue brings you up), rate limits every message type, signed session tokens, and rejects teleports that weren't a server-approved fall.
 - Voice: a WebRTC mesh signalled only through our server, only for server-made links, never without the 18+ gate. The mic is requested on the first talk and attached with replaceTrack (nothing is sent while silent). Nothing is recorded.

@@ -67,7 +67,7 @@ export function connectWorld(profile: () => { name: string; blob: string }, url 
       const was = open;
       open = false;
       if (was) emitState("closed");
-      if (closed || e.code === 4003) return;
+      if (closed || e.code === 4003 || e.code === 4004) return;
       tries++;
       setTimeout(dial, Math.min(15000, 400 * 2 ** tries));
     };

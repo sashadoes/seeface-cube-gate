@@ -12,7 +12,7 @@ import { ROOMS, roomById } from "../../shared/world/rooms.ts";
 import { EMOJIS, MAX_BUBBLE, MAX_SPEAKERS, NEAR_OFF, NEAR_ON, PROTOCOL_V, type ClientMsg, type Link, type PeerView, type RoomSummary, type ServerMsg, type AgeState } from "../../shared/world/protocol.ts";
 import { isStage, mayEnterRoom, mayKick, mayLink, mayPromote, maySpeak, roleIn, type Actor, type RoomState } from "../../shared/world/permissions.ts";
 import { apply, balance, EARN, type Reason } from "../../shared/world/ledger.ts";
-import { acceptCaption, purgeExpired, reportExcerpt } from "../../shared/world/transcripts.ts";
+import { acceptCaption, deleteUserData, purgeExpired, reportExcerpt } from "../../shared/world/transcripts.ts";
 import { filterMark } from "../../src/marks/filter.ts";
 import { createStore, type User } from "./store.ts";
 import { PROD, ageAdapter, iceServers, livekit, signUser, verifyUser } from "./adapters.ts";
@@ -339,6 +339,25 @@ function onMessage(s: Session, m: ClientMsg) {
     }
     case "heard":
       return;
+    case "forget": {
+      // delete my data: transcript lines, quotes, profile, follows; ledger rows are anonymised
+      // (kept only as numbers, so purchase records still add up), owned rooms are released
+      const d = deleteUserData(store.data.transcripts, store.data.verdicts, s.id);
+      store.data.transcripts = d.lines;
+      store.data.verdicts = d.verdicts;
+      for (const e of store.data.ledger) if (e.user === s.id) e.user = "deleted";
+      for (const [id, r] of Object.entries(store.data.ownedRooms)) if (r.owner === s.id) delete store.data.ownedRooms[id];
+      for (const u of Object.values(store.data.users)) {
+        u.follows = u.follows.filter((x) => x !== s.id);
+        u.mutes = u.mutes.filter((x) => x !== s.id);
+        u.blocks = u.blocks.filter((x) => x !== s.id);
+      }
+      store.data.reports = store.data.reports.filter((r) => r.reporter !== s.id);
+      delete store.data.users[s.id];
+      store.dirty();
+      s.ws.close(4004, "forgotten");
+      return;
+    }
     case "quest": {
       if (!allow(s, "write")) return;
       if (m.id === "say-hi" && (s.saidHi || s.speakMs > 1500)) credit(s, s.id, EARN["say-hi"], "say-hi", "say-hi");

@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import type { AgeState, RoomSummary, Role, ServerMsg } from "../../shared/world/protocol.ts";
 import { roomById } from "../../shared/world/rooms.ts";
 import type { Game } from "./engine/game.ts";
+import type { BlobKind } from "./avatar/blob.ts";
 import { connectWorld, type WorldNet } from "./net/client.ts";
 import { createMeshVoice, type VoiceAdapter } from "./voice/mesh.ts";
 import { createVoices, type Voices } from "./audio/voices.ts";
@@ -297,11 +298,27 @@ export function startSession(game: Game) {
       net.send({ t: "transcribe", on });
     },
     ageMock: () => net.send({ t: "age", action: "mock" }),
+    forget() {
+      net.send({ t: "forget" });
+      try {
+        for (const k of Object.keys(localStorage)) if (k.startsWith("sf1w.")) localStorage.removeItem(k);
+      } catch {
+        // nothing stored
+      }
+      setTimeout(() => location.reload(), 600);
+    },
+    /** the busiest live room (real counts only); quiet → First Words, where the AI host is */
+    busiest() {
+      const rs = ui.get().rooms.filter((r) => r.public);
+      const best = [...rs].sort((a, b) => b.speaking.length - a.speaking.length || b.people - a.people)[0];
+      return best && best.people > 0 ? best.id : "first-words";
+    },
     ageStart: () => net.send({ t: "age", action: "start" }),
     profile(name: string, blob: string) {
       write("sf1w.name", name);
       write("sf1w.blobKind", blob);
       ui.set({ name, blob });
+      game.setBlob(blob as BlobKind);
       net.send({ t: "profile", name, blob });
     },
     jumpTo: (room: string) => net.send({ t: "fallTo", room }),

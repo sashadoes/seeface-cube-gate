@@ -36,7 +36,7 @@ export function createGame(canvas: HTMLCanvasElement, opts: { blob: BlobKind; ph
   const input = createInput(canvas);
 
   const body = createBody(SPAWN.x, SPAWN.z);
-  const me = createBlob(opts.blob, { color: lab.fog.color, density: lab.fog.density, cam: camera.position });
+  let me = createBlob(opts.blob, { color: lab.fog.color, density: lab.fog.density, cam: camera.position });
   scene.add(me.group);
   let facing = 0;
 
@@ -201,7 +201,16 @@ export function createGame(canvas: HTMLCanvasElement, opts: { blob: BlobKind; ph
     body,
     input,
     lab,
-    me,
+    get me() {
+      return me;
+    },
+    setBlob(kind: BlobKind) {
+      scene.remove(me.group);
+      me.dispose();
+      me = createBlob(kind, { color: lab.fog.color, density: lab.fog.density, cam: camera.position });
+      scene.add(me.group);
+      me.wobble(1.2);
+    },
     start() {
       clock.start();
       frame();
