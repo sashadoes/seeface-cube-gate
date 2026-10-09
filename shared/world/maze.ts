@@ -1,4 +1,4 @@
-// The seeface1 world labyrinth: seeded, chunked, identical for every visitor and for the server.
+// The seeface1 world maze: seeded, chunked, identical for every visitor and for the server.
 //
 // Cells are CELL metres square; cell (i, j) covers x ∈ [i·CELL, (i+1)·CELL), z ∈ [j·CELL, (j+1)·CELL).
 // Each cell can have a wall on its east (+x) and south (+z) edge. The world is cut into CH×CH-cell
@@ -6,7 +6,7 @@
 // reachable) with extra openings for loops; rooms and hubs are rectangles kept one cell away from
 // each other and from the chunk border, so the remaining corridor cells stay one connected region.
 // Neighbouring chunks are joined by several border openings (at least one guaranteed), so the
-// whole labyrinth is connected.
+// whole maze is connected.
 import { ROOMS, type District } from "./rooms.ts";
 
 export const CELL = 4;

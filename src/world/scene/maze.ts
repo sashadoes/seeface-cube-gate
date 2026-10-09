@@ -1,4 +1,4 @@
-// Streams the labyrinth around the player: the 3×3 chunks around you become ONE instanced wall
+// Streams the maze around the player: the 3×3 chunks around you become ONE instanced wall
 // mesh, one floor, one mesh per toy kind, well shafts, door glows and neon signs. Rebuilt only
 // when you cross into a new chunk (a few ms), never per frame.
 import * as THREE from "three";
@@ -15,7 +15,7 @@ const WRITINGS = [
 
 export type RoomStatus = { people: number; speaking: string[]; transcribed: boolean; variant?: number };
 
-export type Labyrinth = {
+export type MazeScene = {
   group: THREE.Group;
   update: (px: number, pz: number, cam: THREE.Vector3, t: number) => void;
   /** live info per room id → door light brightness and the neon sign text */
@@ -32,7 +32,7 @@ export type Labyrinth = {
 
 const FOG = new THREE.Color(0x07060c);
 
-export function createLabyrinth(): Labyrinth {
+export function createMaze(): MazeScene {
   const group = new THREE.Group();
   const shared = {
     uLights: { value: Array.from({ length: MAX_LIGHTS }, () => new THREE.Vector4()) },

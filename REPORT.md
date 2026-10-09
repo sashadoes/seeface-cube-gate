@@ -7,7 +7,7 @@ Branch `feature/world-core-v1` (worktree `shop_of_horrors/seeface-world-core`), 
 | # | Milestone | Status |
 |---|---|---|
 | 0 | Audit, plan, setup, strict TS, test tooling | ✅ ARCHITECTURE / PLAN / SETUP / DECISIONS / PROGRESS / CHANGELOG, `.env.example`, `tsconfig.world.json` (strict), vitest + Playwright |
-| 1 | Movement, physics, labyrinth, falling holes | ✅ Seeded chunked labyrinth (shared with the server), kinematic blob with momentum, coyote time, buffered jump, double jump, air control and wall bumps; wells (2.6 s freefall); bounce pads, wind vents, speed strips, low-g district, secret walls; squash-and-stretch blobs; player bumping ("boop") |
+| 1 | Movement, physics, maze, falling holes | ✅ Seeded chunked maze (shared with the server), kinematic blob with momentum, coyote time, buffered jump, double jump, air control and wall bumps; wells (2.6 s freefall); bounce pads, wind vents, speed strips, low-g district, secret walls; squash-and-stretch blobs; player bumping ("boop") |
 | 2 | Rooms, voice, MIC, proximity audio | ✅ Our own authoritative WebSocket server; WebRTC mesh voice (server-signalled, server-linked, 18+ gated, never recorded); MIC hold / lock / whisper / tap-to-type; HRTF voices, wall occlusion, room crossfade, per-room reverb, ducking, limiter; zone soundscapes; Follow · Mute · Report · Block; kick |
 | 3 | RADIO tuner | ✅ Spin dial, static and filter sweep, haptic ticks, 3 s live preview, JUMP IN = fall, radio off |
 | 4 | Onboarding | ✅ 🎧 screen → 18+ (adapter) + name + 6 blobs → 3 cards → auto-drop into the busiest real room; two quests; ME panel; Transcribe me; delete my data |
@@ -21,7 +21,7 @@ Hard rules: no audio is stored anywhere. Voice, previews and bubbles need the 18
 |---|---|---|---|
 | First load | < 5 MB | **255 KB** | built `/world/`, transferred bytes |
 | Time to playable | < 3 s | **1.02 s** | Pixel 7 viewport, CPU 4× throttle, 9 Mbps / 60 ms |
-| fps in the labyrinth | 60 | **57 min / 60 median** | same profile, walking 8 s (**Mac GPU**, see caveat) |
+| fps in the maze | 60 | **57 min / 60 median** | same profile, walking 8 s (**Mac GPU**, see caveat) |
 | Draw calls | < 100 | **18–26** | `renderer.info` |
 | Time to first voice (new user) | < 30 s | **4.5 s** | e2e with automated taps; a human reading the 3 cards adds ~10 s |
 | Mic press → heard | — | **0.68 s** | 2 real Chrome pages, localhost |

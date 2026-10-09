@@ -1,4 +1,4 @@
-// The labyrinth's living soundscape, all synthesised (nothing to download):
+// The maze's living soundscape, all synthesised (nothing to download):
 //   a deep drone everywhere; one bed per district, crossfaded as you walk:
 //   entrance  — a slow ~60 bpm pulse + a crowd murmur that exists only when real people are in rooms nearby
 //   whisper   — close whispers drifting around your head; they stop when you stand still

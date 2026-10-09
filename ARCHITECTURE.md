@@ -37,7 +37,7 @@ small Express API in `server/` (Render blueprint, MongoDB or a JSONL file).
 | Public MQTT relay | Our own WebSocket world server (`server/world/`). It's authoritative for rooms, permissions, coins and moderation. |
 | Self-declared 18+ | An age-assurance adapter. A mock is allowed only in dev with a flag. In production the voice stays locked until a vendor is configured. |
 | WebRTC mesh over a public relay | A `VoiceAdapter` with a WebRTC mesh signalled only through our own server (built). LiveKit for big rooms: server token minting is built, the client adapter is the next step. |
-| The HUD-heavy Labyrinth shell | A new lean shell with only three buttons (📻 🎙 👤). |
+| The HUD-heavy Maze shell | A new lean shell with only three buttons (📻 🎙 👤). |
 
 ## Why the world is a new route instead of a refactor of `/labyrinth`
 
@@ -51,7 +51,7 @@ the owner decides whether `/` points at it.
 
 ```
 shared/world/          pure TypeScript, used by BOTH client and server (no DOM, no Node APIs)
-  maze.ts              seeded chunked labyrinth, curated rooms, wells (giant holes), toys
+  maze.ts              seeded chunked maze, curated rooms, wells (giant holes), toys
   rooms.ts             the curated public rooms (name, topic, theme pack, acoustics)
   ledger.ts            coin rules + pure ledger (append-only entries, idempotency keys)
   permissions.ts       who may hear/speak/kick/read transcripts
@@ -65,7 +65,7 @@ src/world/             the client (lazy chunk at /world/)
   World.tsx            React shell: the 3 buttons + overlays (tuner, onboarding, ME, avatar card)
   flags.ts             feature flags
   engine/              renderer, game loop, perf (tiers, dynamic resolution)
-  scene/               instanced labyrinth chunks, rooms, doors, signs, wells, toys
+  scene/               instanced maze chunks, rooms, doors, signs, wells, toys
   player/              kinematic capsule controller, grid collision, camera
   avatar/              blob avatars (squash-and-stretch vertex shader)
   audio/               master bus + limiter + ducking, HRTF voices, occlusion, reverb, soundscapes, one-key SFX

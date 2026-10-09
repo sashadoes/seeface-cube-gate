@@ -2,7 +2,7 @@
 // holes, and the frame loop with dynamic resolution. React only talks to it through this API.
 import * as THREE from "three";
 import { CELL, WELL_R, curatedRoomPlace, placeById, districtAt, roomAtPoint, roomGeometry, SPAWN, type Well } from "../../../shared/world/maze.ts";
-import { createLabyrinth } from "../scene/labyrinth.ts";
+import { createMaze } from "../scene/maze.ts";
 import { createProps, type Decor } from "../scene/props.ts";
 import { createBlob, type BlobKind } from "../avatar/blob.ts";
 import { createBody, dropAt, step, type StepEvent } from "../player/controller.ts";
@@ -29,7 +29,7 @@ export function createGame(canvas: HTMLCanvasElement, opts: { blob: BlobKind; ph
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  const lab = createLabyrinth();
+  const lab = createMaze();
   scene.background = lab.fog.color;
   scene.fog = new THREE.FogExp2(lab.fog.color, lab.fog.density);
   scene.add(lab.group);

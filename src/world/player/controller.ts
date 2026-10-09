@@ -1,5 +1,5 @@
 // Kinematic capsule controller: momentum, coyote time, jump buffer, a small double jump, air
-// control, and the labyrinth toys (bounce pads, wind vents, speed strips, low gravity, wells).
+// control, and the maze toys (bounce pads, wind vents, speed strips, low gravity, wells).
 // Pure logic (no three.js, no DOM), so it runs the same in tests.
 import { WELL_R, lowGravityAt, pushOut, toyAt, wellsNear, type Well } from "../../../shared/world/maze.ts";
 

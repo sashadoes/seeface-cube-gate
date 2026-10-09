@@ -67,7 +67,7 @@ export function Onboarding({ session, onDone }: { session: Session; onDone: () =
             {age === "verified" ? (
               <div className="w-age-ok">✓ 18+ checked</div>
             ) : age === "unavailable" ? (
-              <div className="w-age-note">Voice rooms are 18+. Age checks aren't switched on yet, so for now you can walk the labyrinth, but not hear or talk.</div>
+              <div className="w-age-note">Voice rooms are 18+. Age checks aren't switched on yet, so for now you can walk the Maze, but not hear or talk.</div>
             ) : ageMock ? (
               <button data-testid="onb-age" className="w-age-btn" onClick={() => session.ageMock()} disabled={!connected}>
                 I'm 18+ · check (dev mock)

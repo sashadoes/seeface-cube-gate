@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CELL, CH, SPAWN, cellOf, chunkAt, circleFree, curatedRooms, pushOut, reachable, roomAtPoint, roomGeometry, wallE, wellsNear } from "../../shared/world/maze.ts";
 import { ROOMS } from "../../shared/world/rooms.ts";
 
-describe("labyrinth", () => {
+describe("maze", () => {
   it("is deterministic", () => {
     const a = chunkAt(5, -3).edges.join(",");
     const b = chunkAt(5, -3).edges.join(",");

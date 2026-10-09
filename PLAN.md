@@ -7,7 +7,7 @@ gets its own branch `world/mN-*`, cut from the previous one and merged forward i
 | # | Milestone | Gap today | Deliverable |
 |---|---|---|---|
 | 0 | Audit | No tests, strict TS, flags or world server | Docs, `.env.example`, strict `tsconfig.world.json`, vitest + playwright, flags |
-| 1 | Movement, physics, labyrinth, holes | The existing controller is walk/run with no coyote time, double jump or toys | `/world/`: seeded chunked labyrinth (instanced, ≤ 100 draw calls), kinematic capsule (momentum, coyote, double jump, air control), blob avatars, wells → 2.5 s freefall tunnel, bounce pads, wind vents, low-g, speed strips, secret walls |
+| 1 | Movement, physics, maze, holes | The existing controller is walk/run with no coyote time, double jump or toys | `/world/`: seeded chunked maze (instanced, ≤ 100 draw calls), kinematic capsule (momentum, coyote, double jump, air control), blob avatars, wells → 2.5 s freefall tunnel, bounce pads, wind vents, low-g, speed strips, secret walls |
 | 2 | Rooms, voice, MIC, proximity | No world server; voice only on a branch over a public relay | `server/world` WebSocket server (presence, rooms, permissions, rate limits); VoiceAdapter (mesh + LiveKit); MIC hold/lock/whisper; HRTF voices, wall occlusion, room crossfade, reverb, ducking, limiter, soundscapes |
 | 3 | RADIO tuner | — | Circular tuner overlay, static + filter sweep, 3 s live preview, JUMP IN → fall |
 | 4 | Onboarding | — | Headphones screen, age gate (adapter), name + 6 blobs, 3 cards, auto-drop into the busiest room, quests (Say hi +20, Spin the radio +10), Transcribe-me switch, TRANSCRIBED door sign |

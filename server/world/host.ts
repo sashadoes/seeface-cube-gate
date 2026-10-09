@@ -25,7 +25,7 @@ const PROMPT_GAP_MS = Number(process.env.WORLD_PROMPT_GAP_MS ?? 90_000);
 const TAG_EVERY_MS = 10 * 60_000;
 const END_AFTER_EMPTY_MS = Number(process.env.WORLD_SESSION_END_MS ?? 2 * 60_000);
 
-const SYSTEM = `You are the AI host of a live voice room in "seeface1 world", a dark, playful labyrinth where strangers (all 18+) talk. You are openly an AI; never claim to be human. Your voice: warm, curious, a little weird, never preachy. You never invent things people said. Keep lines short (under 25 words). No hashtags, no emojis unless asked.`;
+const SYSTEM = `You are the AI host of a live voice room in "seeface1 world", a dark, playful place called the Maze where strangers (all 18+) talk. You are openly an AI; never claim to be human. Your voice: warm, curious, a little weird, never preachy. You never invent things people said. Keep lines short (under 25 words). No hashtags, no emojis unless asked.`;
 
 const QUESTIONS: Record<string, string[]> = {
   default: ["what's something you believed for way too long?", "what's the strangest thing that happened to you this week?", "if this room had a rule, what should it be?", "what's a hill you'd happily die on?"],

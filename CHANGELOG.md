@@ -39,9 +39,9 @@
 - UI: MIC (hold, swipe up to lock, tap to unlock, slide down to whisper, tap to type), V to talk, tap an avatar for Follow · Mute · Report · Block (plus "bring up" and "ask to leave" for hosts), a text bubble composer with 5 reactions and a raise-hand button.
 - Moderation: block cuts voice both ways; reports carry the target's own transcript lines only; 3 reporters in 24 h pause voice for 1 h pending review; kick bans someone from the room for 10 minutes.
 
-## M1 — movement, physics, labyrinth, wells (world/m1-movement)
-- `/world/` is its own page and chunk (none of the cube or labyrinth code).
-- Seeded, chunked labyrinth shared by client and server (`shared/world/maze.ts`): spanning-tree corridors with loops, 12 curated rooms around spawn, a hub with a giant well in every nearby chunk, secret walls, bounce pads, wind vents, speed strips, a low-gravity district (Dream Garden).
+## M1 — movement, physics, maze, wells (world/m1-movement)
+- `/world/` is its own page and chunk (none of the cube or maze code).
+- Seeded, chunked maze shared by client and server (`shared/world/maze.ts`): spanning-tree corridors with loops, 12 curated rooms around spawn, a hub with a giant well in every nearby chunk, secret walls, bounce pads, wind vents, speed strips, a low-gravity district (Dream Garden).
 - Kinematic capsule controller with momentum, coyote time, jump buffer, a double jump, air control and wall bumps (`src/world/player/controller.ts`).
 - Blob avatars (6 kinds) with squash-and-stretch, a jelly wobble, blinking and a speaking ring.
 - Wells and portals: a 2.6 s freefall through a glowing shaft with a riser, then a flash and a bass-hit splat in the destination room.
