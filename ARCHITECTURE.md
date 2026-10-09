@@ -36,7 +36,7 @@ small Express API in `server/` (Render blueprint, MongoDB or a JSONL file).
 |---|---|
 | Public MQTT relay | Our own WebSocket world server (`server/world/`). It's authoritative for rooms, permissions, coins and moderation. |
 | Self-declared 18+ | An age-assurance adapter. A mock is allowed only in dev with a flag. In production the voice stays locked until a vendor is configured. |
-| WebRTC mesh over a public relay | A `VoiceAdapter`: LiveKit when it's configured, otherwise a WebRTC mesh signalled through our own server (no public relay). |
+| WebRTC mesh over a public relay | A `VoiceAdapter` with a WebRTC mesh signalled only through our own server (built). LiveKit for big rooms: server token minting is built, the client adapter is the next step. |
 | The HUD-heavy Labyrinth shell | A new lean shell with only three buttons (📻 🎙 👤). |
 
 ## Why the world is a new route instead of a refactor of `/labyrinth`
@@ -69,7 +69,7 @@ src/world/             the client (lazy chunk at /world/)
   player/              kinematic capsule controller, grid collision, camera
   avatar/              blob avatars (squash-and-stretch vertex shader)
   audio/               master bus + limiter + ducking, HRTF voices, occlusion, reverb, soundscapes, one-key SFX
-  voice/               VoiceAdapter: mesh (dev/default) and LiveKit
+  voice/               VoiceAdapter (mesh), STT adapter interface
   net/                 world server client
 tests/unit/            vitest
 tests/e2e/             playwright
