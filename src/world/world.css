@@ -66,3 +66,28 @@
 .w-reactions { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .w-reactions span { position: absolute; bottom: 120px; font-size: 34px; animation: w-float 2.6s ease-out forwards; }
 @keyframes w-float { to { transform: translateY(-55vh) scale(1.4); opacity: 0; } }
+
+/* the radio tuner */
+.w-overlay-full { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: radial-gradient(circle at 50% 45%, rgba(20,14,40,.55), rgba(4,3,10,.88)); animation: w-in2 .2s ease-out; }
+@keyframes w-in2 { from { opacity: 0; } }
+.w-dial-wrap { position: relative; width: min(84vw, 380px); aspect-ratio: 1; }
+.w-dial { position: absolute; inset: 0; border-radius: 50%; touch-action: none; cursor: grab;
+  background: conic-gradient(from 0deg, rgba(108,156,255,.10), rgba(255,90,216,.14), rgba(108,156,255,.10), rgba(255,90,216,.14), rgba(108,156,255,.10));
+  border: 2px solid rgba(180,160,255,.35); box-shadow: 0 0 60px rgba(140,110,255,.35), inset 0 0 80px rgba(0,0,0,.6); }
+.w-dial::after { content: ""; position: absolute; inset: 18%; border-radius: 50%; background: rgba(6,5,12,.88); border: 1px solid rgba(255,255,255,.08); pointer-events: none; }
+.w-tick { position: absolute; left: calc(50% - 3px); top: 50%; width: 6px; height: 22px; margin-top: -11px; border-radius: 3px; background: rgba(255,255,255,.22); transform-origin: 50% 50%; pointer-events: none; }
+.w-tick.live { background: #ffb070; box-shadow: 0 0 10px #ff9a3c; }
+.w-tick.on { background: #fff; box-shadow: 0 0 16px #fff; }
+.w-needle { position: absolute; left: calc(50% - 2px); top: -10px; width: 4px; height: 34px; background: var(--w-hot); border-radius: 2px; box-shadow: 0 0 14px var(--w-hot); pointer-events: none; }
+.w-station { position: absolute; inset: 22%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 0 6px; transition: filter .2s, opacity .2s; }
+.w-station.static { filter: blur(1.2px); opacity: .55; }
+.w-st-name { font: italic 22px Georgia, serif; line-height: 1.15; }
+.w-st-topic { color: var(--w-dim); font-size: 14px; margin-top: 6px; }
+.w-st-meta { margin-top: 10px; font-size: 13px; color: #ffd1a8; }
+.w-jump { min-width: 200px; min-height: 56px; border-radius: 999px; border: none; font: 700 18px "Helvetica Neue", Arial, sans-serif; letter-spacing: .12em;
+  background: linear-gradient(90deg, #ff5ad8, #6c9cff); color: #0b0a14; box-shadow: 0 0 30px rgba(255,90,216,.5); cursor: pointer; }
+.w-jump:disabled { opacity: .35; box-shadow: none; }
+.w-radio-off { background: none; border: 1px solid var(--w-line); color: var(--w-dim); border-radius: 999px; padding: 10px 16px; font-size: 13px; }
+.w-x-big { position: absolute; top: var(--w-safe-t); right: 14px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--w-line); background: var(--w-glass); color: var(--w-ink); font-size: 24px; }
+.w-radio.on { box-shadow: 0 0 24px rgba(255,90,216,.6); border-color: var(--w-hot); }

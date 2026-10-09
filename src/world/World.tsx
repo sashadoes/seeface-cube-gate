@@ -8,6 +8,7 @@ import { startSession, ui, useUi, type Session } from "./session.ts";
 import { Mic } from "./ui/Mic.tsx";
 import { Card } from "./ui/Card.tsx";
 import { Composer } from "./ui/Composer.tsx";
+import { Radio } from "./ui/Radio.tsx";
 
 const phone = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
@@ -18,6 +19,7 @@ export function World() {
   const [falling, setFalling] = useState(false);
   const [flash, setFlash] = useState(false);
   const [composer, setComposer] = useState(false);
+  const [radio, setRadio] = useState(false);
   const card = useUi("card");
   const coins = useUi("coins");
   const notice = useUi("notice");
@@ -93,13 +95,14 @@ export function World() {
         <span className={`w-face blob-${blob}`}>◕‿◕</span>
         <span className="w-coins" data-testid="coins">{coins}</span>
       </button>
-      <button className="w-btn w-radio" aria-label="radio" data-testid="radio">
+      <button className={`w-btn w-radio ${radio ? "on" : ""}`} aria-label="radio" data-testid="radio" onClick={() => setRadio((r) => !r)}>
         📻
       </button>
       {session && <Mic session={session} onTap={() => setComposer(true)} />}
 
       {session && card && <Card session={session} id={card} onClose={() => ui.set({ card: null })} />}
       {session && composer && <Composer session={session} onClose={() => setComposer(false)} />}
+      {session && radio && <Radio session={session} onClose={() => setRadio(false)} />}
       {game && null}
     </div>
   );

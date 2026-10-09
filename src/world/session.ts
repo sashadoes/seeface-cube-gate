@@ -38,6 +38,7 @@ export type UiState = {
   quests: { sayHi: boolean; spinRadio: boolean };
   reactions: { emoji: string; at: number; id: number }[];
   heardVoice: boolean;
+  roomAudio: boolean;
 };
 
 function createStore<T extends object>(init: T) {
@@ -98,6 +99,7 @@ export const ui = createStore<UiState>({
   quests: read("sf1w.quests", { sayHi: false, spinRadio: false }),
   reactions: [],
   heardVoice: false,
+  roomAudio: true,
 });
 export const useUi = <K extends keyof UiState>(k: K) => useSyncExternalStore(ui.subscribe, () => ui.get()[k]);
 
@@ -303,7 +305,17 @@ export function startSession(game: Game) {
       net.send({ t: "profile", name, blob });
     },
     jumpTo: (room: string) => net.send({ t: "fallTo", room }),
-    preview: (room: string | null) => net.send({ t: "preview", room }),
+    preview(room: string | null) {
+      net.send({ t: "preview", room });
+      // previews are heard even with the room radio off
+      if (room) getAudio().voices.gain.setTargetAtTime(1, getAudio().ctx.currentTime, 0.05);
+      else getAudio().voices.gain.setTargetAtTime(ui.get().roomAudio ? 1 : 0, getAudio().ctx.currentTime, 0.1);
+    },
+    /** radio off = mute the room's audio but stay */
+    setRoomAudio(on: boolean) {
+      ui.set({ roomAudio: on });
+      getAudio().voices.gain.setTargetAtTime(on ? 1 : 0, getAudio().ctx.currentTime, 0.1);
+    },
     spinQuest: () => !ui.get().quests.spinRadio && net.send({ t: "quest", id: "spin-radio" }),
     pick: (ndc: { x: number; y: number }) => others.pick(ndc, game.camera),
     firstVoiceAt: () => firstVoiceAt,
