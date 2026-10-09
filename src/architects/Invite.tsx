@@ -59,15 +59,15 @@ export default function Invite() {
           <div className="arch-scroll">↓ what this is</div>
         </header>
 
-        <section className="arch-section" style={{ position: "static" }}>
+        <div className="arch-section">
           <h2>The world</h2>
           <p>
             seeface1 is a labyrinth that never ends. People walk it together, in the browser, from their phones: they get lost, meet strangers, talk, and find rooms that
             shouldn't exist. Every room was dreamed by someone. Soon, some of them will be yours.
           </p>
-        </section>
+        </div>
 
-        <section className="arch-section" style={{ position: "static" }}>
+        <div className="arch-section">
           <h2>How it works</h2>
           <ol className="arch-steps">
             <li>
@@ -87,9 +87,9 @@ export default function Invite() {
               <span>Gather people in your room: listening sessions, open mics, premieres, readings. Free or ticketed.</span>
             </li>
           </ol>
-        </section>
+        </div>
 
-        <section className="arch-section" style={{ position: "static" }}>
+        <div className="arch-section">
           <h2>What you get</h2>
           <ul className="arch-list">
             <li>A room of your own, built from your work, that stays in the labyrinth permanently.</li>
@@ -101,9 +101,9 @@ export default function Invite() {
           <p className="arch-small" style={{ textTransform: "none", letterSpacing: 0 }}>
             Ticketed shows and the marketing kit arrive in the next phase. Nothing is charged today.
           </p>
-        </section>
+        </div>
 
-        <section className="arch-section" style={{ position: "static" }}>
+        <div className="arch-section">
           <h2>In plain words</h2>
           <ul className="arch-list">
             <li>
@@ -120,9 +120,9 @@ export default function Invite() {
           <p>
             <a href="/architects/terms/">The full Architect Terms →</a>
           </p>
-        </section>
+        </div>
 
-        <section className="arch-section" style={{ position: "static", textAlign: "center" }}>
+        <div className="arch-section" style={{ textAlign: "center" }}>
           <p style={{ fontStyle: "italic", fontSize: 22 }}>The door doesn't stay open for long.</p>
           <a className="arch-cta" href={joinHref()} onClick={() => track("architects-cta-bottom")}>
             Answer the call
@@ -130,7 +130,7 @@ export default function Invite() {
           <p className="arch-small" style={{ marginTop: 30 }}>
             <a href="/chamber/">already an architect? return to the chamber</a>
           </p>
-        </section>
+        </div>
       </div>
     </main>
   );

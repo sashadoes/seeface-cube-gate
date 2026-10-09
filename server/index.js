@@ -27,6 +27,7 @@ import { promisify } from "node:util";
 import { npcReady, talk } from "./npc/talk.mjs";
 import { openStore } from "./architects/store.mjs";
 import { mountArchitects } from "./architects/routes.mjs";
+import { mountChamber, llmReady } from "./architects/chamber.mjs";
 
 const scrypt = promisify(scryptCb);
 
@@ -267,7 +268,7 @@ app.use(
   })
 );
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, storage: players ? "mongodb" : "file", instagram: igReady(), npc: npcReady() }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, storage: players ? "mongodb" : "file", instagram: igReady(), npc: npcReady(), chamber: { llm: llmReady() } }));
 
 // ------------------------------------------------------------------ the labyrinth's characters (◇, written by Claude)
 // 12 lines / minute per IP; NPC_DAILY_CAP caps the whole day (see npc/talk.mjs)
@@ -563,6 +564,7 @@ mountArchitects(app, {
   SITE,
   accounts: { freeNick: nickFromIg, create: (doc) => store.createAccount(doc), newSession: (n) => store.newSession(n), cleanProgress },
 });
+mountChamber(app, { db: architectsDb, auth });
 
 // unknown routes and any error (bad JSON, too big, a crash in a handler): short JSON, never a stack trace
 app.use((_req, res) => res.status(404).json({ ok: false }));

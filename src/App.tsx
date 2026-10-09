@@ -16,10 +16,12 @@ const Artists = lazy(() => import("./components/artists/Artists"));
 const ArchInvite = lazy(() => import("./architects/Invite"));
 const ArchJoin = lazy(() => import("./architects/Join"));
 const ArchTerms = lazy(() => import("./architects/Terms"));
+const ArchChamber = lazy(() => import("./architects/Chamber"));
 const ARCH_PAGES: Record<string, LazyExoticComponent<ComponentType>> = {
   "/architects": ArchInvite,
   "/architects/join": ArchJoin,
   "/architects/terms": ArchTerms,
+  "/chamber": ArchChamber,
 };
 
 const path = location.pathname.replace(/\/+$/, "");

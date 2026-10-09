@@ -20,9 +20,14 @@
   font-family: "Times New Roman", Times, serif;
   line-height: 1.55;
   font-size: 18px;
+  text-align: left;
 
   a {
     color: var(--ink);
+  }
+  // the cube's global CSS centres every <p>
+  p {
+    text-align: inherit;
   }
   h1,
   h2,

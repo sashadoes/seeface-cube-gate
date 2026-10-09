@@ -202,15 +202,36 @@ export const MISSING_WORDS = {
   welcome_text: "the words visitors read when they enter",
 };
 
-// The JSON schema the model must answer in. blueprint_patch is free-form here
-// (structured outputs can't express "only changed fields" well); cleanPatch does the real checking.
+// The JSON schema the model must answer in (structured outputs). Every patch field is
+// optional ("only the fields that changed"); structured outputs need additionalProperties:
+// false on every object and can't express ranges or lengths, so cleanPatch still checks all of it.
+const obj = (properties) => ({ type: "object", additionalProperties: false, properties });
+const str = { type: "string" };
+const num = { type: "number" };
+const PATCH_SCHEMA = obj({
+  title: str,
+  tagline: str,
+  archetype: { type: "string", enum: ARCHETYPES },
+  mood: { type: "array", items: str },
+  palette: obj({ primary: str, secondary: str, accent: str, fog: str }),
+  lighting: obj({ preset: { type: "string", enum: LIGHTING }, intensity: num }),
+  fog: obj({ density: num }),
+  skybox: obj({ asset_id: { type: ["string", "null"] }, preset: { anyOf: [{ type: "string", enum: SKY_PRESETS }, { type: "null" }] } }),
+  surfaces: obj({ walls: str, floor: str }),
+  posters: { type: "array", items: { type: "object", additionalProperties: false, required: ["asset_id", "slot", "caption"], properties: { asset_id: str, slot: { type: "integer" }, caption: str } } },
+  objects: { type: "array", items: { type: "object", additionalProperties: false, required: ["type", "count", "placement"], properties: { type: { type: "string", enum: OBJECTS }, count: { type: "integer" }, placement: { type: "string", enum: PLACEMENTS } } } },
+  audio: obj({ ambient_asset_id: { type: ["string", "null"] }, preset: { anyOf: [{ type: "string", enum: AUDIO_PRESETS }, { type: "null" }] }, volume: num }),
+  radio: obj({ enabled: { type: "boolean" }, mode: { type: "string", enum: RADIO_MODES } }),
+  welcome_text: str,
+  capacity: { type: "integer" },
+});
 export const TURN_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["reply", "blueprint_patch", "stage"],
   properties: {
     reply: { type: "string", description: "what SeeFace says to the artist, 1-3 sentences" },
-    blueprint_patch: { type: ["object", "null"], description: "only the blueprint fields that changed, or null" },
+    blueprint_patch: { anyOf: [PATCH_SCHEMA, { type: "null" }], description: "only the blueprint fields that changed, or null" },
     stage: { type: "string", enum: ["arrival", "essence", "material", "atmosphere", "naming", "refining", "ready"] },
   },
 };
