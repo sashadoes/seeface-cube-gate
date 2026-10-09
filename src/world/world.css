@@ -1,0 +1,32 @@
+:root {
+  --w-ink: #ece8f6;
+  --w-dim: #8b84a8;
+  --w-glass: rgba(14, 12, 24, 0.62);
+  --w-line: rgba(236, 232, 246, 0.16);
+  --w-hot: #ff5ad8;
+  --w-live: #ff3b5c;
+  --w-cool: #6c9cff;
+  --w-safe-b: max(18px, env(safe-area-inset-bottom));
+  --w-safe-t: max(14px, env(safe-area-inset-top));
+}
+.w-root { position: fixed; inset: 0; color: var(--w-ink); font-family: "Helvetica Neue", Arial, sans-serif; }
+.w-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.w-btn {
+  position: absolute; border: 1px solid var(--w-line); background: var(--w-glass); color: var(--w-ink);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 999px; display: grid; place-items: center;
+  cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; transition: transform .12s ease, box-shadow .2s ease, background .2s;
+  font-size: 26px; padding: 0;
+}
+.w-btn:active { transform: scale(.94); }
+.w-radio { left: 50%; bottom: var(--w-safe-b); width: 76px; height: 76px; transform: translateX(-50%); font-size: 32px; }
+.w-radio:active { transform: translateX(-50%) scale(.94); }
+.w-mic { right: 18px; bottom: var(--w-safe-b); width: 68px; height: 68px; }
+.w-me { left: 14px; top: var(--w-safe-t); height: 44px; min-width: 44px; padding: 0 12px 0 4px; display: flex; gap: 8px; font-size: 15px; }
+.w-face { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: #d8c8ff; color: #120f1c; font-size: 12px; letter-spacing: -1px; }
+
+/* falling: darken the edges (tunnel vision), then a white bloom on landing */
+.w-fall { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .6s; background: radial-gradient(circle at 50% 50%, transparent 30%, rgba(0,0,0,.85) 75%); }
+.w-fall.on { opacity: 1; }
+.w-flash { position: absolute; inset: 0; pointer-events: none; background: #fff; opacity: 0; transition: opacity .38s ease-out; }
+.w-flash.on { opacity: .85; transition: none; }

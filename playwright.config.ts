@@ -8,6 +8,7 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:5174",
     ...devices["Pixel 7"],
+    channel: "chrome",
     launchOptions: {
       args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
     },
