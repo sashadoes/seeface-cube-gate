@@ -8,3 +8,4 @@ not a phone's, so fps is CPU-bound evidence only. Real mid-range Android and iPh
 |---|---|---|---|---|---|
 | Targets | < 5 MB | < 3 s | 60 | < 100 | < 30 s |
 | M1 movement + labyrinth | 234 KB | 0.96 s | 60 / 60 | 19 | n/a |
+| M2 rooms + voice | (see M3 row, same build) | | | | **0.68 s** mic-press → heard (2 real Chrome pages, mesh, localhost; 3/3 runs) |

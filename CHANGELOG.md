@@ -1,5 +1,13 @@
 # Changelog — seeface1 world
 
+## M2 — rooms, voice, MIC, proximity audio (world/m2-voice)
+- `server/world`: our own WebSocket server (no public relay). It decides rooms from positions, who hears whom (room links, corridor proximity links with hysteresis, 3 s radio previews), who may speak (small rooms: everyone; big rooms: raise hand, host or auto-queue brings you up), rate limits every message type, signed session tokens, and rejects teleports that weren't a server-approved fall.
+- Voice: a WebRTC mesh signalled only through our server, only for server-made links, never without the 18+ gate. The mic is requested on the first talk and attached with replaceTrack (nothing is sent while silent). Nothing is recorded.
+- Spatial audio: HRTF from the speaker's mouth (nearest 12, equal-power bed beyond), walls muffle (low-pass per wall crossed), a crossfade from muffled to clear on entering a room, per-room reverb (booth, hall, tunnel, closet, corridor), whisper (only within 2.2 m), mute, ducking, limiter.
+- Soundscape: drone; district beds (heartbeat entrance, moving-only whispers, market buzz, rain scaled by real crowd, archive clock, music bass leaking through walls, garden pads); wind and a choir at the wells; time-of-day colour and the 03:00 witching hour; crowd sounds only from real reactions.
+- UI: MIC (hold, swipe up to lock, tap to unlock, slide down to whisper, tap to type), V to talk, tap an avatar for Follow · Mute · Report · Block (plus "bring up" and "ask to leave" for hosts), a text bubble composer with 5 reactions and a raise-hand button.
+- Moderation: block cuts voice both ways; reports carry the target's own transcript lines only; 3 reporters in 24 h pause voice for 1 h pending review; kick bans someone from the room for 10 minutes.
+
 ## M1 — movement, physics, labyrinth, wells (world/m1-movement)
 - `/world/` is its own page and chunk (none of the cube or labyrinth code).
 - Seeded, chunked labyrinth shared by client and server (`shared/world/maze.ts`): spanning-tree corridors with loops, 12 curated rooms around spawn, a hub with a giant well in every nearby chunk, secret walls, bounce pads, wind vents, speed strips, a low-gravity district (Dream Garden).
