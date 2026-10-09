@@ -13,7 +13,7 @@ const WRITINGS = [
   "the walls have ears (we gave them ears)", "lost? listen", "hold the mic", "the night shift never ends",
 ];
 
-export type RoomStatus = { people: number; speaking: string[]; transcribed: boolean };
+export type RoomStatus = { people: number; speaking: string[]; transcribed: boolean; variant?: number };
 
 export type Labyrinth = {
   group: THREE.Group;
@@ -282,6 +282,9 @@ export function createLabyrinth(): Labyrinth {
         const flicker = 0.92 + 0.08 * Math.sin(t * 7 + i * 3) * Math.sin(t * 2.3 + i);
         shared.uLights.value[i].set(d.x, inside ? 2.6 : 1.6, d.z, (base * (0.45 + Math.min(1.2, people * 0.25))) * flicker * 6);
         shared.uLightCol.value[i].copy(d.col);
+        // the room grows with the conversation: the host's theme variant shifts its light
+        const v = status.get(id)?.variant ?? 0;
+        if (v) shared.uLightCol.value[i].offsetHSL(v * 0.07, 0.05, 0);
       }
       for (const sign of signs.values()) sign.tick(t, cam);
     },

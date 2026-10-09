@@ -143,7 +143,7 @@ function onHello(ws: WebSocket, m: Extract<ClientMsg, { t: "hello" }>, ip: strin
   // one live session per user: the newest wins
   const old = sessions.get(user.id);
   if (old) old.ws.close(4001, "replaced");
-  const s: Session = { id: user.id, ws, user, x: SPAWN.x, y: 0, z: SPAWN.z, f: 0, lastPosAt: 0, fallUntil: Date.now() + 8000, room: null, joinedRoomAt: 0, talking: 0, talkSince: 0, hand: false, handAt: 0, preview: null, previewUntil: 0, previewed: false, sentPeers: new Set(), sentLinks: "", links: new Map(), buckets: {}, listenMs: 0, speakMs: 0, saidHi: false, lastSpokeAt: 0 };
+  const s: Session = { id: user.id, ws, user, x: SPAWN.x, y: 0, z: SPAWN.z, f: 0, lastPosAt: 0, fallUntil: 0, room: null, joinedRoomAt: 0, talking: 0, talkSince: 0, hand: false, handAt: 0, preview: null, previewUntil: 0, previewed: false, sentPeers: new Set(), sentLinks: "", links: new Map(), buckets: {}, listenMs: 0, speakMs: 0, saidHi: false, lastSpokeAt: 0 };
   sessions.set(user.id, s);
   user.lastSeen = Date.now();
   if (!user.days.includes(today())) user.days.push(today());
@@ -515,7 +515,7 @@ function summaries(): RoomSummary[] {
   for (const r of rooms.values()) {
     if (!r.public && !r.owner) continue;
     const members = [...r.members].map((id) => sessions.get(id)).filter((s): s is Session => !!s);
-    out.push({ id: r.id, name: r.name, topic: host.topicOf(r.id) ?? r.topic, people: members.length, speaking: members.filter((s) => s.talking).map((s) => s.user.name), stage: isStage(r), transcribed: members.some((s) => s.user.transcribe), owner: r.owner ? store.data.users[r.owner]?.name ?? null : null, public: r.public, hostAi: r.hostAi });
+    out.push({ id: r.id, name: r.name, topic: host.topicOf(r.id) ?? r.topic, people: members.length, speaking: members.filter((s) => s.talking).map((s) => s.user.name), stage: isStage(r), transcribed: members.some((s) => s.user.transcribe), owner: r.owner ? store.data.users[r.owner]?.name ?? null : null, public: r.public, hostAi: r.hostAi, variant: host.variantOf(r.id) });
   }
   return out;
 }
@@ -546,6 +546,8 @@ const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   }
   if (req.method === "OPTIONS") return res.writeHead(204).end();
+  // every write endpoint is rate limited per address
+  if (req.method === "POST" && !httpAllow(String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0])) return json(res, 429, { ok: false });
   const url = new URL(req.url ?? "/", "http://x");
   if (url.pathname === "/health") return json(res, 200, { ok: true, people: sessions.size, voice: lk ? "livekit" : "mesh", age: age.mode, store: process.env.WORLD_STORE ?? "file" });
   if (url.pathname === "/rooms") return json(res, 200, { rooms: summaries().filter((r) => r.public) });
@@ -556,6 +558,18 @@ const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     json(res, 500, { ok: false });
   });
 });
+const httpBuckets = new Map<string, { tokens: number; at: number }>();
+function httpAllow(ip: string) {
+  const now = Date.now();
+  const b = httpBuckets.get(ip) ?? { tokens: 20, at: now };
+  b.tokens = Math.min(20, b.tokens + ((now - b.at) / 1000) * 0.5);
+  b.at = now;
+  httpBuckets.set(ip, b);
+  if (httpBuckets.size > 50_000) httpBuckets.clear();
+  if (b.tokens < 1) return false;
+  b.tokens--;
+  return true;
+}
 const json = (res: ServerResponse, code: number, body: unknown) => res.writeHead(code, { "content-type": "application/json" }).end(JSON.stringify(body));
 function originOk(origin: string) {
   if (!origin) return !PROD;

@@ -8,7 +8,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       // the world is its own page (its own small first load, none of the cube's code)
-      input: { main: resolve(__dirname, "index.html"), world: resolve(__dirname, "world/index.html") },
+      input: { main: resolve(__dirname, "index.html"), world: resolve(__dirname, "world/index.html"), worldAdmin: resolve(__dirname, "world/admin/index.html") },
     },
   },
   test: { include: ["tests/unit/**/*.test.ts"], environment: "node" },

@@ -4,11 +4,12 @@ import type { AgeState, RoomSummary, Role, ServerMsg } from "../../shared/world/
 import { roomById } from "../../shared/world/rooms.ts";
 import type { Game } from "./engine/game.ts";
 import type { BlobKind } from "./avatar/blob.ts";
-import { connectWorld, type WorldNet } from "./net/client.ts";
+import { connectWorld, worldUrl, type WorldNet } from "./net/client.ts";
 import { createMeshVoice, type VoiceAdapter } from "./voice/mesh.ts";
 import { createVoices, type Voices } from "./audio/voices.ts";
 import { createOthers, type Others } from "./scene/others.ts";
 import { createSoundscape } from "./audio/soundscape.ts";
+import { createStt } from "./voice/stt.ts";
 import { getAudio } from "./audio/engine.ts";
 import { funnel } from "./analytics.ts";
 import { flag } from "./flags.ts";
@@ -119,6 +120,8 @@ export function startSession(game: Game) {
   const notice = (text: string) => ui.set({ notice: { text, at: Date.now() } });
 
   // my own voice level (for my ring)
+  // live captions (only with Transcribe me on, only while live; text only)
+  const stt = createStt("mock", (text, final) => net.send({ t: "caption", text, final }));
   let micAnalyser: AnalyserNode | null = null;
   const micData = new Uint8Array(new ArrayBuffer(256));
   let myLevel = 0;
@@ -148,7 +151,7 @@ export function startSession(game: Game) {
   net.on("peers", (m) => others.update(m.peers, m.gone));
   net.on("rooms", (m) => {
     ui.set({ rooms: m.rooms });
-    for (const r of m.rooms) game.lab.setRoomStatus(r.id, { people: r.people, speaking: r.speaking, transcribed: r.transcribed });
+    for (const r of m.rooms) game.lab.setRoomStatus(r.id, { people: r.people, speaking: r.speaking, transcribed: r.transcribed, variant: r.variant });
     scape.setCrowd(m.rooms);
   });
   net.on("links", (m) => {
@@ -238,6 +241,8 @@ export function startSession(game: Game) {
     net.send({ t: "talk", on, whisper });
     lastTalkSent = performance.now();
     ui.set({ live: on ? (whisper ? "whisper" : "talk") : false, ...(on ? {} : { locked: false }) });
+    if (on && st.transcribe && v.micStream()) stt.start(v.micStream()!);
+    if (!on) stt.stop();
     if (on) {
       funnel("spoke");
       if (!ui.get().quests.sayHi && st.room) setTimeout(() => sayHiCheck(), 2500);
@@ -336,6 +341,17 @@ export function startSession(game: Game) {
     spinQuest: () => !ui.get().quests.spinRadio && net.send({ t: "quest", id: "spin-radio" }),
     pick: (ndc: { x: number; y: number }) => others.pick(ndc, game.camera),
     firstVoiceAt: () => firstVoiceAt,
+    /** HTTP calls to the world server, signed with our session token */
+    async api<T>(path: string, body?: unknown): Promise<T | null> {
+      try {
+        const base = worldUrl().replace(/^ws/, "http");
+        const token = localStorage.getItem("sf1w.token") ?? "";
+        const r = await fetch(base + path, { method: body ? "POST" : "GET", headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        return r.ok ? ((await r.json()) as T) : null;
+      } catch {
+        return null;
+      }
+    },
     dispose() {
       voice?.dispose();
       voices.dispose();

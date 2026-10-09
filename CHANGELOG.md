@@ -1,5 +1,14 @@
 # Changelog — seeface1 world
 
+## M5 — AI host, transcripts, Library (world/m5-host)
+- The AI host (always labelled AI, Claude `claude-opus-5-5` with server-side refusal fallbacks and structured JSON output; scripted when there's no key or past `HOST_DAILY_CAP`): greets newcomers by name with the current topic, asks a question after 30 s of silence (never more than once every 90 s), re-tags the topic every ~10 min and shifts the room's theme variant (door light hue), writes the Library verdict when a session ends (2 min empty), and flags abuse in transcribed lines to the moderators' queue.
+- Transcripts: text only, only from speakers with Transcribe me on (captions from anyone else are dropped server-side); room owners read their own room's transcript (90-day retention, purged automatically); curated public rooms have no owner, so nobody reads theirs.
+- Library: verdicts (title, conclusions, key arguments, quotes); a quote shows only after its speaker approves it (ME → the Library). Nobody else can approve your quotes.
+- Speech-to-text adapter interface; the mock produces nothing (we never invent speech). A real provider needs Sasha's choice and key.
+- Moderation queue page at `/world/admin/` (WORLD_ADMIN_KEY): open reports and AI flags with only the reported person's own lines, the AI's read, and dismiss / strike (1: 24 h voice pause · 2: 7 days · 3: ban) / ban.
+- Every HTTP write endpoint is rate limited per address. Closed a hole where a new connection could teleport freely for 8 s.
+- Server integration tests: teleport rejection, say-hi only after real speech, caption opt-in, verdict + quote approval (including forged approval), owner-only transcripts, host greeting + silence question, the report → admin flow, blocks cut links.
+
 ## M4 — onboarding, age gate, auto-drop, privacy (world/m4-onboarding)
 - 🎧 "Put your headphones on" (that tap unlocks audio and plays the 3-note signature) → a name + one of 6 blobs + the 18+ check → three swipeable one-line cards → an automatic fall into the busiest live room (real counts; rooms with someone speaking first; an empty world drops you into First Words with the AI host).
 - 18+: a dev-only mock button; in production with no vendor the world says honestly that voice isn't open yet (walking still works).

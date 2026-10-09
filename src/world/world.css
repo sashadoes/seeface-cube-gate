@@ -136,3 +136,13 @@
 .w-link { flex: 1; color: var(--w-dim); font-size: 14px; text-align: center; }
 .w-overlay button.danger { background: rgba(255,59,92,.2); border-color: var(--w-live); }
 .w-crash { position: fixed; inset: 0; background: #07060c; color: #8b84a8; border: none; font: italic 16px Georgia, serif; }
+
+.w-library { max-height: 56vh; overflow-y: auto; margin: 4px 0 10px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; line-height: 1.4; }
+.w-lib-h { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--w-dim); }
+.w-lib-t { font: italic 17px Georgia, serif; margin-bottom: 4px; }
+.w-lib-v { border-top: 1px solid var(--w-line); padding-top: 10px; }
+.w-lib-quote { margin-top: 6px; color: #ffd1a8; font-style: italic; }
+.w-lib-q { background: rgba(255,214,110,.08); border-radius: 12px; padding: 10px; }
+.w-dim.small { font-size: 11px; margin-top: 6px; }
+.w-overlay .w-back { width: 100%; margin-bottom: 8px; }
+.w-me-panel { max-height: calc(100dvh - 140px); overflow-y: auto; }

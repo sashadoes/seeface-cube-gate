@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { getAudio } from "../audio/engine.ts";
 import { useUi, type Session } from "../session.ts";
+import { Library } from "./Library.tsx";
 
 export function Me({ session, onClose, children }: { session: Session; onClose: () => void; children?: React.ReactNode }) {
   const name = useUi("name");
@@ -10,12 +11,27 @@ export function Me({ session, onClose, children }: { session: Session; onClose: 
   const age = useUi("age");
   const [out, setOut] = useState(getAudio().output());
   const [confirm, setConfirm] = useState(false);
+  const [lib, setLib] = useState(false);
   return (
     <div className="w-overlay w-me-panel" onPointerDown={(e) => e.stopPropagation()} data-testid="me-panel">
       <div className="w-card-name">
         {name} · <span data-testid="me-coins">{coins}</span> coins
       </div>
+      {lib ? (
+        <>
+          <Library session={session} />
+          <button className="w-back" onClick={() => setLib(false)}>
+            back
+          </button>
+        </>
+      ) : (
+        <>
       {children}
+      <div className="w-row">
+        <button onClick={() => setLib(true)} data-testid="library">
+          📚 the Library
+        </button>
+      </div>
       <label className="w-switch">
         <input type="checkbox" checked={transcribe} onChange={(e) => session.transcribe(e.target.checked)} data-testid="transcribe" />
         <span>
@@ -58,6 +74,8 @@ export function Me({ session, onClose, children }: { session: Session; onClose: 
           </button>
         )}
       </div>
+        </>
+      )}
       <button className="w-x" aria-label="close" onClick={onClose}>
         ×
       </button>

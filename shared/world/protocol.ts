@@ -30,6 +30,8 @@ export type RoomSummary = {
   owner: string | null;
   public: boolean;
   hostAi: boolean;
+  /** the AI host swaps elements from the room's theme pack as the conversation moves (0-3) */
+  variant: number;
 };
 
 /** a voice link the server allows: you may connect audio with this peer */
