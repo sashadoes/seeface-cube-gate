@@ -71,6 +71,8 @@ import { DEFAULTS, hasSavedSettings, onSettings, setSettings, settings, type Set
 import { createPerf, decideTier, describeDevice } from "./perf";
 import { PROFILES, profile, type Tier } from "./tiers";
 import { readGraphics, saveGraphics } from "./graphics";
+import { createPerfMetrics } from "./perfMetrics";
+import type { createPerfOverlay } from "./perfOverlay";
 import type { CheckState } from "./GraphicsCheck";
 import { TIER_NOTES } from "./tierNotes";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
@@ -702,6 +704,13 @@ function Game({ nick }: { nick: string }) {
     // first visit: a guess right away, then the device check screen (graphics.ts) picks for real
     const device = describeDevice(renderer);
     if (!hasSavedSettings()) setSettings({ quality: device.hint });
+    // measuring: anonymous metrics always; the overlay only with ?perf
+    renderer.info.autoReset = false; // count every pass of a frame (bloom, film…), reset per frame
+    const metrics = createPerfMetrics(device);
+    let overlay: ReturnType<typeof createPerfOverlay> | null = null;
+    let overlayAt = 0, overlayFrames = 0;
+    if (new URLSearchParams(location.search).has("perf"))
+      void import("./perfOverlay").then(({ createPerfOverlay }) => (overlay = createPerfOverlay(renderer, world.scene)));
     const hunter = createHunter();
     const residents = createResidents();
     const keepers = createKeepers();
@@ -2331,6 +2340,7 @@ function Game({ nick }: { nick: string }) {
       if (idle < 30_000) perf.frame(dtReal, camera); // idle frames are slow on purpose: don't let them count
       sweep(world.scene);
       immersive.update(dt, perf.info().scale, alive ? lastDanger : 0);
+      renderer.info.reset();
       if (trip) {
         // ---------------- teleport transit: the screen covers everything, so nothing is drawn
         const waited = performance.now() - trip.start;
@@ -2345,7 +2355,19 @@ function Game({ nick }: { nick: string }) {
           setTransit(p);
         }
         if ((time >= 1 && trip.loaded) || waited > TELEPORT_DURATION_MS + TELEPORT_MAX_EXTRA_MS) arrive(trip, waited);
-      } else fx.render();
+      } else {
+        fx.render();
+        metrics.frame(dtReal, idle < 30_000, settings().quality);
+      }
+      overlayFrames++;
+      if (overlay && now - overlayAt > 500) {
+        const fps = Math.round((overlayFrames * 1000) / (now - overlayAt));
+        overlayAt = now;
+        overlayFrames = 0;
+        const st = perf.takeStats();
+        const pi = perf.info();
+        overlay.show({ ...st, fps, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, tier: settings().quality, fpsCap: idle > 120_000 ? 10 : idle > 30_000 ? 20 : pi.fpsCap, pixelRatio: renderer.getPixelRatio(), scale: pi.scale, idle: idle > 30_000, zones: world.zoneInfo() });
+      }
       clipper.frame(renderer.domElement); // share video (only while recording)
 
       // snapshot: grab the frame right after it's drawn
@@ -2385,6 +2407,7 @@ function Game({ nick }: { nick: string }) {
       stopVibe();
       stations.stop();
       offSettings();
+      overlay?.dispose();
       clearTimeout(checkTimer);
       inputEvents.forEach((e) => window.removeEventListener(e, poke));
       clearInterval(rememberTimer);
