@@ -66,7 +66,7 @@ export async function redeem(code: string) {
 
 // ------------------------------------------------------------------ chamber
 export type Asset = { id: string; type: "image" | "audio"; name: string; description: string | null; palette: string[] | null; mime: string };
-export type Message = { role: "seeface" | "artist"; text: string; at: string };
+export type Message = { role: "seeface" | "artist"; text: string; at: string; assets?: string[] };
 export type ChamberState = {
   alias: string;
   disciplines: string[];
@@ -83,13 +83,13 @@ export type TurnEvent =
   | { t: "error"; error: string };
 
 /** One artist turn. SeeFace's reply streams in as `delta`s; `done` carries the merged blueprint. */
-export async function say(text: string, onEvent: (e: TurnEvent) => void) {
+export async function say(text: string, attach: string[], onEvent: (e: TurnEvent) => void) {
   if (!apiBase) return onEvent({ t: "error", error: "offline" });
   try {
     const r = await fetch(`${apiBase}/api/chamber/say`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, attach }),
     });
     if (!r.ok || !r.body) {
       const d = await r.json().catch(() => ({}));
@@ -115,13 +115,13 @@ export async function say(text: string, onEvent: (e: TurnEvent) => void) {
   }
 }
 
-export async function upload(file: File): Promise<{ ok: boolean; asset?: Asset; error?: string }> {
+export async function upload(blob: Blob, name: string, palette: string[]): Promise<{ ok: boolean; asset?: Asset; error?: string }> {
   if (!apiBase) return { ok: false, error: "offline" };
   try {
-    const r = await fetch(`${apiBase}/api/chamber/assets?name=${encodeURIComponent(file.name.slice(0, 80))}`, {
+    const r = await fetch(`${apiBase}/api/chamber/assets?name=${encodeURIComponent(name.slice(0, 80))}`, {
       method: "POST",
-      headers: { "Content-Type": file.type || "application/octet-stream", ...authHeader() },
-      body: file,
+      headers: { "Content-Type": blob.type || "application/octet-stream", "x-palette": palette.join(","), ...authHeader() },
+      body: blob,
     });
     return await r.json();
   } catch {
@@ -141,6 +141,7 @@ export async function transcribe(blob: Blob): Promise<string | null> {
   }
 }
 
+export const removeAsset = (id: string) => call<{ blueprint: Blueprint }>("DELETE", `/api/chamber/assets/${id}`);
 export const submitRoom = () => call<{ missing?: string[]; message?: Message; status?: string }>("POST", "/api/chamber/submit", {});
 export const health = () => call<{ chamber?: { llm: boolean; transcribe: boolean } }>("GET", "/api/health");
 

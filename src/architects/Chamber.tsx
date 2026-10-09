@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "rea
 import { chamber, redeem, requestLink, say, submitRoom, token, type Asset, type ChamberState, type Message } from "./api";
 import type { Blueprint } from "./types";
 import { Composer } from "./Composer";
+import { Thumb } from "./Thumb";
 import { track } from "../analytics";
 import "./architects.scss";
 import "./chamber.scss";
@@ -62,12 +63,12 @@ export default function Chamber() {
   const busy = streaming !== null;
   const locked = status !== "draft" && status !== "rejected";
 
-  function send(text: string) {
+  function send(text: string, attach: string[] = []) {
     if (!text.trim() || busy) return;
     setError("");
-    setMessages((m) => [...m, { role: "artist", text, at: new Date().toISOString() }]);
+    setMessages((m) => [...m, { role: "artist", text, at: new Date().toISOString(), assets: attach }]);
     setStreaming("");
-    say(text, (e) => {
+    say(text, attach, (e) => {
       if (e.t === "delta") setStreaming((s) => (s ?? "") + e.text);
       else if (e.t === "done") {
         setStreaming(null);
@@ -118,9 +119,17 @@ export default function Chamber() {
         <div className="ch-chat" aria-label="conversation with SeeFace">
           <div className="ch-log" ref={log} aria-live="polite">
             {messages.map((m, i) => (
-              <p key={i} className={`ch-msg ${m.role}`}>
+              <div key={i} className={`ch-msg ${m.role}`}>
+                {m.assets?.length ? (
+                  <div className="ch-attached">
+                    {m.assets.map((id) => {
+                      const a = assets.find((x) => x.id === id);
+                      return a ? <Thumb key={id} asset={a} /> : null;
+                    })}
+                  </div>
+                ) : null}
                 {m.text}
-              </p>
+              </div>
             ))}
             {streaming !== null && <p className="ch-msg seeface streaming">{streaming || <span className="ch-dots">· · ·</span>}</p>}
             {error && <p className="ch-msg system">{error}</p>}

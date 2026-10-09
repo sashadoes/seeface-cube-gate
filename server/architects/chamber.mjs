@@ -49,11 +49,11 @@ export const publicAsset = (a) => ({ id: a.id, type: a.type, name: a.name, descr
 const publicRoom = (r) => ({ id: r.id, status: r.status, stage: r.stage, blueprint: { ...r.blueprint, status: r.status }, admin_note: r.admin_note ?? null });
 const left = (room) => (room.usage?.day === today() ? Math.max(0, PER_DAY - room.usage.n) : PER_DAY);
 
-export function mountChamber(app, { db, auth }) {
+export function mountChamber(app, { db, auth, described }) {
   const me = architect(db, auth);
   app.use("/api/chamber", express.json({ limit: "8kb" }));
 
-  const say = (room, role, text) => db.messages.insert({ room_id: room.id, role, text, created_at: new Date() });
+  const say = (room, role, text, asset_ids) => db.messages.insert({ room_id: room.id, role, text, ...(asset_ids?.length ? { asset_ids } : {}), created_at: new Date() });
 
   app.get("/api/chamber", me, async (req, res) => {
     const { app: a, room } = req.arch;
@@ -68,7 +68,7 @@ export function mountChamber(app, { db, auth }) {
       alias: a.alias,
       disciplines: a.disciplines,
       room: publicRoom(room),
-      messages: messages.map((m) => ({ role: m.role, text: m.text, at: m.created_at })),
+      messages: messages.map((m) => ({ role: m.role, text: m.text, at: m.created_at, assets: m.asset_ids ?? [] })),
       assets: assets.map(publicAsset),
       left: left(room),
     });
@@ -83,11 +83,15 @@ export function mountChamber(app, { db, auth }) {
     if (usage.n >= PER_DAY) return res.status(429).json({ ok: false, error: "limit" });
     usage.n++;
     await db.rooms.update({ id: room.id }, { usage });
-    await say(room, "artist", text);
+    // uploads shared with this message (only this room's)
+    const mine = new Set((await db.assets.find({ room_id: room.id })).map((x) => x.id));
+    const attach = (Array.isArray(req.body?.attach) ? req.body.attach : []).filter((id) => mine.has(id)).slice(0, 15);
+    await say(room, "artist", text, attach);
 
     res.status(200).set({ "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
     const send = (o) => res.write(JSON.stringify(o) + "\n");
     try {
+      if (client) await described(room.id); // let SeeFace see freshly uploaded images
       const assets = await db.assets.find({ room_id: room.id }, { sort: { created_at: 1 } });
       const history = (await db.messages.find({ room_id: room.id }, { sort: { created_at: 1 } })).slice(-40);
       const out = client && spend() ? await askSeeFace({ a, room, assets, history, left: PER_DAY - usage.n, send }) : scripted(text, room, assets);
@@ -129,7 +133,10 @@ async function askSeeFace({ a, room, assets, history, left, send }) {
   const messages = [];
   for (const m of history) {
     if (m.role === "seeface") messages.push({ role: "assistant", content: JSON.stringify({ reply: m.text, blueprint_patch: null, stage: room.stage }) });
-    else messages.push({ role: "user", content: m.text });
+    else {
+      const shared = (m.asset_ids ?? []).map((id) => assets.find((x) => x.id === id)).filter(Boolean);
+      messages.push({ role: "user", content: shared.length ? `${m.text}\n[shared: ${shared.map((x) => `${x.type} ${x.id} "${x.name}"`).join(", ")}]` : m.text });
+    }
   }
   while (messages.length && messages[0].role !== "user") messages.shift(); // the greeting was scripted
   // the chamber state rides along with the artist's latest words (only the text is stored, so
