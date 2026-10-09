@@ -17,11 +17,14 @@ const ArchInvite = lazy(() => import("./architects/Invite"));
 const ArchJoin = lazy(() => import("./architects/Join"));
 const ArchTerms = lazy(() => import("./architects/Terms"));
 const ArchChamber = lazy(() => import("./architects/Chamber"));
+const ArchAdmin = lazy(() => import("./architects/Admin"));
+const ArchRoom = lazy(() => import("./architects/RoomPage"));
 const ARCH_PAGES: Record<string, LazyExoticComponent<ComponentType>> = {
   "/architects": ArchInvite,
   "/architects/join": ArchJoin,
   "/architects/terms": ArchTerms,
   "/chamber": ArchChamber,
+  "/admin/architects": ArchAdmin,
 };
 
 const path = location.pathname.replace(/\/+$/, "");
@@ -35,7 +38,7 @@ const isMarks = path === "/marks";
 const isLabyrinth = path === "/labyrinth";
 
 export default function App() {
-  const ArchPage = ARCH_PAGES[path];
+  const ArchPage = ARCH_PAGES[path] ?? (path.startsWith("/room/") ? ArchRoom : undefined);
   if (ArchPage) {
     return (
       <Suspense fallback={null}>

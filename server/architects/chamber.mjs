@@ -78,7 +78,7 @@ export function mountChamber(app, { db, auth, described }) {
     const { app: a, room } = req.arch;
     const text = line(req.body?.text, 1200);
     if (!text) return res.status(400).json({ ok: false, error: "empty" });
-    if (!["draft", "rejected"].includes(room.status)) return res.status(409).json({ ok: false, error: "submitted" });
+    if (room.status !== "draft") return res.status(409).json({ ok: false, error: "submitted" });
     const usage = room.usage?.day === today() ? { ...room.usage } : { day: today(), n: 0 };
     if (usage.n >= PER_DAY) return res.status(429).json({ ok: false, error: "limit" });
     usage.n++;
@@ -113,7 +113,7 @@ export function mountChamber(app, { db, auth, described }) {
 
   app.post("/api/chamber/submit", me, async (req, res) => {
     const { room } = req.arch;
-    if (!["draft", "rejected"].includes(room.status)) return res.json({ ok: true, status: room.status });
+    if (room.status !== "draft") return res.json({ ok: true, status: room.status });
     const missing = missingForSubmit(room.blueprint);
     if (missing.length) {
       const words = missing.map((m) => MISSING_WORDS[m]);

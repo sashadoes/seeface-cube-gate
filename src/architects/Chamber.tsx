@@ -61,7 +61,7 @@ export default function Chamber() {
   }, [messages, streaming]);
 
   const busy = streaming !== null;
-  const locked = status !== "draft" && status !== "rejected";
+  const locked = status !== "draft"; // submitted, approved, live, or rejected
 
   function send(text: string, attach: string[] = []) {
     if (!text.trim() || busy) return;
@@ -133,10 +133,18 @@ export default function Chamber() {
             ))}
             {streaming !== null && <p className="ch-msg seeface streaming">{streaming || <span className="ch-dots">· · ·</span>}</p>}
             {error && <p className="ch-msg system">{error}</p>}
-            {status === "rejected" && state.room.admin_note && <p className="ch-msg system">From the labyrinth's keepers: {state.room.admin_note}</p>}
+            {state.room.admin_note && status === "draft" && <p className="ch-msg system">Changes asked by the labyrinth's keepers: {state.room.admin_note}</p>}
           </div>
           {locked ? (
-            <p className="ch-locked">{status === "submitted" ? "Submitted. The labyrinth is reviewing your room." : status === "approved" || status === "live" ? "Your door is open." : ""}</p>
+            <p className="ch-locked">{status === "submitted" ? "Submitted. The labyrinth is reviewing your room." : status === "approved" || status === "live" ? (
+                <>
+                  Your door is open. <a href={`/room/${state.room.id}/`}>Enter the labyrinth →</a>
+                </>
+              ) : status === "rejected" ? (
+                "The labyrinth can't hold this room."
+              ) : (
+                ""
+              )}</p>
           ) : (
             <Composer disabled={busy} left={left} onSend={send} onUploaded={(a) => setAssets((x) => [...x, a])} assets={assets} />
           )}

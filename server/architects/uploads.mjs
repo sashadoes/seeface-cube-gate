@@ -53,7 +53,7 @@ export function mountUploads(app, { db, auth, limiter }) {
   app.post("/api/chamber/assets", me, express.raw({ type: () => true, limit: "20mb" }), async (req, res, next) => {
     try {
       const { room, acc } = req.arch;
-      if (!["draft", "rejected"].includes(room.status)) return res.status(409).json({ ok: false, error: "submitted" });
+      if (room.status !== "draft") return res.status(409).json({ ok: false, error: "submitted" });
       const buf = Buffer.isBuffer(req.body) ? req.body : null;
       const kind = buf && sniff(buf);
       if (!kind) return res.status(415).json({ ok: false, error: "type" });
@@ -106,7 +106,7 @@ export function mountUploads(app, { db, auth, limiter }) {
       const { room } = req.arch;
       const asset = await db.assets.findOne({ id: String(req.params.id), room_id: room.id });
       if (!asset) return res.status(404).json({ ok: false });
-      if (!["draft", "rejected"].includes(room.status)) return res.status(409).json({ ok: false, error: "submitted" });
+      if (room.status !== "draft") return res.status(409).json({ ok: false, error: "submitted" });
       // take it out of the room too
       const bp = structuredClone(room.blueprint);
       bp.posters = bp.posters.filter((p) => p.asset_id !== asset.id);

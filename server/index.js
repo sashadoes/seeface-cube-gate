@@ -29,6 +29,7 @@ import { openStore } from "./architects/store.mjs";
 import { mountArchitects } from "./architects/routes.mjs";
 import { mountChamber, llmReady } from "./architects/chamber.mjs";
 import { mountUploads, transcribeReady } from "./architects/uploads.mjs";
+import { mountAdmin } from "./architects/admin.mjs";
 
 const scrypt = promisify(scryptCb);
 
@@ -567,6 +568,7 @@ mountArchitects(app, {
 });
 const uploads = mountUploads(app, { db: architectsDb, auth, limiter });
 mountChamber(app, { db: architectsDb, auth, described: uploads.described });
+mountAdmin(app, { db: architectsDb, SITE });
 
 // unknown routes and any error (bad JSON, too big, a crash in a handler): short JSON, never a stack trace
 app.use((_req, res) => res.status(404).json({ ok: false }));

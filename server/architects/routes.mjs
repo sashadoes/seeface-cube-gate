@@ -48,7 +48,9 @@ export function cleanApplication(b) {
   const country = text(b?.country, 56);
   if (!country) return { error: "country" };
   if (b?.terms !== true) return { error: "terms" };
-  const ref = typeof b?.ref === "string" && CODE.test(b.ref.replace(/^@/, "")) ? b.ref.replace(/^@/, "") : null;
+  // ?ref= is usually an Instagram handle (dots allowed)
+  const refRaw = typeof b?.ref === "string" ? b.ref.trim().replace(/^@/, "") : "";
+  const ref = IG.test(refRaw) || CODE.test(refRaw) ? refRaw : null;
   const invite_code = typeof b?.invite === "string" && CODE.test(b.invite) ? b.invite : null;
   return { doc: { alias, ig_handle: ig, email, disciplines, links, one_liner, country, ref, invite_code } };
 }
