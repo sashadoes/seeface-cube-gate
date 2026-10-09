@@ -8,7 +8,7 @@
 //   return-week-2 / -month   came back 8–14 / 15–31 days after
 //   src-<ref>            first visit came from ?ref=<ref> (or utm_source)
 //   return-src-<ref>     a returning visitor who first came from <ref>
-// Tag every Reel link: seeface1.world/?ref=reel-cube1 → compare src-reel-cube1 with
+// Tag every Reel link: seeface.world/?ref=reel-cube1 → compare src-reel-cube1 with
 // return-src-reel-cube1 to see which Reels bring people who stay.
 import { track } from "./analytics";
 

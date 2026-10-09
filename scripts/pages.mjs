@@ -3,7 +3,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const html = await readFile("dist/index.html", "utf8");
-const SITE = "https://seeface1.world";
+const SITE = "https://seeface.world";
 const pages = {
   labyrinth: { title: "seeface1 · the labyrinth", description: "The labyrinth behind the seeface1 cube: an endless 3D maze you walk with strangers. Floods, a Pop Queen, secret rooms. Play in your browser.", index: true },
   privacy: { title: "seeface1 · privacy", description: "What seeface1 keeps and why.", index: true },

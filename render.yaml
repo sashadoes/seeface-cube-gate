@@ -15,11 +15,11 @@ services:
       - key: MONGODB_DB
         value: seeface1
       - key: ALLOWED_ORIGINS
-        value: https://seeface1.world
+        value: https://seeface.world,https://seeface1.world
       - key: IP_SALT
         generateValue: true
       - key: SITE_URL
-        value: https://seeface1.world
+        value: https://seeface.world
       # Instagram login (optional): fill these in Render after creating the Meta app
       - key: IG_APP_ID
         sync: false

@@ -16,7 +16,7 @@ const Artists = lazy(() => import("./components/artists/Artists"));
 const path = location.pathname.replace(/\/+$/, "");
 
 // people who've already been inside skip the cube and go straight back in
-// (seeface1.world/?cube still shows the cube)
+// (seeface.world/?cube still shows the cube)
 if ((path === "" || path === "/") && hasEntered() && !new URLSearchParams(location.search).has("cube")) {
   location.replace("/labyrinth/?from=return");
 }

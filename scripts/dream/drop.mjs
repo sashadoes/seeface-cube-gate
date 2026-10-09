@@ -67,7 +67,7 @@ const schema = {
   },
 };
 
-const system = `You dream up one day of the labyrinth at seeface1.world: an endless, dark, dreamlike 3D maze
+const system = `You dream up one day of the labyrinth at seeface.world: an endless, dark, dreamlike 3D maze
 ("the after life") where real people wander, meet and share snapshots. Each day you invent a small set of
 strange, beautiful objects that float in its corridors and one shared dream event that happens a few times
 that day for everyone at once.

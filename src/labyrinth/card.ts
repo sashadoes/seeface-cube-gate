@@ -70,7 +70,7 @@ export async function makeCard(r: RunResult): Promise<Blob> {
 
   g.font = "48px 'Times New Roman', serif";
   g.fillStyle = "#e9e4da";
-  g.fillText("seeface1.world/labyrinth", W / 2, 1720);
+  g.fillText("seeface.world/labyrinth", W / 2, 1720);
 
   return new Promise((res) => c.toBlob((b) => res(b!), "image/jpeg", 0.9));
 }
@@ -79,7 +79,7 @@ export async function makeCard(r: RunResult): Promise<Blob> {
 export async function shareCard(r: RunResult) {
   const blob = await makeCard(r);
   const file = new File([blob], "seeface1-labyrinth.jpg", { type: "image/jpeg" });
-  const data = { files: [file], title: "seeface1", text: "seeface1.world/labyrinth" };
+  const data = { files: [file], title: "seeface1", text: "seeface.world/labyrinth" };
   try {
     if (navigator.canShare?.(data)) {
       await navigator.share(data);

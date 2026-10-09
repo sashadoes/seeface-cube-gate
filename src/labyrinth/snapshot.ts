@@ -82,7 +82,7 @@ export async function makeSnapshot(view: HTMLCanvasElement, info: SnapInfo): Pro
   g.fillText("find me in the labyrinth", W / 2, H - 175);
   g.fillStyle = "#ffe6b8";
   g.font = "44px 'Times New Roman', serif";
-  g.fillText("seeface1.world/labyrinth", W / 2, H - 100);
+  g.fillText("seeface.world/labyrinth", W / 2, H - 100);
 
   return new Promise((res) => c.toBlob((b) => res(b!), "image/jpeg", 0.9));
 }

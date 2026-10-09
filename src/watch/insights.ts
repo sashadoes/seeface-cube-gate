@@ -264,7 +264,7 @@ export function exportForAnalysis(all: Journal[], i: Insights) {
   }));
   const { suggestions, ...summary } = i;
   return [
-    "This is play data from seeface1.world (a 3D labyrinth game behind a cube page), from the owner's /the-eye page.",
+    "This is play data from seeface.world (a 3D labyrinth game behind a cube page), from the owner's /the-eye page.",
     "Each player is one device. ◈ is the in-game currency (earned by play, never bought). 'did' counts game events; 'on' is ◈ per reason (+ earned, − spent/lost).",
     "Please find: where players drop off, what returning players do differently, what ◈ is spent on and what's ignored, and the 5 most valuable changes to the game, each with the number that supports it.",
     "",

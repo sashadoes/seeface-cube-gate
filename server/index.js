@@ -31,10 +31,10 @@ const scrypt = promisify(scryptCb);
 const PORT = Number(process.env.PORT || 8787);
 // Instagram login (optional): set these and the button appears in the game.
 // IG_APP_ID / IG_APP_SECRET come from the Meta app; IG_REDIRECT must match the
-// redirect URI you register there, e.g. https://api.seeface1.world/api/instagram/callback
+// redirect URI you register there, e.g. https://api.seeface.world/api/instagram/callback
 const IG = { id: process.env.IG_APP_ID || "", secret: process.env.IG_APP_SECRET || "", redirect: process.env.IG_REDIRECT || "" };
-const SITE = process.env.SITE_URL || "https://seeface1.world";
-const ORIGINS = (process.env.ALLOWED_ORIGINS || "https://seeface1.world,http://localhost:5173")
+const SITE = process.env.SITE_URL || "https://seeface.world";
+const ORIGINS = (process.env.ALLOWED_ORIGINS || "https://seeface.world,https://seeface1.world,http://localhost:5173")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);

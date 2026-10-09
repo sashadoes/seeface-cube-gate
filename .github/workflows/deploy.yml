@@ -1,6 +1,6 @@
 name: Deploy to GitHub Pages
 
-# Every push to main builds the game and publishes it to https://seeface1.world
+# Every push to main builds the game and publishes it to https://seeface.world
 on:
   push:
     branches: [main]
