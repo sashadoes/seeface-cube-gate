@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Howl } from "howler";
 import { createWorld } from "./world";
@@ -13,7 +13,8 @@ import { ALL_DONE_BONUS, createQuests, type QuestKind, type QuestView } from "./
 import { EMOTES, type Emote } from "./net";
 import { demonOf, demonTexture } from "./demons";
 import { createRadio } from "./radio";
-import { shareCard, type RunResult } from "./card";
+import type { RunResult } from "./card";
+import { makeSnapshot, shareSnapshot } from "./snapshot";
 import { createPresence, type Presence } from "./net";
 import { createOthers } from "./others";
 import { createArt } from "./art";
@@ -22,7 +23,7 @@ import { cleanNick, savedNick, saveNick } from "./nick";
 import { apiReady, registerPlayer } from "../api";
 import { noteLevel, noteRun, readProgress } from "../progress";
 import { accountsReady, currentAccount, deleteAccount, finishInstagram, instagramReady, instagramUrl, login, logout, refresh, register, type Account, type AuthError } from "../account";
-import LabMap, { type MapSource, type Trail } from "./LabMap";
+import type { MapSource, Trail } from "./LabMap";
 import Radar from "./Radar";
 import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, MAX_CARDS, TELEPORT_COST } from "./cards";
 import { onOnline } from "../online";
@@ -32,7 +33,6 @@ import { createRifts } from "./rifts";
 import { LEVELS, levelAtX } from "./zones";
 import { createSound } from "./sound";
 import { currentEvent, EVENTS, type EventKind } from "./events";
-import { makeSnapshot, shareSnapshot } from "./snapshot";
 import { relicMesh } from "./props";
 import { release, sweep } from "./gpu";
 
@@ -71,6 +71,10 @@ import { createPerf, detectTier } from "./perf";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
+
+// opened on demand, so they don't weigh on the first frame
+const LabMap = lazy(() => import("./LabMap"));
+const loadCard = () => import("./card");
 
 // /labyrinth: survive the infinite seeface1 maze.
 //   your lantern dies in the dark · working lights recharge it · rooms are safe
@@ -2288,7 +2292,7 @@ function Game({ nick }: { nick: string }) {
   const share = async () => {
     if (!hud.dead || shareState === "busy") return;
     setShareState("busy");
-    const how = await shareCard(hud.dead);
+    const how = await (await loadCard()).shareCard(hud.dead);
     track(`share-card-${how}`);
     setShareState("done");
   };
@@ -3209,7 +3213,7 @@ function Game({ nick }: { nick: string }) {
         )}
       </div>
 
-      {mapOpen && mapRef.current && <LabMap source={mapRef.current} nick={nick} cards={cards} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} />}
+      {mapOpen && mapRef.current && <Suspense fallback={null}><LabMap source={mapRef.current} nick={nick} cards={cards} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} /></Suspense>}
 
       {hud.dead && (
         <div className="lab-dead" onPointerDown={stop} onPointerUp={stop}>

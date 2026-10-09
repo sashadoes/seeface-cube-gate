@@ -3,7 +3,7 @@
 // own). Only anonymous positions and light signals are sent, never names or
 // text. Anyone can read a public relay, so before launch this moves to our own
 // server (same message shapes).
-import mqtt, { type MqttClient } from "mqtt";
+import type { MqttClient } from "mqtt";
 import { cleanNick } from "./nick";
 import { filterMark } from "../marks/filter";
 
@@ -112,7 +112,12 @@ export function createPresence(myId?: string): Presence {
   let lastSend = 0;
   let pending: { x: number; z: number; yaw: number; light: number; nick: string; held?: number } | null = null;
 
-  function connect() {
+  let closed = false;
+  // the relay library (~105 kB gzip) loads after the world is already on screen
+  const lib = import("mqtt").then((m) => m.default);
+  async function connect() {
+    const mqtt = await lib;
+    if (closed) return;
     client = mqtt.connect(RELAYS[relay], {
       clientId: `sf1-${me}-${Math.random().toString(36).slice(2, 6)}`,
       connectTimeout: 6000,
@@ -232,7 +237,7 @@ export function createPresence(myId?: string): Presence {
       }
     });
   }
-  connect();
+  void connect();
 
   // forget people who stopped sending
   const sweep = setInterval(() => {
@@ -344,6 +349,7 @@ export function createPresence(myId?: string): Presence {
       worldFns.push(fn);
     },
     close() {
+      closed = true;
       clearInterval(sweep);
       client?.publish(`${ROOT}/bye/${me}`, "1");
       client?.end();
