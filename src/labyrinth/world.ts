@@ -42,6 +42,8 @@ export type World = {
   zoneInfo: () => { kinds: string[]; resident: number; parked: number };
   /** load these locations' textures now (teleport destination); resolves when they're ready */
   prepare: (x: number, z: number) => Promise<void>;
+  /** free every location texture not on screen right now (after a teleport) */
+  parkNow: () => void;
 };
 
 function digitTexture(d: string) {
@@ -241,9 +243,9 @@ export function createWorld(): World {
   };
   const parked = new Set<THREE.Texture>();
   // Unload: free the GPU copy of textures no wall/floor has used for a while
-  function park(now: number) {
+  function park(now: number, after = PARK_AFTER_MS) {
     for (const m of wallMeshes.values()) {
-      if (m.visible || now - (m.userData.used ?? 0) < PARK_AFTER_MS) continue;
+      if (m.visible || now - (m.userData.used ?? 0) < after) continue;
       for (const t of mapsOf(m.material as THREE.Material)) {
         if (parked.has(t)) continue;
         t.dispose(); // three.js uploads it again from the canvas if it's ever drawn
@@ -251,7 +253,7 @@ export function createWorld(): World {
       }
     }
     for (const [kind, used] of floorUsed) {
-      if (now - used < PARK_AFTER_MS || kind === currentZone.kind) continue;
+      if (now - used < after || kind === currentZone.kind) continue;
       for (const t of mapsOf(zoneFloorMaterial(zoneOfKind(kind)!))) {
         if (parked.has(t)) continue;
         t.dispose();
@@ -469,7 +471,7 @@ export function createWorld(): World {
     return Promise.all(waits).then(() => undefined);
   }
 
-  return { scene, update, zoneInfo, prepare, setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => {
+  return { scene, update, zoneInfo, prepare, parkNow: () => park(performance.now(), 0), setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => {
     wet = w;
     relief.setWet(w);
   }, setFlashes: (on: boolean) => (flashesOn = on), setSpace: (on: boolean) => (space = on), setCeiling: (on: boolean) => {

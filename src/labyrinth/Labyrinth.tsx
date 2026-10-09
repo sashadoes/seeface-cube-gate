@@ -25,7 +25,8 @@ import { noteLevel, noteRun, readProgress } from "../progress";
 import { accountsReady, currentAccount, deleteAccount, finishInstagram, instagramReady, instagramUrl, login, logout, refresh, register, type Account, type AuthError } from "../account";
 import type { MapSource, Trail } from "./LabMap";
 import Radar from "./Radar";
-import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, MAX_CARDS, TELEPORT_COST } from "./cards";
+import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, MAX_CARDS, TELEPORT_COST, TELEPORT_DURATION_MS, TELEPORT_MAX_EXTRA_MS } from "./cards";
+import Transit from "./Transit";
 import { onOnline } from "../online";
 import { createProps } from "./props";
 import { createDream } from "./dream";
@@ -659,6 +660,7 @@ function Game({ nick }: { nick: string }) {
   const snapRef = useRef<() => void>(() => {});
   const dropRef = useRef<() => void>(() => {});
   const [snapState, setSnapState] = useState<"" | "busy" | "done">("");
+  const [transit, setTransit] = useState<number | null>(null); // teleport progress 0–1
   const [hud, setHud] = useState<Hud>({ event: null, holding: false, level: 0, light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
   const strikeRef = useRef<() => void>(() => {});
   const [shareState, setShareState] = useState<"" | "busy" | "done">("");
@@ -1426,6 +1428,7 @@ function Game({ nick }: { nick: string }) {
         }
       }
     };
+    let trip: { from: { x: number; z: number }; spot: { x: number; z: number }; incognito: boolean; start: number; loaded: boolean; shown: number } | null = null;
     const teleport = (x: number, z: number, incognito: boolean): string | null => {
       const cost = incognito ? INCOGNITO_COST : TELEPORT_COST;
       if (!alive) return tr("not now");
@@ -1438,6 +1441,30 @@ function Game({ nick }: { nick: string }) {
       addCards(-cost);
       const from = { x: pos.x, z: pos.z };
       pillar(from.x, from.z);
+      // in transit: frozen and out of reach (no hazards, knives, rifts, pickups) until arrival
+      alive = false;
+      vel.x = vel.z = 0;
+      sound.chime();
+      el.classList.remove("rift");
+      void el.offsetWidth;
+      el.classList.add("rift");
+      el.style.setProperty("--rift", "#c8b8ff");
+      // closing the tab mid-trip still lands you there next time (the card is spent)
+      saveResume({ x: spot.x, z: spot.z, yaw: +input.yaw.toFixed(3), light: Math.round(light), shards, depth, metres: Math.round(metres), place: whereName(spot.x, spot.z) });
+      presence.peek(spot.x, spot.z);
+      const tr0 = { from, spot, incognito, start: performance.now(), loaded: false, shown: -1 };
+      world.prepare(spot.x, spot.z).then(() => (tr0.loaded = true));
+      trip = tr0;
+      setTransit(0);
+      track("teleport-start");
+      return null;
+    };
+    // the transit is over: the destination is loaded (and 15 s have passed)
+    const arrive = (tr0: NonNullable<typeof trip>, waited: number) => {
+      const { from, spot, incognito } = tr0;
+      trip = null;
+      setTransit(null);
+      alive = true;
       pos.x = spot.x;
       pos.z = spot.z;
       vel.x = vel.z = 0;
@@ -1460,8 +1487,11 @@ function Game({ nick }: { nick: string }) {
         trails.push({ nick, fx: from.x, fz: from.z, tx: spot.x, tz: spot.z, at: performance.now(), mine: true });
       }
       track(incognito ? "teleport-incognito" : "teleport");
+      // how long people really wait (15 s = loaded in time; more = the device/network was slow)
+      track(`teleport-wait-${waited <= TELEPORT_DURATION_MS + 500 ? "15s" : waited < 25_000 ? "25s" : "slow"}${tr0.loaded ? "" : "-unloaded"}`);
       sayRef.current(incognito ? tr("you arrived unseen") : tr("you arrived · everyone saw where"), true);
-      return null;
+      // the place you left: its textures leave the graphics chip soon after
+      setTimeout(() => world.parkNow(), 1500);
     };
     // someone else teleported: everyone on the same level is told, and sees it on the map
     let lastTpNotice = 0;
@@ -2234,7 +2264,21 @@ function Game({ nick }: { nick: string }) {
       perf.frame(dt, camera);
       sweep(world.scene);
       immersive.update(dt, perf.info().scale, alive ? lastDanger : 0);
-      fx.render();
+      if (trip) {
+        // ---------------- teleport transit: the screen covers everything, so nothing is drawn
+        const waited = performance.now() - trip.start;
+        const time = Math.min(1, waited / TELEPORT_DURATION_MS);
+        // time carries the bar to 90%; the last 10% is the destination actually loading.
+        // Past 15 s and still loading: it keeps creeping towards (never reaching) the end.
+        const over = Math.max(0, waited - TELEPORT_DURATION_MS) / 1000;
+        const p = trip.loaded ? time : Math.min(time * 0.9, 0.9) + (time >= 1 ? 0.09 * (1 - Math.exp(-over / 6)) : 0);
+        const shown = Math.floor(p * 200);
+        if (shown !== trip.shown) {
+          trip.shown = shown;
+          setTransit(p);
+        }
+        if ((time >= 1 && trip.loaded) || waited > TELEPORT_DURATION_MS + TELEPORT_MAX_EXTRA_MS) arrive(trip, waited);
+      } else fx.render();
       clipper.frame(renderer.domElement); // share video (only while recording)
 
       // snapshot: grab the frame right after it's drawn
@@ -3212,6 +3256,8 @@ function Game({ nick }: { nick: string }) {
           </>
         )}
       </div>
+
+      {transit !== null && <Transit progress={transit} />}
 
       {mapOpen && mapRef.current && <Suspense fallback={null}><LabMap source={mapRef.current} nick={nick} cards={cards} onClose={() => setMapOpen(false)} onMeet={startMeet} target={meetId} /></Suspense>}
 

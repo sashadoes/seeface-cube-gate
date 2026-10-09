@@ -1,0 +1,188 @@
+// teleport transit: lost signal + redacted archive, in the teleport violet
+.lab-transit {
+  --violet: #c8b8ff;
+  position: fixed;
+  inset: 0;
+  z-index: 1500; // above the HUD (≤ 1001) and the music switch
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 46%, #17122a 0%, #07060b 55%, #000 100%);
+  animation: lab-transit-in 0.5s ease-out both;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+@keyframes lab-transit-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+// tape noise: one small tile, jittered every frame-ish
+.lab-transit-noise {
+  position: absolute;
+  inset: -96px;
+  background: var(--noise);
+  opacity: 0.55;
+  animation: lab-transit-jitter 0.18s steps(3) infinite;
+}
+
+@keyframes lab-transit-jitter {
+  0% { transform: translate(0, 0); }
+  33% { transform: translate(-37px, 21px); }
+  66% { transform: translate(18px, -44px); }
+}
+
+// the rift: violet rings opening from the centre
+.lab-transit-rift {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  i {
+    position: absolute;
+    left: -40vmin;
+    top: -40vmin;
+    width: 80vmin;
+    height: 80vmin;
+    border-radius: 50%;
+    border: 1px solid var(--violet);
+    box-shadow: 0 0 24px rgba(200, 184, 255, 0.35), inset 0 0 24px rgba(200, 184, 255, 0.2);
+    opacity: 0;
+    animation: lab-transit-ring 3.6s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  }
+}
+
+@keyframes lab-transit-ring {
+  0% { transform: scale(0.05); opacity: 0; }
+  20% { opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+// the mark, flickering through the signal (a red/cyan split copy behind it)
+.lab-transit-mark {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: min(42vmin, 220px);
+  transform: translate(-50%, -50%) scale(calc(0.9 + var(--p) * 0.25));
+  img {
+    display: block;
+    width: 100%;
+    filter: drop-shadow(0 0 14px rgba(200, 184, 255, 0.55));
+    animation: lab-transit-flicker 2.3s steps(1) infinite;
+  }
+  img + img {
+    position: absolute;
+    inset: 0;
+    filter: drop-shadow(3px 0 0 rgba(255, 60, 120, 0.7)) drop-shadow(-3px 0 0 rgba(60, 240, 255, 0.7));
+    opacity: 0;
+    animation: lab-transit-split 1.7s steps(1) infinite;
+  }
+}
+
+@keyframes lab-transit-flicker {
+  0%, 100% { opacity: 0.9; }
+  8% { opacity: 0.2; }
+  10% { opacity: 1; }
+  47% { opacity: 0.6; }
+  49% { opacity: 1; }
+  71% { opacity: 0.1; transform: translateX(6px); }
+  73% { opacity: 0.95; transform: none; }
+}
+
+@keyframes lab-transit-split {
+  0%, 100% { opacity: 0; transform: none; }
+  12% { opacity: 0.8; transform: translateX(-8px) skewX(-6deg); }
+  16% { opacity: 0; transform: none; }
+  58% { opacity: 0.6; transform: translateX(10px); }
+  61% { opacity: 0; }
+}
+
+// redaction bars sweeping across, like a file being censored as it transmits
+.lab-transit-redact {
+  position: absolute;
+  left: 0;
+  height: 1.1em;
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(200, 184, 255, 0.08);
+  transform: translateX(-110%);
+  animation: lab-transit-redact linear infinite;
+}
+
+@keyframes lab-transit-redact {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(260%); }
+}
+
+// scanlines + one slow rolling tracking band
+.lab-transit-scan {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.32) 0 1px, transparent 1px 3px);
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 18vh;
+    background: linear-gradient(to bottom, transparent, rgba(200, 184, 255, 0.07), transparent);
+    animation: lab-transit-roll 4.2s linear infinite;
+  }
+}
+
+@keyframes lab-transit-roll {
+  from { transform: translateY(-20vh); }
+  to { transform: translateY(110vh); }
+}
+
+.lab-transit-promo {
+  position: absolute;
+  left: 50%;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  max-width: min(86vw, 360px);
+}
+
+// the packet bar: 24 cells, the current one blinking
+.lab-transit-bar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(38px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 3px;
+  width: min(78vw, 340px);
+  span {
+    flex: 1;
+    height: 5px;
+    background: rgba(200, 184, 255, 0.12);
+    transition: background 0.25s, box-shadow 0.25s;
+    &.on {
+      background: var(--violet);
+      box-shadow: 0 0 8px rgba(200, 184, 255, 0.8);
+    }
+    &.now {
+      animation: lab-transit-blink 0.5s steps(1) infinite;
+    }
+  }
+}
+
+@keyframes lab-transit-blink {
+  50% { background: rgba(200, 184, 255, 0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-transit-noise,
+  .lab-transit-mark img,
+  .lab-transit-redact,
+  .lab-transit-scan::after,
+  .lab-transit-bar span.now {
+    animation: none;
+  }
+  .lab-transit-redact {
+    display: none;
+  }
+  .lab-transit-rift i {
+    animation-duration: 8s;
+  }
+}

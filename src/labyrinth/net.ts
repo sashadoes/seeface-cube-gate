@@ -84,6 +84,8 @@ export type Presence = {
   /** tell everyone you teleported (not sent when travelling incognito) */
   teleported: (from: { x: number; z: number }, to: { x: number; z: number }, nick: string) => void;
   onTeleport: (fn: (t: Teleport) => void) => void;
+  /** start listening to the people around (x, z) before you get there (teleport) */
+  peek: (x: number, z: number) => void;
   close: () => void;
 };
 
@@ -338,6 +340,14 @@ export function createPresence(myId?: string): Presence {
       if (Date.now() - lastTp < 3000) return;
       lastTp = Date.now();
       client?.publish(`${ROOT}/tp/${me}`, JSON.stringify({ fx: Math.round(from.x), fz: Math.round(from.z), tx: Math.round(to.x), tz: Math.round(to.z), n: nick }));
+    },
+    peek(x, z) {
+      if (!client?.connected) return;
+      // added on top of the current areas; arriving there drops the old ones (follow)
+      const add = areasAround(x, z).filter((k) => !subscribedAreas.has(k));
+      if (!add.length) return;
+      client.subscribe(add.map((k) => `${ROOT}/pos/${k}/+`));
+      for (const k of add) subscribedAreas.add(k);
     },
     onTeleport(fn) {
       tpFns.push(fn);
