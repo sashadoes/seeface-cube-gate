@@ -6,11 +6,33 @@
 //   · a light budget: only the nearest N lights are on (every light costs the
 //     graphics chip on every pixel). Exactly N stay on at all times, so
 //     three.js never has to recompile its shaders while you walk.
+//   · if the phone still can't keep up at the lowest sharpness, the quality
+//     steps down one level by itself (only while the player hasn't picked one)
 import * as THREE from "three";
+import { deviceTier, isIOS, reducedMotion, type Tier } from "../device";
+import { settings, setSettings, type Settings } from "./settings";
 
-export type Tier = "low" | "medium" | "high";
+export type { Tier };
+const RANK: Record<Tier, number> = { low: 0, medium: 1, high: 2 };
+
+/** the settings a first-time player starts with on this device */
+export function autoSettings(renderer: THREE.WebGLRenderer): Partial<Settings> {
+  const st: Partial<Settings> = { quality: detectTier(renderer), qualityAuto: true };
+  // the phone asks for less motion: no head bob or shakes, calmer flashes
+  if (reducedMotion) Object.assign(st, { cameraBob: false, shake: false, flashes: false });
+  return st;
+}
 
 export function detectTier(renderer: THREE.WebGLRenderer): Tier {
+  const dev = deviceTier(); // phone model, in-app browser, data saver (device.ts)
+  // Safari hides an iPhone's real core count and graphics chip ("Apple GPU"),
+  // so the guess below would wrongly call every iPhone weak: trust device.ts
+  if (isIOS) return dev;
+  const gpuTier = gpuGuess(renderer);
+  return RANK[gpuTier] < RANK[dev] ? gpuTier : dev;
+}
+
+function gpuGuess(renderer: THREE.WebGLRenderer): Tier {
   const nav = navigator as Navigator & { deviceMemory?: number };
   const cores = nav.hardwareConcurrency || 4;
   const mem = nav.deviceMemory || 4;
@@ -36,7 +58,7 @@ export function createPerf(renderer: THREE.WebGLRenderer, scene: THREE.Scene, on
   let base = 1; // the pixel ratio the quality setting asks for
   let scale = 1; // dynamic resolution on top (0.55–1)
   let budget = LIGHT_BUDGET.medium;
-  let acc = 0, frames = 0, good = 0, lightTick = 0;
+  let acc = 0, frames = 0, good = 0, lightTick = 0, struggling = 0;
   const tmp = new THREE.Vector3();
 
   function apply() {
@@ -62,7 +84,16 @@ export function createPerf(renderer: THREE.WebGLRenderer, scene: THREE.Scene, on
         if (ms > 26 && scale > 0.55) {
           scale = Math.max(0.55, scale - 0.1);
           good = 0;
+          struggling = 0;
           apply();
+        } else if (ms > 30 && !document.hidden) {
+          // already at the lowest sharpness and still slow: after 6 seconds of
+          // this, step the quality down (fewer lights, no glow)
+          const st = settings();
+          if (++struggling >= 6 && st.qualityAuto && st.quality !== "low") {
+            struggling = 0;
+            setSettings({ quality: st.quality === "high" ? "medium" : "low", qualityAuto: true });
+          }
         } else if (ms < 18) {
           good++;
           if (good >= 4 && scale < 1) {
@@ -71,6 +102,7 @@ export function createPerf(renderer: THREE.WebGLRenderer, scene: THREE.Scene, on
             apply();
           }
         } else good = 0;
+        if (ms <= 30) struggling = 0;
         acc = 0;
         frames = 0;
       }

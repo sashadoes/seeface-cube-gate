@@ -12,6 +12,8 @@ export type Sound = {
   musicBus: GainNode;
   effectsOut: GainNode;
   ambienceOut: GainNode;
+  /** the voices bus (people talking live, sirens, songs) */
+  voicesOut: GainNode;
   setWeather: (kind: WeatherKind, intensity: number, wind: number) => void;
   step: (zone: ZoneKind, running: boolean, wet?: number) => void;
   /** the flood siren: 0 = off, 1 = full wail */
@@ -34,7 +36,14 @@ export function createSound(): Sound {
   const ctx = new Ctx();
   const master = ctx.createGain();
   master.gain.value = 0.9;
-  master.connect(ctx.destination);
+  // a soft limiter: no sudden loud peaks (thunder, crashes, sirens stacking up)
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -18;
+  limiter.knee.value = 12;
+  limiter.ratio.value = 4;
+  limiter.attack.value = 0.01;
+  limiter.release.value = 0.3;
+  master.connect(limiter).connect(ctx.destination);
   // groups the player can turn up/down in the settings
   const bus = () => {
     const g = ctx.createGain();
@@ -68,13 +77,13 @@ export function createSound(): Sound {
     src.start();
     return { f, gain };
   };
-  const rain = bed("highpass", 1400);
+  const rain = bed("highpass", 1100);
   const rainBody = bed("bandpass", 500, 0.5);
   const wind = bed("lowpass", 380, 2.5);
   const snow = bed("bandpass", 3000, 0.4);
 
   // wind gusts: slowly moving filter + level
-  let windLevel = 0.02;
+  let windLevel = 0.012;
   setInterval(() => {
     const now = ctx.currentTime;
     wind.f.frequency.setTargetAtTime(250 + Math.random() * 500, now, 1.2);
@@ -203,11 +212,11 @@ export function createSound(): Sound {
     const src = noise();
     const f = ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.frequency.setValueAtTime(900, now);
-    f.frequency.exponentialRampToValueAtTime(60, now + 3.5);
+    f.frequency.setValueAtTime(600, now);
+    f.frequency.exponentialRampToValueAtTime(50, now + 3.5);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(0.9, now + 0.08 + Math.random() * 0.3);
+    g.gain.linearRampToValueAtTime(0.45, now + 0.15 + Math.random() * 0.3);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 4.5);
     src.connect(f).connect(g).connect(ambienceBus);
     src.start(now);
@@ -292,21 +301,23 @@ export function createSound(): Sound {
     musicBus,
     effectsOut: effectsBus,
     ambienceOut: ambienceBus,
+    voicesOut: voicesBus,
     showtune(level) {
       showLevel = level;
       showGain.gain.setTargetAtTime(level * 0.9, ctx.currentTime, 0.3);
     },
     setWeather(kind, intensity, windKmh) {
       const now = ctx.currentTime;
-      const wet = kind === "rain" || kind === "storm" ? 0.1 + intensity * 0.14 : kind === "drizzle" ? 0.06 : 0;
+      // background beds are kept low: atmosphere, not noise (owner 2026-10-07)
+      const wet = kind === "rain" || kind === "storm" ? 0.05 + intensity * 0.07 : kind === "drizzle" ? 0.03 : 0;
       rain.gain.gain.setTargetAtTime(wet, now, 2);
-      rainBody.gain.gain.setTargetAtTime(wet * 0.5, now, 2);
-      snow.gain.gain.setTargetAtTime(kind === "snow" ? 0.03 + intensity * 0.03 : 0, now, 2);
-      windLevel = Math.min(0.02 + windKmh / 400, 0.18);
+      rainBody.gain.gain.setTargetAtTime(wet * 0.6, now, 2);
+      snow.gain.gain.setTargetAtTime(kind === "snow" ? 0.015 + intensity * 0.015 : 0, now, 2);
+      windLevel = Math.min(0.012 + windKmh / 900, 0.06);
     },
     step,
     siren(level) {
-      sirenGain.gain.setTargetAtTime(level * 0.09, ctx.currentTime, 0.4);
+      sirenGain.gain.setTargetAtTime(level * 0.065, ctx.currentTime, 0.4);
     },
     crash,
     thunder,

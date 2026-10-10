@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Howl } from "howler";
 import { track } from "../../analytics";
 import { watchMusic } from "../../engagement";
+import { onSound, setSoundOn } from "../../soundSwitch";
 import "./MusicToggle.scss";
 
 // Background music: the owner's own track, looping forever, played exactly as
@@ -10,6 +11,8 @@ import "./MusicToggle.scss";
 // while the page isn't open on screen.
 // Played with Howler (HTML5 audio, streamed), so it also works on iPhone/iPad
 // once the visitor touches the page.
+// OFF by default (owner rule: the site is silent until the visitor turns
+// sound on). The "sound" switch below mutes/unmutes the whole site.
 const TRACK = "/music/girl_on_the_line_v1.mp3";
 const TRACK_NAME = "girl on the line";
 const VOLUME = 1; // full, original volume
@@ -17,9 +20,9 @@ const STORAGE_KEY = "seeface-music";
 
 function readPref(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) !== "off";
+    return localStorage.getItem(STORAGE_KEY) === "on";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -40,6 +43,7 @@ export default function MusicToggle() {
   useLang();
   const [on, setOn] = useState(readPref);
   const [playing, setPlaying] = useState(false);
+  const [sound, setSound] = useState(false);
   const musicRef = useRef<Howl | null>(null);
   const onRef = useRef(on);
   onRef.current = on;
@@ -104,8 +108,29 @@ export default function MusicToggle() {
     };
   }, []);
 
+  // the site-wide sound switch: turning it off also stops the music
+  useEffect(
+    () =>
+      onSound((v) => {
+        setSound(v);
+        if (!v && onRef.current) {
+          setOn(false);
+          writePref(false);
+          musicRef.current?.pause();
+        }
+      }),
+    []
+  );
+
+  const setSoundSwitch = (next: boolean) => {
+    track(next ? "sound-on" : "sound-off");
+    setSoundOn(next);
+  };
+
   const set = (next: boolean) => {
     if (next !== onRef.current) track(next ? "music-on" : "music-off");
+    if (next) setSoundOn(true); // music needs sound on
+    onRef.current = next;
     setOn(next);
     writePref(next);
     const m = musicRef.current;
@@ -133,6 +158,16 @@ export default function MusicToggle() {
         <div className="music-marquee">
           <span>♫ {tr("now playing")}: {TRACK_NAME} ~ seeface1 ~</span>
         </div>
+      </div>
+      <div className="music-switch" role="group" aria-label={tr("sound")}>
+        <span className="music-label">{tr("sound")}:</span>
+        <button className={sound ? "active" : ""} onClick={() => setSoundSwitch(true)}>
+          {tr("on")}
+        </button>
+        <span className="music-sep">/</span>
+        <button className={!sound ? "active" : ""} onClick={() => setSoundSwitch(false)}>
+          {tr("off")}
+        </button>
       </div>
       <div className="music-switch" role="group" aria-label={tr("background music")}>
         <span className="music-label">{tr("music")}:</span>

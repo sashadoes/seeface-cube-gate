@@ -262,3 +262,91 @@
     cursor: pointer;
   }
 }
+
+// talking to guests
+.eye-talk {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0 14px;
+
+  .warn {
+    margin: 0;
+    color: #ffb27a;
+    font-size: 12px;
+  }
+
+  .eye-talk-log {
+    max-height: 220px;
+    overflow-y: auto;
+    display: grid;
+    gap: 4px;
+    font-size: 13px;
+    color: #d8d2c6;
+
+    p {
+      margin: 0;
+      color: #8f897c;
+    }
+
+    > div {
+      padding: 4px 6px;
+      border-left: 2px solid rgba(255, 255, 255, 0.12);
+    }
+
+    > div.mine {
+      border-left-color: #ffd27a;
+      color: #ffe7b0;
+    }
+
+    b {
+      font-weight: normal;
+      color: #fff;
+      margin-right: 4px;
+    }
+
+    button {
+      margin-left: 6px;
+      background: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  }
+
+  form {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 6px;
+  }
+
+  select,
+  input,
+  button[type="submit"] {
+    background: #0c0c0c;
+    color: #eee;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+    font-size: 13px;
+    min-width: 0;
+  }
+
+  button[type="submit"] {
+    cursor: pointer;
+    border-color: rgba(255, 210, 122, 0.6);
+    color: #ffd27a;
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+  }
+}
+
+.eye-live {
+  color: #ff6b5e;
+  font-style: normal;
+  font-size: 11px;
+}

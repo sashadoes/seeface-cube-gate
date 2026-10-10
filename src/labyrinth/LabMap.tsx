@@ -414,7 +414,7 @@ export default function LabMap({ source, nick, cards, onClose, onMeet, target }:
       <div className="lab-map-online">
         ◉ {source.presence?.online() ?? 1} {tr("inside")}
         <span className="lab-map-cards" title={tr("teleport cards")}>
-          ⟡ {cards}/{MAX_CARDS}
+          ⟡ {cards}{cards <= MAX_CARDS ? `/${MAX_CARDS}` : ""}
           {cards < MAX_CARDS && <small> · {tr("next card in {t}", { t: clock(nextIn) })}</small>}
         </span>
       </div>

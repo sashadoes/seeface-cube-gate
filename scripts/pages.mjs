@@ -8,8 +8,10 @@ const pages = {
   labyrinth: { title: "seeface1 · the labyrinth", description: "The labyrinth behind the seeface1 cube: an endless 3D maze you walk with strangers. Floods, a Pop Queen, secret rooms. Play in your browser.", index: true },
   privacy: { title: "seeface1 · privacy", description: "What seeface1 keeps and why.", index: true },
   artists: { title: "seeface1 · artists", description: "The agreement artists accept when they hang their work in the seeface1 labyrinth.", index: true },
+  brands: { title: "seeface1 · for brands", description: "Bring your brand into seeface world: posters, your own place in the labyrinth, goods for players, and one link that drops your people inside.", index: true },
   marks: { title: "seeface1 · marks", description: "seeface1 marks.", index: false },
   "the-eye": { title: "the eye", description: "", index: false },
+  control: { title: "control room", description: "", index: false },
 };
 
 const page = (path, p) =>

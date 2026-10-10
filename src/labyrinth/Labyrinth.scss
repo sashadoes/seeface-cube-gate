@@ -2274,3 +2274,90 @@
     height: 76px;
   }
 }
+
+// ------------------------------------------------------------------ live voice + the eye + the café
+.lab-chat-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lab-voice-btn {
+  font-size: 15px;
+
+  small {
+    font-size: 12px;
+    opacity: 0.7;
+  }
+
+  .lab-voice-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 246, 226, 0.7);
+  }
+
+  &.live {
+    border-color: rgba(255, 120, 110, 0.75);
+
+    .lab-voice-dot {
+      background: #ff6b5e;
+      border-color: #ff6b5e;
+      box-shadow: 0 0 8px #ff6b5e;
+    }
+  }
+
+  &.speaking .lab-voice-dot {
+    animation: lab-voice-pulse 0.6s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes lab-voice-pulse {
+  to {
+    transform: scale(1.5);
+    box-shadow: 0 0 14px #ff6b5e;
+  }
+}
+
+.lab-voice-talking {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  span {
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 120, 110, 0.4);
+    color: #ffd9d4;
+    font-size: 13px;
+  }
+}
+
+.lab-voice-off {
+  all: unset;
+  cursor: pointer;
+  margin-left: auto;
+  margin-right: 10px;
+  font-size: 13px;
+  color: #c9b8b0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+// lines from the owner (signed, from the eye): warm gold, easy to spot
+.lab-chat-line.host b,
+.lab-chat-row.host b {
+  color: #ffd27a;
+}
+
+.lab-chat-row.host .lab-chat-line,
+.lab-chat-line.host {
+  border-color: rgba(255, 210, 122, 0.45);
+}
+
+.lab-cafe-btn {
+  border-color: rgba(0, 168, 98, 0.7);
+  color: #f2ead8;
+  box-shadow: 0 0 18px rgba(0, 168, 98, 0.18);
+}

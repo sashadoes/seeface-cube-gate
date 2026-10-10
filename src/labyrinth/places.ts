@@ -14,6 +14,7 @@ import { relicMesh } from "./props";
 import { zoneAt, zoneWallMaterial } from "./zones";
 import { beam, shipSilhouette } from "./ship";
 import { newsTower } from "./bignord";
+import { ACTIVE, brandName, fill, logoUrl } from "../brands/campaigns";
 
 export const PLACE_NAMES: Record<PlaceKind, string> = {
   open: "the open",
@@ -24,6 +25,7 @@ export const PLACE_NAMES: Record<PlaceKind, string> = {
   dark: "the dark room",
   ritual: "the hall of champions",
   bazaar: "the open market",
+  cafe: brandName(), // the campaign's café (brands/campaigns.ts)
 };
 
 // ------------------------------------------------------------------ the market's stalls (fed by market.ts)
@@ -761,6 +763,165 @@ function buildBazaar(g: THREE.Group, b: Built) {
   b.spots.push({ x: 10, y: 3.2, z: 10, color: 0xffd8a0, intensity: 16 }, { x: 4, y: 3, z: 16, color: 0xffb0c0, intensity: 6 }, { x: 16, y: 3, z: 4, color: 0xffe0a0, intensity: 6 });
 }
 
+// ------------------------------------------------------------------ the café (the brand campaign's place)
+// Warm and calm on purpose: a place to rest in the labyrinth. The counter sells
+// coffee and teleport cards for ◈ (Labyrinth.tsx opens the menu inside).
+// Everything branded comes from brands/campaigns.ts (name only when licensed).
+function cupTexture(deep: string, accent: string, cream: string) {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 256;
+  const g = c.getContext("2d")!;
+  g.clearRect(0, 0, 256, 256);
+  // steam
+  g.strokeStyle = "rgba(255,255,255,0.55)";
+  g.lineWidth = 6;
+  g.lineCap = "round";
+  for (const x of [104, 128, 152]) {
+    g.beginPath();
+    g.moveTo(x, 92);
+    g.bezierCurveTo(x - 14, 72, x + 14, 56, x, 30);
+    g.stroke();
+  }
+  // a plain paper cup with a band (no brand marks)
+  g.fillStyle = cream;
+  g.beginPath();
+  g.moveTo(84, 104);
+  g.lineTo(172, 104);
+  g.lineTo(160, 236);
+  g.lineTo(96, 236);
+  g.closePath();
+  g.fill();
+  g.fillStyle = deep;
+  g.fillRect(78, 96, 100, 14);
+  g.fillStyle = accent;
+  g.beginPath();
+  g.moveTo(89, 150);
+  g.lineTo(167, 150);
+  g.lineTo(163, 192);
+  g.lineTo(93, 192);
+  g.closePath();
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function menuBoard(lines: string[], deep: string, cream: string, accent: string) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 320;
+  const g = c.getContext("2d")!;
+  g.fillStyle = deep;
+  g.fillRect(0, 0, 512, 320);
+  g.strokeStyle = "rgba(255,255,255,0.18)";
+  g.lineWidth = 3;
+  g.strokeRect(10, 10, 492, 300);
+  g.textAlign = "center";
+  g.fillStyle = accent;
+  g.font = "italic 34px 'Times New Roman', serif";
+  g.fillText("menu", 256, 56);
+  g.fillStyle = cream;
+  g.font = "italic 30px 'Times New Roman', serif";
+  lines.forEach((l, k) => g.fillText(l, 256, 112 + k * 52, 470));
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function buildCafe(g: THREE.Group, b: Built, r: () => number) {
+  const { deep, accent, cream } = ACTIVE.colors;
+  const deepHex = new THREE.Color(deep).getHex(), accentHex = new THREE.Color(accent).getHex();
+  floorOf(g, 0x6b4a33, 0.55, 0.05, 12); // warm wood
+  // walls get a deep brand-coloured wainscot (inside faces, leaving the doorways open)
+  const wain = mat(deepHex, 0, 0, 0.6);
+  for (const [x, z, w, d] of [
+    [4, 0.25, 8, 0.1], [16, 0.25, 8, 0.1], [4, L - 0.25, 8, 0.1], [16, L - 0.25, 8, 0.1],
+    [0.25, 4, 0.1, 8], [0.25, 16, 0.1, 8], [L - 0.25, 4, 0.1, 8], [L - 0.25, 16, 0.1, 8],
+  ] as const)
+    box(g, w, 1.1, d, x, 0.55, z, wain);
+  // the counter (matches SOLID in maze.ts: x 5–15, z 2.4–3.6)
+  box(g, 10, 1.05, 1.2, 10, 0.525, 3, mat(0x2a1b12, 0, 0, 0.45));
+  box(g, 10.2, 0.06, 1.35, 10, 1.08, 3, mat(0xe9e2d4, 0, 0, 0.25)); // stone top
+  box(g, 10, 0.12, 0.02, 10, 0.9, 3.61, mat(accentHex, accentHex, 1.4)); // a glowing strip
+  // the espresso machine + a stack of cups
+  box(g, 1.4, 0.7, 0.6, 7.2, 1.45, 2.8, mat(0xb8b8bc, 0, 0, 0.2));
+  box(g, 1.2, 0.08, 0.5, 7.2, 1.84, 2.8, mat(0x222222, 0, 0, 0.3));
+  const cupTex = cupTexture(deep, accent, cream);
+  for (let k = 0; k < 5; k++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cupTex, transparent: true }));
+    sp.scale.setScalar(0.42);
+    sp.position.set(11 + k * 0.45, 1.32, 2.85);
+    g.add(sp);
+  }
+  // the big sign over the counter + the menu boards behind it
+  sign(g, fill(ACTIVE.cafe.sign), 7, 1.1, 10, 3.0, 0.32, 0, { color: cream, glow: true, bg: deep, font: "italic 64px 'Times New Roman', serif" });
+  sign(g, ACTIVE.cafe.tagline, 7, 0.45, 10, 2.25, 0.33, 0, { color: accent, bg: deep, font: "italic 34px 'Times New Roman', serif" });
+  // the brand's own logo over the counter (only with a signed deal: campaigns.ts)
+  const logo = logoUrl();
+  if (logo) {
+    // drawn into a 512 px canvas so a small SVG stays sharp up close
+    const lc = document.createElement("canvas");
+    lc.width = lc.height = 512;
+    const tex = new THREE.CanvasTexture(lc);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const li = new Image();
+    li.onload = () => {
+      lc.getContext("2d")!.drawImage(li, 0, 0, 512, 512);
+      tex.needsUpdate = true;
+    };
+    li.src = logo;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false }));
+    // one on each side of the name sign (the middle stays clear for the name)
+    m.position.set(6.0, 3.0, 0.34);
+    g.add(m);
+    const right = m.clone();
+    right.position.x = 14.0;
+    g.add(right);
+  }
+  const board = menuBoard(ACTIVE.menu.map((m) => `${m.name} · ${m.price} ◈`), deep, cream, accent);
+  for (const x of [3, 17]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.62), new THREE.MeshBasicMaterial({ map: board, toneMapped: false }));
+    m.position.set(x, 2.1, 0.32);
+    g.add(m);
+  }
+  // six small round tables (matches SOLID), each with a glowing cup
+  const tableTop = mat(0x3a2618, 0, 0, 0.4), leg = mat(0x111111, 0, 0, 0.5);
+  const steam: THREE.Sprite[] = [];
+  for (const [x, z] of [[4.5, 8.5], [15.5, 8.5], [4.5, 13.5], [15.5, 13.5], [7.5, 16.5], [12.5, 16.5]]) {
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.05, 20), tableTop);
+    top.position.set(x, 0.76, z);
+    g.add(top);
+    box(g, 0.08, 0.74, 0.08, x, 0.37, z, leg);
+    const cup = new THREE.Sprite(new THREE.SpriteMaterial({ map: cupTex, transparent: true }));
+    cup.scale.setScalar(0.3);
+    cup.position.set(x + (r() - 0.5) * 0.3, 0.92, z + (r() - 0.5) * 0.3);
+    g.add(cup);
+    steam.push(cup);
+    // two stools
+    for (const a of [r() * Math.PI, r() * Math.PI + Math.PI]) {
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.45, 12), mat(deepHex, 0, 0, 0.6));
+      st.position.set(x + Math.cos(a) * 0.95, 0.225, z + Math.sin(a) * 0.95);
+      g.add(st);
+    }
+  }
+  // warm pendant lamps
+  const bulbs: THREE.Sprite[] = [];
+  for (const [x, z] of [[4.5, 8.5], [15.5, 8.5], [4.5, 13.5], [15.5, 13.5], [7.5, 16.5], [12.5, 16.5], [7, 4], [13, 4]]) {
+    const bl = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: 0xffd8a0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    bl.position.set(x, 2.6, z);
+    bl.scale.setScalar(0.5);
+    bulbs.push(bl);
+    g.add(bl);
+    box(g, 0.02, WALL_H - 2.65, 0.02, x, (WALL_H + 2.65) / 2, z, leg);
+  }
+  b.anim.push((t) => {
+    steam.forEach((s, k) => (s.position.y = 0.92 + Math.sin(t * 1.3 + k) * 0.015));
+    bulbs.forEach((bl, k) => bl.scale.setScalar(0.48 + Math.sin(t * 2 + k * 1.7) * 0.03));
+  });
+  b.spots.push({ x: 10, y: 3, z: 5, color: 0xffd8a0, intensity: 14 }, { x: 5, y: 3, z: 12, color: 0xffcf9a, intensity: 8 }, { x: 15, y: 3, z: 14, color: new THREE.Color(accent).getHex(), intensity: 5 });
+}
+
 const BUILD: Record<PlaceKind, (g: THREE.Group, b: Built, r: () => number) => void> = {
   open: buildOpen,
   theater: buildTheater,
@@ -770,6 +931,7 @@ const BUILD: Record<PlaceKind, (g: THREE.Group, b: Built, r: () => number) => vo
   dark: (g, b) => buildDark(g, b),
   ritual: (g, b) => buildRitual(g, b),
   bazaar: (g, b) => buildBazaar(g, b),
+  cafe: buildCafe,
 };
 
 // ------------------------------------------------------------------ the layer

@@ -29,3 +29,10 @@ services:
         sync: false
       - key: ADMIN_KEY
         generateValue: true # copy it from Render → Environment to read /api/stats
+      # control room (seeface1.world/control), optional: list/start GitHub Actions, restart/redeploy on Render
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: RENDER_API_KEY
+        sync: false
+      - key: RENDER_SERVICE_ID
+        sync: false

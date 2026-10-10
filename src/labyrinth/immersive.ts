@@ -100,7 +100,7 @@ export function createImmersive(renderer: THREE.WebGLRenderer, scene: THREE.Scen
         beatT -= dtReal;
         if (beatT <= 0) {
           beatT = 1.1 - danger * 0.6;
-          thump(0.12 + danger * 0.35);
+          thump(0.08 + danger * 0.22);
         }
       } else beatT = 0;
     },

@@ -3,6 +3,7 @@
 // in monochrome like the walls. Each room gets its own vivid light colour, so
 // the black-and-white art glows differently from room to room. Corridors get the odd
 // glowing photo poster. All emissive: only a fixed pool of 4 real lights.
+import { ACTIVE, fill, logoUrl } from "../brands/campaigns";
 import * as THREE from "three";
 import { zoneAt, type ZoneKind } from "./zones";
 import { CELL, WALL_H, inShip, placeAt, placeOf, roomCentre, roomOf, rnd, wallEast, wallSouth } from "./maze";
@@ -176,6 +177,14 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
   logoImg.onload = () => adCache.forEach((t, k) => drawAd(t.image as HTMLCanvasElement, k, logoImg) && (t.needsUpdate = true));
   logoImg.src = "/imgs/seeface-logo-transparent.png";
 
+  // the brand campaign's posters (brands/campaigns.ts)
+  const campaignCache = new Map<number, THREE.CanvasTexture>();
+  const campaignPoster = (k: number) => {
+    let t = campaignCache.get(k);
+    if (!t) campaignCache.set(k, (t = makeCampaignPoster(k)));
+    return t;
+  };
+
   // generated posters that belong to the place they hang in: each zone has its own look
   const posterCache = new Map<string, THREE.CanvasTexture>();
   const zonePoster = (kind: ZoneKind, k: number) => {
@@ -270,7 +279,7 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
         const pick = rnd(i, j, 62);
         // players' approved art takes the photo slots (and a few more) once there is any
         const piece = gallery.length && pick >= 0.6 ? gallery[Math.floor(rnd(i, j, 61) * gallery.length)] : null;
-        (p.material as THREE.MeshBasicMaterial).map = piece ? galleryPoster(piece) : pick < 0.22 ? logoSign : pick < 0.42 ? adPoster(Math.floor(rnd(i, j, 64) * AD_LINES.length)) : pick < 0.68 ? zonePoster(zoneAt((i + 0.5) * CELL, (j + 0.5) * CELL).kind, Math.floor(rnd(i, j, 63) * 4)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
+        (p.material as THREE.MeshBasicMaterial).map = piece ? galleryPoster(piece) : pick < 0.18 ? logoSign : pick < 0.34 ? campaignPoster(Math.floor(rnd(i, j, 65) * ACTIVE.posters.length)) : pick < 0.42 ? adPoster(Math.floor(rnd(i, j, 64) * AD_LINES.length)) : pick < 0.68 ? zonePoster(zoneAt((i + 0.5) * CELL, (j + 0.5) * CELL).kind, Math.floor(rnd(i, j, 63) * 4)) : art(`seeface1-poster-${Math.floor(rnd(i, j, 61) * 24)}`).tex;
         (p.material as THREE.MeshBasicMaterial).needsUpdate = true;
         p.visible = true;
       }
@@ -468,6 +477,89 @@ function makeZonePoster(kind: ZoneKind, k: number) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+// ------------------------------------------------------------------ brand campaign posters
+// Calm and warm, in the brand's colours: a steaming cup + three lines. Never a
+// brand logo unless the brand supplied one under a deal (campaigns.ts).
+function makeCampaignPoster(k: number) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 360;
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  drawCampaignPoster(c, k, null);
+  // with a signed deal, the brand's own logo replaces the cup once it loads
+  const url = logoUrl();
+  if (url) {
+    const img = new Image();
+    img.onload = () => {
+      drawCampaignPoster(c, k, img);
+      t.needsUpdate = true;
+    };
+    img.src = url;
+  }
+  return t;
+}
+
+function drawCampaignPoster(c: HTMLCanvasElement, k: number, logo: HTMLImageElement | null) {
+  const g = c.getContext("2d")!;
+  const W = c.width, H = c.height;
+  const { deep, accent, cream } = ACTIVE.colors;
+  const [title, sub, cta] = ACTIVE.posters[k].map((l) => fill(l));
+  g.fillStyle = deep;
+  g.fillRect(0, 0, W, H);
+  const v = g.createRadialGradient(W * 0.28, H * 0.5, 10, W * 0.28, H * 0.5, W * 0.6);
+  v.addColorStop(0, "rgba(255,236,200,0.18)");
+  v.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = v;
+  g.fillRect(0, 0, W, H);
+  const cx = 130, top = 120;
+  if (logo) g.drawImage(logo, cx - 90, H / 2 - 90, 180, 180);
+  // the cup, left
+  else {
+  g.strokeStyle = "rgba(255,255,255,0.5)";
+  g.lineWidth = 5;
+  g.lineCap = "round";
+  for (const x of [cx - 22, cx, cx + 22]) {
+    g.beginPath();
+    g.moveTo(x, top - 12);
+    g.bezierCurveTo(x - 14, top - 34, x + 14, top - 52, x, top - 76);
+    g.stroke();
+  }
+  g.fillStyle = cream;
+  g.beginPath();
+  g.moveTo(cx - 52, top);
+  g.lineTo(cx + 52, top);
+  g.lineTo(cx + 38, top + 170);
+  g.lineTo(cx - 38, top + 170);
+  g.closePath();
+  g.fill();
+  g.fillStyle = "#1b1b1b";
+  g.fillRect(cx - 58, top - 12, 116, 16);
+  g.fillStyle = accent;
+  g.beginPath();
+  g.moveTo(cx - 46, top + 55);
+  g.lineTo(cx + 46, top + 55);
+  g.lineTo(cx + 42, top + 105);
+  g.lineTo(cx - 42, top + 105);
+  g.closePath();
+  g.fill();
+  }
+  // the words, right
+  g.textAlign = "left";
+  g.fillStyle = cream;
+  g.font = "italic 44px 'Times New Roman', serif";
+  g.fillText(title, 230, 150, W - 250);
+  g.fillStyle = "rgba(242,234,216,0.75)";
+  g.font = "italic 25px 'Times New Roman', serif";
+  g.fillText(sub, 230, 192, W - 250);
+  g.fillStyle = accent;
+  g.font = "italic 24px 'Times New Roman', serif";
+  g.fillText(cta, 230, 262, W - 250);
+  g.strokeStyle = "rgba(255,255,255,0.14)";
+  g.lineWidth = 2;
+  g.strokeRect(12, 12, W - 24, H - 24);
 }
 
 // ------------------------------------------------------------------ "opening soon" ads

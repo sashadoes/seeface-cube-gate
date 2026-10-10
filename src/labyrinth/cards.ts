@@ -2,7 +2,9 @@
 // Everyone is told where you appeared, unless you spend one more card to travel
 // unseen. Cards recharge on their own, but only while you're in the game:
 // one every RECHARGE_S seconds of play, up to MAX_CARDS. The charge in progress
-// is kept, so leaving and coming back doesn't lose it.
+// is kept, so leaving and coming back doesn't lose it. Cards bought at the café
+// (for ◈, never real money) can stack past MAX_CARDS up to HOLD_MAX; recharging
+// only tops you up to MAX_CARDS.
 import { CELL, free, placeOf } from "./maze";
 import { PLACE_NAMES } from "./places";
 import { LEVELS, levelAtX } from "./zones";
@@ -10,6 +12,7 @@ import { LEVELS, levelAtX } from "./zones";
 export const TELEPORT_COST = 1;
 export const INCOGNITO_COST = 2;
 export const MAX_CARDS = 3;
+export const HOLD_MAX = 9;
 export const RECHARGE_S = 180;
 const KEY = "seeface-tp-cards";
 const CHARGE_KEY = "seeface-tp-charge";
@@ -33,7 +36,7 @@ const save = (k: string, v: number) => {
 
 /** cards in hand (a newcomer starts with one) */
 export function readCards() {
-  return Math.max(0, Math.min(MAX_CARDS, num(KEY, 1)));
+  return Math.max(0, Math.min(HOLD_MAX, num(KEY, 1)));
 }
 
 /** seconds of play charged towards the next card */
@@ -48,7 +51,7 @@ export const onCards = (fn: (n: number) => void) => {
 
 /** add (or spend, with n < 0); returns the new count */
 export function addCards(n: number) {
-  const v = Math.max(0, Math.min(MAX_CARDS, readCards() + n));
+  const v = Math.max(0, Math.min(HOLD_MAX, readCards() + n));
   save(KEY, v);
   listeners.forEach((f) => f(v));
   return v;

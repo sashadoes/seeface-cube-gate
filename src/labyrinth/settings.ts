@@ -19,6 +19,7 @@ export type Settings = {
   stickSteers: boolean; // phone stick turns you (true) or side-steps (false)
   // graphics
   quality: "low" | "medium" | "high";
+  qualityAuto: boolean; // true while the game picks the quality; false once the player picks one
   fov: number; // 60–90
   glow: boolean; // glow, film look, light shafts, motes, trails, aurora
   cameraBob: boolean;
@@ -40,6 +41,7 @@ export const DEFAULTS: Settings = {
   invertY: false,
   stickSteers: true,
   quality: "medium",
+  qualityAuto: true,
   fov: 72,
   glow: true,
   cameraBob: true,
@@ -69,6 +71,8 @@ export function hasSavedSettings() {
 }
 
 export function setSettings(patch: Partial<Settings>) {
+  // a quality picked in the settings panel is the player's: the game stops adjusting it
+  if ("quality" in patch && !("qualityAuto" in patch)) patch = { ...patch, qualityAuto: false };
   current = { ...current, ...patch };
   try {
     localStorage.setItem(KEY, JSON.stringify(current));

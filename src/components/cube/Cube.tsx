@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { Howl, Howler } from "howler";
+import { applyHowlerMute } from "../../soundSwitch";
 import {
   randomIntFromInterval,
   appendVideo,
@@ -15,6 +16,7 @@ import { track } from "../../analytics";
 import { initMystery, mysteryStep, buzz } from "./mystery";
 import { initAlive } from "./alive";
 import { enterDigit } from "./gate";
+import { watchFrames } from "../../device";
 
 import "./CubeStyle.scss";
 
@@ -327,13 +329,9 @@ function unlockAudioOnPress() {
   window.addEventListener(type, unlockAudioOnPress, { capture: true })
 );
 
-// The cube only makes sound while its page is actually open on screen:
-// switching tabs, minimising or locking the phone silences every effect.
-const muteWhenHidden = () => Howler.mute(document.hidden);
-document.addEventListener("visibilitychange", muteWhenHidden);
-window.addEventListener("pagehide", () => Howler.mute(true));
-window.addEventListener("pageshow", muteWhenHidden);
-muteWhenHidden();
+// The cube only makes sound while its page is actually open on screen AND the
+// visitor has turned sound on (off by default): see soundSwitch.ts.
+applyHowlerMute();
 
 export default function Cube() {
   useEffect(() => {
@@ -513,7 +511,33 @@ export default function Cube() {
         self.down = false;
       });
 
-      setInterval(this.animate.bind(this), this.fps);
+      // Smooth on 60 / 120 Hz phone screens: the spin physics still steps every
+      // `fps` ms (same feel as before), but the cube is drawn on every screen
+      // frame, eased between the last two steps. Pauses while the tab is hidden.
+      var acc = 0;
+      var last = 0;
+      var prevX = this.positionX;
+      var prevY = this.positionY;
+      var wrap = function (d) {
+        return d > 180 ? d - 360 : d < -180 ? d + 360 : d;
+      };
+      var loop = function (t) {
+        if (last) acc += Math.min(t - last, 250);
+        last = t;
+        while (acc >= self.fps) {
+          prevX = self.positionX;
+          prevY = self.positionY;
+          self.animate();
+          acc -= self.fps;
+        }
+        var k = acc / self.fps;
+        var x = prevX + wrap(self.positionX - prevX) * k;
+        var y = prevY + wrap(self.positionY - prevY) * k;
+        self.element.style[userPrefix.js + "Transform"] =
+          "rotateX(" + y + "deg) rotateY(" + x + "deg)";
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
     }
     events.implement(Viewport);
     Viewport.prototype.animate = function () {
@@ -765,6 +789,9 @@ export default function Cube() {
     // pointerup (not mouseup): phones only fake mouseup for taps, never after a drag
     window.addEventListener("pointerup", myFunction, false);
 
+    // phones that can't keep up switch to the light look (see device.ts)
+    watchFrames();
+
     // initStars();
 
     // video backgtound
@@ -825,6 +852,8 @@ export default function Cube() {
             autoPlay={false}
             loop
             muted
+            playsInline
+            preload="none" // 5.6 MB and never shown yet: don't spend phone data on it
           >
             <source src="/videos/FireCubeBack.mp4" type="video/mp4" />
           </video>

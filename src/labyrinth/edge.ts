@@ -6,7 +6,7 @@
 // around its own entrance.
 import { LEVEL_OFFSET, levelAtX } from "./zones";
 
-const BASE = 70; // metres of labyrinth for one lonely person
+const BASE = 100; // metres of labyrinth for one lonely person (reaches the café east of the entrance)
 const PER_PERSON = 45; // more for each extra person
 const MAX = 3000;
 

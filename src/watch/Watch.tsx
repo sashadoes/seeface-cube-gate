@@ -1,8 +1,10 @@
 // The owner's secret page (/the-eye): live online numbers for the whole site,
 // and a live map of the labyrinth with every player and the path they walked.
-// It only LISTENS to the relay: it never sends anything, so it is not counted
-// online and never appears in the game. It shows only what the game already
-// shares (nickname + position in the maze), never emails or IP addresses.
+// It mostly LISTENS to the relay, so it is not counted online and never appears
+// in the game as a player. It sends only: post approvals, and the owner's own
+// words to guests ("talk", signed with the moderator key: see labyrinth/host.ts).
+// It shows only what the game already shares (nickname + position in the maze),
+// never emails or IP addresses.
 // Hidden, not locked: anyone who finds the address sees the same public data.
 import { useEffect, useRef, useState } from "react";
 import mqtt from "mqtt";
@@ -11,6 +13,8 @@ import { LEVELS, LEVEL_OFFSET, levelAtX, zoneAt } from "../labyrinth/zones";
 import { DEMONS, demonOf } from "../labyrinth/demons";
 import { cleanNick } from "../labyrinth/nick";
 import { MOD_PUBLIC_KEY, approvalText, type Post } from "../labyrinth/posts";
+import { HOST_MAX, HOST_NAME, signHost } from "../labyrinth/host";
+import { filterMark } from "../marks/filter";
 import "./Watch.scss";
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
@@ -22,7 +26,8 @@ const TRAIL_KEEP_MS = 15 * 60_000; // trails of people who left stay for 15 min
 const HISTORY_KEY = "seeface-eye-history";
 
 type Pt = { x: number; z: number; t: number };
-type Player = { id: string; nick: string; x: number; z: number; yaw: number; light: number; held: number; first: number; last: number; trail: Pt[]; walked: number };
+type Player = { id: string; nick: string; x: number; z: number; yaw: number; light: number; held: number; voice: number; first: number; last: number; trail: Pt[]; walked: number };
+type TalkLine = { key: number; id: string; nick: string; text: string; mine: boolean; t: number };
 type Sample = { t: number; site: number; lab: number };
 
 const PLACE: Record<string, string> = {
@@ -68,6 +73,14 @@ export default function Watch() {
       return null;
     }
   });
+  // talking to guests: what you said and what they answered
+  const [talk, setTalk] = useState<TalkLine[]>([]);
+  const [talkTo, setTalkTo] = useState<string>("all");
+  const [talkDraft, setTalkDraft] = useState("");
+  const talkKey = useRef(0);
+  const addTalk = (l: Omit<TalkLine, "key" | "t">) => setTalk((c) => [...c.slice(-79), { ...l, key: ++talkKey.current, t: Date.now() }]);
+  const addTalkRef = useRef(addTalk);
+  addTalkRef.current = addTalk;
   const history = useRef<Sample[]>(loadHistory());
   const peak = useRef({ site: 0, lab: 0 });
 
@@ -89,8 +102,7 @@ export default function Watch() {
       client = mqtt.connect(RELAYS[r], { clientId: `sf1eye-${Math.random().toString(36).slice(2, 10)}`, connectTimeout: 6000, reconnectPeriod: 4000 });
       client.on("connect", () => {
         setRelay(RELAYS[r].replace("wss://", "").split(":")[0]);
-        // listen only: no publish anywhere in this file
-        client!.subscribe([`${SITE}/+`, `${LAB}/pos/#`, `${LAB}/bye/+`, `${LAB}/world/#`]);
+        client!.subscribe([`${SITE}/+`, `${LAB}/pos/#`, `${LAB}/bye/+`, `${LAB}/world/#`, `${LAB}/tohost/+`]);
       });
       client.on("error", () => {
         client?.end(true);
@@ -106,6 +118,19 @@ export default function Watch() {
           if (id.length > 16) return;
           if (payload.toString() === "bye") site.current.delete(id);
           else site.current.set(id, now);
+          return;
+        }
+        if (parts[3] === "tohost") {
+          // a guest answering you (filtered again: never trust what a client sends)
+          const id = parts[4];
+          if (!id || id.length > 16 || payload.length > 400) return;
+          try {
+            const d = JSON.parse(payload.toString());
+            const text = typeof d.t === "string" ? filterMark(d.t) : null;
+            if (text) addTalkRef.current({ id, nick: cleanNick(d.n) ?? players.current.get(id)?.nick ?? "wanderer", text, mine: false });
+          } catch {
+            // ignore garbage
+          }
           return;
         }
         if (parts[3] === "world") {
@@ -144,7 +169,7 @@ export default function Watch() {
         const x = m.x, z = m.z;
         let p = players.current.get(id);
         if (!p || now - p.last > TRAIL_KEEP_MS) {
-          p = { id, nick: "", x, z, yaw: 0, light: 0, held: 0, first: now, last: now, trail: [], walked: 0 };
+          p = { id, nick: "", x, z, yaw: 0, light: 0, held: 0, voice: 0, first: now, last: now, trail: [], walked: 0 };
           players.current.set(id, p);
         }
         const lastPt = p.trail[p.trail.length - 1];
@@ -159,6 +184,7 @@ export default function Watch() {
           yaw: typeof m.y === "number" ? m.y : 0,
           light: typeof m.l === "number" ? m.l : 0,
           held: typeof m.h === "number" ? m.h : 0,
+          voice: m.v === 1 || m.v === 2 ? m.v : 0,
           nick: cleanNick(m.n) ?? "wanderer",
           last: now,
         });
@@ -400,6 +426,17 @@ export default function Watch() {
     setTick((n) => n + 1);
   }
 
+  async function sendTalk() {
+    const text = talkDraft.trim().slice(0, HOST_MAX);
+    if (!text || !modKey || !clientRef.current) return;
+    const to = talkTo === "all" || !players.current.has(talkTo) ? "all" : talkTo;
+    const ts = Date.now();
+    const sig = await signHost(modKey.priv, to, ts, text);
+    clientRef.current.publish(`${LAB}/host/${to}`, JSON.stringify({ t: text, ts, sig }));
+    addTalk({ id: to, nick: to === "all" ? "everyone" : players.current.get(to)?.nick ?? "?", text, mine: true });
+    setTalkDraft("");
+  }
+
   function fitAll() {
     setFollow(null);
     const v = view.current;
@@ -474,6 +511,43 @@ export default function Watch() {
         </div>
 
         <aside className="eye-list">
+          <div className="eye-list-head">talk to guests · they see it as ◉ {HOST_NAME}, in gold</div>
+          <div className="eye-talk">
+            {!MOD_PUBLIC_KEY && <p className="warn">guests only see your words once your public key is in the game (below). until then nothing arrives.</p>}
+            <div className="eye-talk-log">
+              {talk.length === 0 && <p>say hello to someone: pick them in the list, or talk to everyone in the labyrinth. their answers appear here.</p>}
+              {talk.map((l) => (
+                <div key={l.key} className={l.mine ? "mine" : ""}>
+                  <b>{l.mine ? `you → ${l.nick}` : `@${l.nick}`}</b> {l.text}
+                  {!l.mine && (
+                    <button onClick={() => setTalkTo(l.id)} title="answer this person">
+                      ↩
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void sendTalk();
+              }}
+            >
+              <select value={talkTo} onChange={(e) => setTalkTo(e.target.value)}>
+                <option value="all">everyone inside</option>
+                {online.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    @{p.nick}
+                  </option>
+                ))}
+                {talkTo !== "all" && !online.some((p) => p.id === talkTo) && <option value={talkTo}>@{players.current.get(talkTo)?.nick ?? "?"} (left)</option>}
+              </select>
+              <input value={talkDraft} maxLength={HOST_MAX} onChange={(e) => setTalkDraft(e.target.value)} placeholder={modKey ? "write to them…" : "create your moderator key first (below)"} disabled={!modKey} />
+              <button type="submit" disabled={!modKey || !talkDraft.trim()}>
+                send
+              </button>
+            </form>
+          </div>
           <div className="eye-list-head">posts waiting · {[...posts.current.values()].filter((p) => !approvedIds.current.has(p.id)).length}</div>
           {!modKey && (
             <div className="eye-mod">
@@ -514,9 +588,19 @@ export default function Watch() {
             const live = now - p.last < STALE_MS;
             const d = DEMONS[demonOf(p.id)];
             return (
-              <button key={p.id} className={"eye-row" + (live ? "" : " gone") + (follow === p.id ? " sel" : "")} onClick={() => setFollow(p.id)}>
+              <button
+                key={p.id}
+                className={"eye-row" + (live ? "" : " gone") + (follow === p.id ? " sel" : "")}
+                onClick={() => {
+                  setFollow(p.id);
+                  if (live) setTalkTo(p.id);
+                }}
+              >
                 <i style={{ background: hex(d.aura) }} />
-                <span className="n">{p.nick}</span>
+                <span className="n">
+                  {p.nick}
+                  {live && p.voice === 2 && <em className="eye-live"> ◉ live voice</em>}
+                </span>
                 <span className="m">
                   {d.name} · {placeOf(p.x, p.z)}
                   <br />

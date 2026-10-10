@@ -27,7 +27,7 @@ export function createRadio(): Radio {
   // radio band: cut lows and highs, a little resonance
   const band = ctx.createBiquadFilter();
   band.type = "bandpass";
-  band.frequency.value = 1800;
+  band.frequency.value = 1500;
   band.Q.value = 0.9;
 
   // crackle: the gain jumps around in bursts
@@ -44,9 +44,9 @@ export function createRadio(): Radio {
   const tick = () => {
     const now = ctx.currentTime;
     // bursts get denser and longer as danger rises
-    const burst = Math.random() < 0.25 + danger * 0.7 ? 0.35 + Math.random() * 0.65 : Math.random() * 0.12;
+    const burst = Math.random() < 0.2 + danger * 0.6 ? 0.3 + Math.random() * 0.5 : Math.random() * 0.1;
     crackle.gain.setTargetAtTime(burst, now, 0.012);
-    band.frequency.setTargetAtTime(1200 + Math.random() * 1600 + danger * 900, now, 0.05);
+    band.frequency.setTargetAtTime(1000 + Math.random() * 1000 + danger * 600, now, 0.05); // lower, less hiss
     setTimeout(tick, 40 + Math.random() * (140 - danger * 100));
   };
   tick();
@@ -57,8 +57,9 @@ export function createRadio(): Radio {
   return {
     set(d: number) {
       danger = Math.max(0, Math.min(1, d));
-      // silent until it's within reach, then rising sharply
-      master.gain.setTargetAtTime(danger < 0.05 ? 0 : 0.04 + danger * danger * 0.32, ctx.currentTime, 0.15);
+      // silent until it's really close, then rising; kept soft (owner 2026-10-07:
+      // "keep it for vibe but not too disturbing")
+      master.gain.setTargetAtTime(danger < 0.2 ? 0 : 0.015 + danger * danger * 0.13, ctx.currentTime, 0.3);
     },
     resume() {
       if (ctx.state !== "running") ctx.resume();

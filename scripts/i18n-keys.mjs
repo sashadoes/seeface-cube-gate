@@ -30,6 +30,8 @@ for (const m of read("src/labyrinth/events.ts").matchAll(/name: "([^"]+)"/g)) ad
 for (const m of read("src/labyrinth/music.ts").matchAll(/name: "([^"]+)"/g)) add(m[1]);
 for (const m of read("src/labyrinth/stations.ts").matchAll(/name: "([^"]+)" \}/g)) add(m[1]);
 for (const m of read("src/labyrinth/wishes.ts").matchAll(/label: "([^"]+)"/g)) add(m[1]);
+// the café menu of the brand campaigns (names + notes)
+for (const m of read("src/brands/campaigns.ts").matchAll(/name: "([^"]+)", note: "([^"]+)"/g)) (add(m[1]), add(m[2]));
 
 const list = [...keys].sort();
 writeFileSync(new URL("../src/i18n/_keys.json", import.meta.url), JSON.stringify(list, null, 1) + "\n");

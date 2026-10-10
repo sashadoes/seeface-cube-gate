@@ -1,0 +1,227 @@
+// /brands: the same dark minimal look as the game (italic serif, thin lines)
+.brands {
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  touch-action: pan-y;
+  user-select: text;
+  -webkit-overflow-scrolling: touch;
+  background: #050505;
+  color: #d8d2c6;
+  font-family: "Times New Roman", serif;
+  line-height: 1.6;
+  text-align: left;
+  padding: 40px 16px 60px;
+  box-sizing: border-box;
+
+  a {
+    color: #ffe6b8;
+  }
+
+  // the cube page's global <p> styles are loaded everywhere: reset them here
+  p {
+    position: static;
+    font-size: 16px;
+    line-height: 1.6;
+    text-align: left;
+    margin: 0 0 10px;
+    color: inherit;
+    width: auto;
+    transform: none;
+  }
+}
+
+.brands-wrap {
+  max-width: 680px;
+  margin: 0 auto;
+
+  header {
+    text-align: center;
+
+    img {
+      width: 72px;
+      height: 72px;
+      opacity: 0.9;
+    }
+
+    h1 {
+      font-weight: normal;
+      font-style: italic;
+      font-size: clamp(28px, 7vw, 40px);
+      margin: 10px 0 8px;
+      color: #fff6e2;
+    }
+  }
+
+  .lead {
+    font-size: 18px;
+    color: #cfc6b8;
+  }
+
+  .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-style: italic;
+    color: #a9e8c8;
+
+    i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #3fd38b;
+      box-shadow: 0 0 10px #3fd38b;
+    }
+  }
+
+  footer {
+    margin-top: 48px;
+    text-align: center;
+    font-style: italic;
+    color: #8f897c;
+  }
+}
+
+.brands-block {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+  h2 {
+    font-weight: normal;
+    font-style: italic;
+    color: #fff6e2;
+    margin: 0 0 10px;
+  }
+
+  .small {
+    font-size: 14px;
+    color: #8f897c;
+  }
+
+  pre {
+    overflow-x: auto;
+    padding: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: #0b0b0b;
+    color: #e9e4da;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  ul {
+    padding-left: 20px;
+  }
+}
+
+.brands-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+
+  > div {
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    display: grid;
+    gap: 2px;
+  }
+
+  b {
+    font-weight: normal;
+    font-style: italic;
+    font-size: 18px;
+    color: #ffd27a;
+  }
+
+  span {
+    font-size: 14px;
+    color: #a9a293;
+  }
+}
+
+.brands-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  code {
+    flex: 1 1 220px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: #0b0b0b;
+    font-size: 14px;
+    color: #fff6e2;
+  }
+
+  button,
+  a {
+    all: unset;
+    cursor: pointer;
+    padding: 9px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 210, 122, 0.5);
+    font-style: italic;
+    color: #ffd27a;
+  }
+}
+
+.brands-campaign {
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--deep);
+  border: 1px solid var(--accent);
+  color: var(--cream);
+
+  p {
+    margin: 6px 0;
+  }
+
+  .small {
+    color: var(--cream);
+    opacity: 0.7;
+  }
+
+  .brands-link a,
+  .brands-link button {
+    border-color: var(--accent);
+    color: var(--cream);
+  }
+
+  & + & {
+    margin-top: 12px;
+  }
+}
+
+.brands-campaign-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+
+  b {
+    font-weight: normal;
+    font-style: italic;
+    font-size: 24px;
+  }
+
+  span {
+    font-size: 13px;
+    font-style: italic;
+    color: var(--accent);
+  }
+}
+
+.brands-cta {
+  display: inline-block;
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 210, 122, 0.6);
+  text-decoration: none;
+  font-style: italic;
+}

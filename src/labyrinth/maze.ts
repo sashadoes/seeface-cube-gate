@@ -58,7 +58,7 @@ function shipFree(x: number, z: number, r: number) {
 // around the entrance (so everyone finds them even when the labyrinth is
 // small); more are scattered further out. The dark room is secret: one door
 // only, disguised as a wall you can walk through.
-export type PlaceKind = "open" | "theater" | "mall" | "museum" | "market" | "dark" | "ritual" | "bazaar";
+export type PlaceKind = "open" | "theater" | "mall" | "museum" | "market" | "dark" | "ritual" | "bazaar" | "cafe";
 export const PLACE = 5; // cells per side (20 m)
 const NEAR_PLACES: Record<string, PlaceKind> = {
   "1,0": "museum",
@@ -69,6 +69,7 @@ const NEAR_PLACES: Record<string, PlaceKind> = {
   "-1,-1": "dark",
   "-1,1": "ritual", // the hall of champions (there is only one)
   "1,-1": "bazaar", // the open market: players sell to each other
+  "2,0": "cafe", // the first brand campaign's café (brands/campaigns.ts): coffee + teleports
 };
 const FAR_PLACES: PlaceKind[] = ["open", "theater", "mall", "museum", "market"];
 
@@ -81,6 +82,7 @@ export function placeAt(I: number, J: number): PlaceKind | null {
   const h = hash(I, J, 60);
   if (h < 0.015) return "dark";
   if (h < 0.11) return FAR_PLACES[Math.floor(hash(I, J, 61) * FAR_PLACES.length)];
+  if (h < 0.125) return "cafe"; // more cafés further out (they replace ordinary rooms only)
   return null;
 }
 
@@ -204,6 +206,8 @@ const SOLID: Partial<Record<PlaceKind, [number, number, number, number][]>> = {
   ritual: [[9, 9, 11, 11], [16.12, 10.72, 16.72, 11.32], [14.30, 14.30, 14.90, 14.90], [10.72, 16.12, 11.32, 16.72], [6.75, 15.49, 7.35, 16.09], [3.91, 12.65, 4.51, 13.25], [3.28, 8.68, 3.88, 9.28], [5.10, 5.10, 5.70, 5.70], [8.68, 3.28, 9.28, 3.88], [12.65, 3.91, 13.25, 4.51], [15.49, 6.75, 16.09, 7.35]],
   // the open market: 12 stalls in a ring + the sign pillar in the middle
   bazaar: [[9.4, 9.4, 10.6, 10.6], [16.06, 11.11, 17.46, 12.51], [14.25, 14.25, 15.65, 15.65], [11.11, 16.06, 12.51, 17.46], [7.49, 16.06, 8.89, 17.46], [4.35, 14.25, 5.75, 15.65], [2.54, 11.11, 3.94, 12.51], [2.54, 7.49, 3.94, 8.89], [4.35, 4.35, 5.75, 5.75], [7.49, 2.54, 8.89, 3.94], [11.11, 2.54, 12.51, 3.94], [14.25, 4.35, 15.65, 5.75], [16.06, 7.49, 17.46, 8.89]],
+  // the café: the counter along the north wall + six small tables
+  cafe: [[5, 2.4, 15, 3.6], [4, 8, 5, 9], [15, 8, 16, 9], [4, 13, 5, 14], [15, 13, 16, 14], [7, 16, 8, 17], [12, 16, 13, 17]],
   // standing stones in the open
   open: [[5, 5, 6, 6], [14, 6, 15, 7], [9.5, 14, 10.5, 15]],
 };

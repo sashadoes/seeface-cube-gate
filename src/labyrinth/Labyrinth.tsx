@@ -13,6 +13,7 @@ import { ALL_DONE_BONUS, createQuests, type QuestKind, type QuestView } from "./
 import { EMOTES, type Emote } from "./net";
 import { demonOf, demonTexture } from "./demons";
 import { createRadio } from "./radio";
+import { onSound, soundOn } from "../soundSwitch";
 import { shareCard, type RunResult } from "./card";
 import { createPresence, type Presence } from "./net";
 import { createOthers } from "./others";
@@ -24,7 +25,7 @@ import { noteLevel, noteRun, readProgress } from "../progress";
 import { accountsReady, currentAccount, deleteAccount, finishInstagram, instagramReady, instagramUrl, login, logout, refresh, register, type Account, type AuthError } from "../account";
 import LabMap, { type MapSource, type Trail } from "./LabMap";
 import Radar from "./Radar";
-import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, INCOGNITO_COST, TELEPORT_COST } from "./cards";
+import { addCards, chargeCards, firstCard, landingSpot, onCards, readCards, whereName, HOLD_MAX, INCOGNITO_COST, TELEPORT_COST } from "./cards";
 import { onOnline } from "../online";
 import { createProps } from "./props";
 import { createDream } from "./dream";
@@ -63,9 +64,13 @@ import { createBignord } from "./bignord";
 import { CLIP_SECONDS, clipSupported, createClipper, shareClip } from "./clip";
 import { clearResume, markEntered, readResume, saveResume } from "./resume";
 import { DEFAULTS, hasSavedSettings, onSettings, setSettings, settings, type Settings } from "./settings";
-import { createPerf, detectTier } from "./perf";
+import { createPerf, autoSettings } from "./perf";
+import { deviceTier } from "../device";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
 import { track } from "../analytics";
+import { ACTIVE, CAMPAIGNS, brandName } from "../brands/campaigns";
+import { createVoice, setVoiceConsent, voiceConsented, voiceSupported, RANGE as VOICE_RANGE, type Voice, type VoiceMode } from "./voice";
+import { HOST_NAME } from "./host";
 import "./Labyrinth.scss";
 
 // /labyrinth: survive the infinite seeface1 maze.
@@ -120,7 +125,10 @@ function LangPicker() {
 function NickGate({ onDone }: { onDone: (n: string) => void }) {
   useLang();
   // coming back? say so, and say where they'll continue
-  const [back] = useState(() => (new URLSearchParams(location.search).get("with") ? null : readResume()));
+  const [back] = useState(() => {
+    const q = new URLSearchParams(location.search);
+    return q.get("with") || q.get("brand") ? null : readResume(); // invites and brand links start elsewhere
+  });
   // default for newcomers: face_ + 4 random digits (e.g. face_2492)
   const [v, setV] = useState(() => savedNick() ?? `face_${Math.floor(1000 + Math.random() * 9000)}`);
   const [bad, setBad] = useState(false);
@@ -451,7 +459,7 @@ function Game({ nick }: { nick: string }) {
   const questRef = useRef<(k: QuestKind, n?: number) => void>(() => {});
 
   // chat with strangers + weird interactions
-  type Line = { key: number; id: string; nick: string; text: string; mine?: boolean };
+  type Line = { key: number; id: string; nick: string; text: string; mine?: boolean; host?: boolean };
   const [chat, setChat] = useState<Line[]>([]);
   // the open chat keeps the whole conversation (this visit); closed, lines float and fade
   const [log, setLog] = useState<Line[]>([]);
@@ -459,6 +467,23 @@ function Game({ nick }: { nick: string }) {
   const chatOpenRef = useRef(false);
   const [unread, setUnread] = useState(0);
   const [lineMenu, setLineMenu] = useState<number | null>(null);
+  // live voice with people near you (18+, opt-in)
+  const voiceRef = useRef<Voice | null>(null);
+  const [voiceMode, setVoiceModeState] = useState<VoiceMode>(0);
+  const [voiceAsk, setVoiceAsk] = useState(false);
+  const [voiceNow, setVoiceNow] = useState<{ peers: number; talking: string[]; me: boolean }>({ peers: 0, talking: [], me: false });
+  const setVoiceMode = async (m: VoiceMode) => {
+    const v = voiceRef.current;
+    if (!v) return;
+    if (!(await v.setMode(m))) return say(tr("no microphone, or it wasn't allowed"), true);
+    setVoiceModeState(m);
+    track(m === 2 ? "voice-live" : m === 1 ? "voice-listen" : "voice-off");
+  };
+  const voiceButton = () => {
+    if (!voiceSupported()) return say(tr("live voice doesn't work in this browser"), true);
+    if (!voiceConsented() || voiceMode === 0) return setVoiceAsk(true);
+    void setVoiceMode(voiceMode === 2 ? 1 : 2);
+  };
   const setChatOpen = (open: boolean) => {
     chatOpenRef.current = open;
     setChatOpenState(open);
@@ -485,6 +510,7 @@ function Game({ nick }: { nick: string }) {
   }, [chatOpen, log.length]);
   const muteLine = (l: Line) => {
     muted.current.add(l.id);
+    voiceRef.current?.mute(l.id);
     setChat((c) => c.filter((x) => x.id !== l.id));
     setLog((c) => c.filter((x) => x.id !== l.id));
     setLineMenu(null);
@@ -508,6 +534,10 @@ function Game({ nick }: { nick: string }) {
   const [sellItem, setSellItem] = useState<ItemId | "">("");
   const [sellPrice, setSellPrice] = useState("10");
   const [, bumpMarket] = useState(0);
+  // the brand campaign's café: coffee + teleport cards, for ◈ only
+  const [atCafe, setAtCafe] = useState(false);
+  const [cafeOpen, setCafeOpen] = useState(false);
+  const cafeBuyRef = useRef<(id: string) => void>(() => {});
 
   // notes between players
   const notesRef = useRef<ReturnType<typeof createNotes> | null>(null);
@@ -556,6 +586,18 @@ function Game({ nick }: { nick: string }) {
   const sendChat = (said?: string) => {
     const text = (said ?? draft).trim();
     if (!text) return;
+    // an answer to the owner (who wrote from the eye) goes to the eye, not to strangers
+    const toHost = new RegExp(`^@${HOST_NAME}\\b`, "i").exec(text);
+    if (toHost) {
+      const body = text.slice(toHost[0].length).trim();
+      if (body && presenceRef.current?.toHost(body, nick)) {
+        addLine({ id: "me", nick, text, mine: true });
+        if (said === undefined) setDraft("");
+        chatInput.current?.focus();
+        track("host-reply");
+      } else say(tr("that can't be said here (or slow down)"), true);
+      return;
+    }
     if (presenceRef.current?.say(text)) {
       addLine({ id: "me", nick, text, mine: true });
       questRef.current("say");
@@ -620,7 +662,9 @@ function Game({ nick }: { nick: string }) {
 
   useEffect(() => {
     const el = host.current!;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    // smoothing edges costs weak phones a lot (and can't change later), so it's off on "low"
+    const antialias = (hasSavedSettings() ? settings().quality : deviceTier()) !== "low";
+    const renderer = new THREE.WebGLRenderer({ antialias, powerPreference: "high-performance" });
     // phones: lighter rendering so it stays smooth
     const pixelRatio = (q: Settings["quality"]) => (q === "low" ? 0.75 : q === "high" ? Math.min(window.devicePixelRatio, 2) : Math.min(window.devicePixelRatio, isPhone ? 1.25 : 1.5));
     renderer.setPixelRatio(pixelRatio(settings().quality));
@@ -634,8 +678,8 @@ function Game({ nick }: { nick: string }) {
     const fx = createFx(renderer, world.scene, camera, myVibe());
     const stopVibe = trackVibe();
     const perf = createPerf(renderer, world.scene, (pr) => fx.setPixelRatio(pr));
-    // first visit: pick a quality that suits this device
-    if (!hasSavedSettings()) setSettings({ quality: detectTier(renderer) });
+    // first visit: pick settings that suit this device (quality, calmer motion if the phone asks)
+    if (!hasSavedSettings()) setSettings(autoSettings(renderer));
     const hunter = createHunter();
     const residents = createResidents();
     const keepers = createKeepers();
@@ -880,8 +924,19 @@ function Game({ nick }: { nick: string }) {
     newRun();
     enterStartLevel();
     markEntered();
+    // a brand's link (?brand=<id>, from /brands): arrive inside that brand's café
+    const brandId = new URLSearchParams(location.search).get("brand");
+    const brandArrival = !withId && !startLevel && CAMPAIGNS.some((c) => c.id === brandId);
+    if (brandArrival) {
+      const to = roomCentreOf(2, 0); // the café east of the entrance (maze.ts NEAR_PLACES)
+      pos.x = to.x;
+      pos.z = to.z;
+      input.yaw = 0; // facing the counter (north)
+      hunter.reset(pos.x, pos.z);
+      track(`brand-link-${brandId}`);
+    }
     // coming back: continue where you were (unless a friend's invite or a level link says otherwise)
-    const back = !withId && !startLevel ? readResume() : null;
+    const back = !withId && !startLevel && !brandArrival ? readResume() : null;
     if (back && free(back.x, back.z)) {
       pos.x = back.x;
       pos.z = back.z;
@@ -1189,15 +1244,24 @@ function Game({ nick }: { nick: string }) {
     // settings: volumes, graphics, what's shown
     const sfx: [Howl, number][] = [[spinSfx, 0.5], [shardSfx, 0.6], [shiftSfx, 0.7], [caughtSfx, 0.8], [signalSfx, 0.35], [meetSfx, 0.5]];
     const offSettings = onSettings((st) => {
-      sound.setVolumes(st);
-      radio.setVolume(st.radio * st.master);
-      sfx.forEach(([h, base]) => h.volume(base * st.effects * st.master));
+      // the site-wide sound switch (off by default) silences the whole world
+      const master = soundOn() ? st.master : 0;
+      sound.setVolumes({ ...st, master });
+      radio.setVolume(st.radio * master);
+      sfx.forEach(([h, base]) => h.volume(base * st.effects * master));
       perf.setQuality(pixelRatio(st.quality), st.quality);
       world.setFlashes(st.flashes);
       others.setShow(st.showNames, st.showChat);
       el.dataset.calm = st.flashes ? "" : "1";
       fx.setEnabled(st.glow && st.quality !== "low");
       immersive.setAllowed(st.quality === "high");
+    });
+    const offSound = onSound((on) => {
+      const st = settings();
+      const master = on ? st.master : 0;
+      sound.setVolumes({ ...st, master });
+      radio.setVolume(st.radio * master);
+      sfx.forEach(([h, base]) => h.volume(base * st.effects * master));
     });
 
     const hazards = createHazards(sound.ctx, sound.ambienceOut);
@@ -1226,6 +1290,23 @@ function Game({ nick }: { nick: string }) {
     });
     marketRef.current = market;
     let wasAtMarket = false;
+    let wasAtCafe = false;
+    cafeBuyRef.current = (id) => {
+      const item = ACTIVE.menu.find((m) => m.id === id);
+      if (!item) return;
+      if (blood < item.price) return sayRef.current(tr("not enough ◈"), true);
+      if (item.kind === "teleport" && readCards() + item.cards > HOLD_MAX) return sayRef.current(tr("your hand is full · {n} ⟡ max", { n: HOLD_MAX }), true);
+      blood = addBlood(-item.price);
+      if (item.kind === "teleport") addCards(item.cards);
+      else {
+        light = 100;
+        stamina = 100;
+        exhausted = false;
+      }
+      sound.chime();
+      sayRef.current(item.kind === "teleport" ? tr("+{n} ⟡ · open the map to travel", { n: item.cards }) : tr("warm. your lantern is full again"), true);
+      track(`cafe-buy-${ACTIVE.id}-${item.id}`);
+    };
     const notes = createNotes(presence, () => nick);
     notesRef.current = notes;
     let unreadSeen = 0;
@@ -1256,6 +1337,17 @@ function Game({ nick }: { nick: string }) {
       track(`gramophone-${rec}-${fx}`);
     };
     const stations = createStations(sound.ctx, sound.musicBus, () => gramos.nearestPlaying(pos.x, pos.z));
+    // live voice: people near you, from where they stand (voice.ts)
+    const voice = createVoice(presence, sound.ctx, sound.voicesOut, (id) => muted.current.has(id));
+    voiceRef.current = voice;
+    let voiceT = 0, voiceShown = "";
+    // the owner talking from the eye (signed: see host.ts)
+    presence.onHost((text, toAll) => {
+      addLineRef.current({ id: "host", nick: `◉ ${HOST_NAME}`, text, host: true });
+      sayRef.current(`◉ ${HOST_NAME}: ${text}`, true);
+      sound.chime();
+      track(toAll ? "host-heard-all" : "host-heard");
+    });
     radioNextRef.current = () => {
       sound.resume();
       setStation(stations.next());
@@ -1400,7 +1492,7 @@ function Game({ nick }: { nick: string }) {
       },
       trails: () => trails,
     } satisfies Partial<MapSource>);
-    if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails, dream });
+    if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails, dream, voice, presence });
     // twists: unpredictable things that happen to you
     const twists = createTwists();
     const doppel = new THREE.Sprite(new THREE.SpriteMaterial({ map: demonTexture(demonOf(presence.me)), transparent: true, depthWrite: false, opacity: 0 }));
@@ -1528,7 +1620,7 @@ function Game({ nick }: { nick: string }) {
         // ---------------- the Hollow
         const h = runTime > GRACE ? hunter.update(dt, t, { px: pos.x, pz: pos.z, light, depth: depth + (levelAtX(pos.x) > 0 ? 3 : 0), isLit: world.isLit }) : { dist: 99, hunting: false };
         const danger = Math.max(0, 1 - h.dist / (CELL * 5)) * (h.hunting ? 1 : 0.45);
-        radio.set(Math.max(danger, edgeFog * 0.7));
+        radio.set(Math.max(danger, edgeFog * 0.35)); // the edge only hints with static (owner: keep the vibe, not disturbing)
         lastDanger = danger;
         if (h.dist < 1.0 && !room && kingSummonT <= 0) kingMeets();
         // never met him: he comes to greet you once, standing right in front of you
@@ -1607,7 +1699,21 @@ function Game({ nick }: { nick: string }) {
       renderer.toneMappingExposure += ((inPlace?.kind === "dark" ? 0.12 : world.zone().exposure) - renderer.toneMappingExposure) * Math.min(1, dt * 1.5);
 
       // other wanderers
-      presence.send({ x: pos.x, z: pos.z, yaw: input.yaw, light, nick, held: held ? held.colour : 0 });
+      presence.send({ x: pos.x, z: pos.z, yaw: input.yaw, light, nick, held: held ? held.colour : 0, voice: voice.mode() });
+      voiceT += dt;
+      if (voiceT > 0.4) {
+        voiceT = 0;
+        voice.update(pos.x, pos.z);
+        if (voice.mode()) {
+          const talking = voice.talking().map((id) => presence.peers.get(id)?.nick ?? "").filter(Boolean);
+          const now = { peers: voice.connected().length, talking, me: voice.meTalking() };
+          const key = JSON.stringify(now);
+          if (key !== voiceShown) {
+            voiceShown = key;
+            setVoiceNow(now);
+          }
+        }
+      }
       wishes.update(pos.x, pos.z, dt);
       const meet = others.update(dt, t, pos.x, pos.z);
       if (meet.nearest < 4 && !metSomeone) {
@@ -2024,6 +2130,13 @@ function Game({ nick }: { nick: string }) {
         wasAtMarket = nowAtMarket;
         setAtMarket(nowAtMarket);
       }
+      const nowAtCafe = pl.inside?.kind === "cafe";
+      if (nowAtCafe !== wasAtCafe) {
+        wasAtCafe = nowAtCafe;
+        setAtCafe(nowAtCafe);
+        if (!nowAtCafe) setCafeOpen(false);
+        else track(`cafe-visit-${ACTIVE.id}`);
+      }
       world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && pl.inside?.kind !== "bazaar" && !inShip(pos.x, pos.z));
       // the ritual: stand in the gold circle by the altar for 5 seconds
       if (pl.atAltar && alive) {
@@ -2139,7 +2252,9 @@ function Game({ nick }: { nick: string }) {
     return () => {
       stopVibe();
       stations.stop();
+      voice.stop();
       offSettings();
+      offSound();
       clearInterval(rememberTimer);
       window.removeEventListener("pagehide", remember);
       document.removeEventListener("visibilitychange", rememberHidden);
@@ -2401,6 +2516,87 @@ function Game({ nick }: { nick: string }) {
         <button className="lab-market-btn" onPointerDown={stop} onPointerUp={stop} onClick={() => setMarketTab("buy")}>
           {tr("open the market")}
         </button>
+      )}
+      {voiceAsk && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-tabs">
+              <button className="on">{tr("live voice")}</button>
+            </div>
+            <div className="lab-settings-body">
+              <p className="note">{tr("talk out loud with the people near you. anyone within {m} m who also turned voice on hears you, and you hear them, from where they stand.", { m: VOICE_RANGE })}</p>
+              <p className="note">{tr("18+ only. be kind. tap someone's line in the chat to mute them, voice too.")}</p>
+              <p className="note">{tr("your voice goes straight to them. it's not recorded.")}</p>
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setVoiceAsk(false)}>{tr("cancel")}</button>
+              {voiceMode > 0 && (
+                <button
+                  onClick={() => {
+                    setVoiceAsk(false);
+                    void setVoiceMode(0);
+                  }}
+                >
+                  {tr("voice off")}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setVoiceConsent();
+                  setVoiceAsk(false);
+                  void setVoiceMode(1);
+                }}
+              >
+                {tr("just listen")}
+              </button>
+              <button
+                className="done"
+                onClick={() => {
+                  setVoiceConsent();
+                  setVoiceAsk(false);
+                  void setVoiceMode(2);
+                }}
+              >
+                {tr("I'm 18+ · go live")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {atCafe && !cafeOpen && (
+        <button className="lab-market-btn lab-cafe-btn" onPointerDown={stop} onPointerUp={stop} onClick={() => setCafeOpen(true)}>
+          ☕ {tr("order at {place}", { place: brandName() })}
+        </button>
+      )}
+      {cafeOpen && (
+        <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-settings-box">
+            <div className="lab-settings-tabs">
+              <button className="on">{brandName()}</button>
+              <span className="lab-market-purse">
+                ◈ {hud.blood} · ⟡ {cards}
+              </span>
+            </div>
+            <div className="lab-settings-body">
+              <div className="lab-market-list">
+                {ACTIVE.menu.map((m) => (
+                  <div key={m.id}>
+                    <span className="g">{m.kind === "teleport" ? "⟡" : "☕"}</span>
+                    <span className="n">
+                      {tr(m.name)}
+                      <i>{tr(m.note)}</i>
+                    </span>
+                    <button onClick={() => cafeBuyRef.current(m.id)}>{m.price} ◈</button>
+                  </div>
+                ))}
+              </div>
+              <p className="note">{tr("paid in ◈ you earn by playing. never real money.")}</p>
+            </div>
+            <div className="lab-settings-foot">
+              <button onClick={() => setCafeOpen(false)}>{tr("close")}</button>
+            </div>
+          </div>
+        </div>
       )}
       {marketTab && (
         <div className="lab-settings" onPointerDown={stop} onPointerUp={stop}>
@@ -2936,6 +3132,11 @@ function Game({ nick }: { nick: string }) {
                   </span>
                 );
               })()}
+              {voiceMode > 0 && (
+                <button className="lab-voice-off" onClick={() => void setVoiceMode(0)}>
+                  {tr("voice off")}
+                </button>
+              )}
               <button className="lab-chat-x" onClick={() => setChatOpen(false)} aria-label={tr("close chat")}>
                 ×
               </button>
@@ -2943,7 +3144,7 @@ function Game({ nick }: { nick: string }) {
             <div className="lab-chat-log">
               {log.length === 0 && <div className="lab-chat-empty">{tr("say hi. anyone within 30 m hears you.")}</div>}
               {log.map((l) => (
-                <div key={l.key} className={"lab-chat-row" + (l.mine ? " mine" : "")}>
+                <div key={l.key} className={"lab-chat-row" + (l.mine ? " mine" : "") + (l.host ? " host" : "")}>
                   <button className="lab-chat-line" onClick={() => !l.mine && setLineMenu(lineMenu === l.key ? null : l.key)}>
                     <b>{l.mine ? tr("you") : l.nick}</b> {l.text}
                   </button>
@@ -2951,7 +3152,7 @@ function Game({ nick }: { nick: string }) {
                     <span className="lab-chat-menu">
                       <button
                         onClick={() => {
-                          setDraft(`@${l.nick.replace(/^◇ /, "")} `);
+                          setDraft(`@${l.nick.replace(/^[◇◉] /, "")} `);
                           setLineMenu(null);
                           chatInput.current?.focus();
                         }}
@@ -2995,14 +3196,28 @@ function Game({ nick }: { nick: string }) {
         ) : (
           <>
             {chat.map((l) => (
-              <button key={l.key} className={"lab-chat-line" + (l.mine ? " mine" : "")} onClick={() => setChatOpen(true)}>
+              <button key={l.key} className={"lab-chat-line" + (l.mine ? " mine" : "") + (l.host ? " host" : "")} onClick={() => setChatOpen(true)}>
                 <b>{l.mine ? tr("you") : l.nick}</b> {l.text}
               </button>
             ))}
-            <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label={tr("open chat")}>
-              <span className="lab-chat-icon">❝</span> {tr("chat")}
-              {unread > 0 && <span className="lab-chat-badge">{unread > 9 ? "9+" : unread}</span>}
-            </button>
+            {voiceMode > 0 && voiceNow.talking.length > 0 && (
+              <div className="lab-voice-talking">
+                {voiceNow.talking.map((n) => (
+                  <span key={n}>◉ {n}</span>
+                ))}
+              </div>
+            )}
+            <div className="lab-chat-buttons">
+              <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label={tr("open chat")}>
+                <span className="lab-chat-icon">❝</span> {tr("chat")}
+                {unread > 0 && <span className="lab-chat-badge">{unread > 9 ? "9+" : unread}</span>}
+              </button>
+              <button className={"lab-chat-open lab-voice-btn" + (voiceMode === 2 ? " live" : "") + (voiceMode === 2 && voiceNow.me ? " speaking" : "")} onClick={voiceButton} aria-label={tr("live voice")}>
+                <span className="lab-voice-dot" />
+                {voiceMode === 2 ? tr("live") : voiceMode === 1 ? tr("listening") : tr("go live")}
+                {voiceMode > 0 && voiceNow.peers > 0 && <small> · {voiceNow.peers}</small>}
+              </button>
+            </div>
           </>
         )}
       </div>

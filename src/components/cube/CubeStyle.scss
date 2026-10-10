@@ -906,3 +906,21 @@ canvas {
   }
 }
 
+
+/* ---------- Light look for weaker phones (data-tier is set by src/device.ts) ----------
+   The colour filter on the moving fog makes the phone repaint the whole screen
+   every frame, which is what made weaker phones stutter. On "low" the fog
+   keeps moving, with two layers and no filter. */
+[data-tier="low"] .fogwrapper {
+  -webkit-filter: none;
+  filter: none;
+}
+[data-tier="low"] #foglayer_03 {
+  display: none;
+}
+/* the visitor's phone asks for less motion: the fog drifts slower */
+[data-calm] #foglayer_01,
+[data-calm] #foglayer_02,
+[data-calm] #foglayer_03 {
+  animation-duration: 30s, 45s;
+}

@@ -11,7 +11,9 @@ const MarksMode = lazy(() => import("./marks/MarksMode"));
 const Labyrinth = lazy(() => import("./labyrinth/Labyrinth"));
 const Privacy = lazy(() => import("./components/privacy/Privacy"));
 const Watch = lazy(() => import("./watch/Watch"));
+const Control = lazy(() => import("./control/Control"));
 const Artists = lazy(() => import("./components/artists/Artists"));
+const Brands = lazy(() => import("./components/brands/Brands"));
 
 const path = location.pathname.replace(/\/+$/, "");
 
@@ -32,10 +34,25 @@ export default function App() {
       </Suspense>
     );
   }
+  // the owner's control room: services, processes, deploy/restart (see control/Control.tsx)
+  if (path === "/control") {
+    return (
+      <Suspense fallback={null}>
+        <Control />
+      </Suspense>
+    );
+  }
   if (path === "/artists") {
     return (
       <Suspense fallback={null}>
         <Artists />
+      </Suspense>
+    );
+  }
+  if (path === "/brands") {
+    return (
+      <Suspense fallback={null}>
+        <Brands />
       </Suspense>
     );
   }

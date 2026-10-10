@@ -12,11 +12,19 @@
 //                                   account and hand the game a session token
 //   GET  /api/health
 //   GET  /api/stats  (header x-admin-key: ADMIN_KEY) → active players, retention, sources
+//   GET  /api/admin/overview  (x-admin-key) → this process, database, GitHub Actions runs, Render deploys
+//   POST /api/admin/workflow { workflow }  (x-admin-key) → start a GitHub Actions workflow (deploy / dream)
+//   POST /api/admin/render { action }      (x-admin-key) → Render: "deploy" (redeploy) or "restart" the API
 //
 // MONGODB_URI   MongoDB Atlas (or any Mongo) connection string. If it's missing,
 //               sign-ups go to ./data/players.jsonl so the game can be tested locally.
 // ALLOWED_ORIGINS comma-separated list of sites allowed to call the API.
-// ADMIN_KEY     secret for GET /api/stats (no key set = stats disabled)
+// ADMIN_KEY     secret for GET /api/stats and /api/admin/* (no key set = disabled)
+// GITHUB_TOKEN  (optional) fine-grained token, repo seeface-cube-gate, "Actions: read & write":
+//               lets the control page (seeface1.world/control) list and start workflows
+// GITHUB_REPO   default sashadoes/seeface-cube-gate
+// RENDER_API_KEY + RENDER_SERVICE_ID (optional): lets the control page see deploys and
+//               redeploy / restart this API on Render
 // PORT          default 8787
 import express from "express";
 import cors from "cors";
@@ -28,6 +36,7 @@ import { promisify } from "node:util";
 const scrypt = promisify(scryptCb);
 
 const PORT = Number(process.env.PORT || 8787);
+const STARTED = new Date();
 // Instagram login (optional): set these and the button appears in the game.
 // IG_APP_ID / IG_APP_SECRET come from the Meta app; IG_REDIRECT must match the
 // redirect URI you register there, e.g. https://api.seeface1.world/api/instagram/callback
@@ -42,8 +51,10 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS || "https://seeface1.world,http://l
 let players = null; // Mongo collection, or null = local file
 let accounts = null; // Mongo collections for accounts + sessions
 let sessions = null;
+let mongo = null; // the client, for the control page's database ping
 if (process.env.MONGODB_URI) {
   const client = new MongoClient(process.env.MONGODB_URI);
+  mongo = client;
   await client.connect();
   players = client.db(process.env.MONGODB_DB || "seeface1").collection("players");
   await players.createIndex({ email: 1 }, { unique: true, partialFilterExpression: { email: { $type: "string" } } });
@@ -510,11 +521,14 @@ function summarise(docs, startKey) {
     retained_d30: kept(30),
   };
 }
-app.get("/api/stats", async (req, res) => {
+// compare fixed-length hashes so neither the key nor its length leaks through timing
+function adminOk(req) {
   const key = process.env.ADMIN_KEY;
-  // compare fixed-length hashes so neither the key nor its length leaks through timing
   const given = createHash("sha256").update(req.get("x-admin-key") || "").digest();
-  if (!key || !timingSafeEqual(given, createHash("sha256").update(key).digest())) return res.status(404).end();
+  return Boolean(key) && timingSafeEqual(given, createHash("sha256").update(key).digest());
+}
+app.get("/api/stats", async (req, res) => {
+  if (!adminOk(req)) return res.status(404).end();
   try {
     const acc = await allDocs("accounts");
     const ply = await allDocs("players");
@@ -529,6 +543,130 @@ app.get("/api/stats", async (req, res) => {
   } catch (e) {
     console.error("stats failed", e.message);
     res.status(500).json({ ok: false });
+  }
+});
+
+// ------------------------------------------------------------------ control page (/control)
+// 20 admin calls / minute per IP: a wrong key can't be brute-forced fast
+const adminLimited = limiter(20, 60_000);
+const GH_REPO = process.env.GITHUB_REPO || "sashadoes/seeface-cube-gate";
+const WORKFLOWS = ["deploy.yml", "dream.yml"];
+
+async function gh(path, init = {}) {
+  const r = await fetch(`https://api.github.com/repos/${GH_REPO}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(init.headers || {}) },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) throw new Error(`github ${r.status}`);
+  return r.status === 204 ? null : r.json();
+}
+async function render(path, init = {}) {
+  const r = await fetch(`https://api.render.com/v1/services/${process.env.RENDER_SERVICE_ID}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${process.env.RENDER_API_KEY}`, Accept: "application/json", "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) throw new Error(`render ${r.status}`);
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
+}
+const ghReady = () => Boolean(process.env.GITHUB_TOKEN);
+const renderReady = () => Boolean(process.env.RENDER_API_KEY && process.env.RENDER_SERVICE_ID);
+const settle = async (f) => {
+  try {
+    return { ok: true, ...(await f()) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+};
+
+app.use("/api/admin", (req, res, next) => {
+  if (adminLimited(req.ip) || !adminOk(req)) return res.status(404).json({ ok: false });
+  next();
+});
+
+app.get("/api/admin/overview", async (_req, res) => {
+  const mem = process.memoryUsage();
+  const [database, github, renderInfo] = await Promise.all([
+    settle(async () => {
+      if (!mongo) return { kind: "file (data/players.jsonl)", note: "MONGODB_URI not set" };
+      const t = Date.now();
+      await mongo.db(process.env.MONGODB_DB || "seeface1").command({ ping: 1 });
+      return { kind: "mongodb", pingMs: Date.now() - t, players: await players.estimatedDocumentCount(), accounts: await accounts.estimatedDocumentCount() };
+    }),
+    ghReady()
+      ? settle(async () => {
+          const runs = await gh("/actions/runs?per_page=12");
+          return {
+            repo: GH_REPO,
+            runs: runs.workflow_runs.map((r) => ({ id: r.id, name: r.name, file: r.path?.split("/").pop(), status: r.status, conclusion: r.conclusion, branch: r.head_branch, event: r.event, at: r.created_at, url: r.html_url, title: r.display_title })),
+          };
+        })
+      : { ok: false, error: "GITHUB_TOKEN not set", repo: GH_REPO },
+    renderReady()
+      ? settle(async () => {
+          const [svc, deploys] = await Promise.all([render(""), render("/deploys?limit=6")]);
+          return {
+            name: svc.name,
+            suspended: svc.suspended,
+            url: svc.serviceDetails?.url,
+            dashboard: svc.dashboardUrl,
+            deploys: deploys.map((d) => ({ id: d.deploy.id, status: d.deploy.status, at: d.deploy.createdAt, finished: d.deploy.finishedAt, commit: d.deploy.commit?.message?.split("\n")[0], trigger: d.deploy.trigger })),
+          };
+        })
+      : { ok: false, error: "RENDER_API_KEY / RENDER_SERVICE_ID not set" },
+  ]);
+  res.json({
+    ok: true,
+    at: new Date(),
+    process: {
+      started: STARTED,
+      uptimeSec: Math.round(process.uptime()),
+      node: process.version,
+      pid: process.pid,
+      rssMb: Math.round(mem.rss / 1048576),
+      heapMb: Math.round(mem.heapUsed / 1048576),
+      region: process.env.RENDER_REGION || null,
+      commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || null,
+    },
+    config: {
+      mongodb: Boolean(process.env.MONGODB_URI),
+      instagram: igReady(),
+      github: ghReady(),
+      render: renderReady(),
+      origins: ORIGINS,
+    },
+    database,
+    github,
+    render: renderInfo,
+  });
+});
+
+app.post("/api/admin/workflow", async (req, res) => {
+  const wf = String(req.body?.workflow || "");
+  if (!WORKFLOWS.includes(wf)) return res.status(400).json({ ok: false, error: "unknown workflow" });
+  if (!ghReady()) return res.status(400).json({ ok: false, error: "GITHUB_TOKEN not set" });
+  try {
+    await gh(`/actions/workflows/${wf}/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main" }) });
+    console.log("control: started workflow", wf);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/admin/render", async (req, res) => {
+  const action = String(req.body?.action || "");
+  if (!["deploy", "restart"].includes(action)) return res.status(400).json({ ok: false, error: "unknown action" });
+  if (!renderReady()) return res.status(400).json({ ok: false, error: "RENDER_API_KEY / RENDER_SERVICE_ID not set" });
+  try {
+    if (action === "deploy") await render("/deploys", { method: "POST", body: JSON.stringify({ clearCache: "do_not_clear" }) });
+    else await render("/restart", { method: "POST" });
+    console.log("control: render", action);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
   }
 });
 
