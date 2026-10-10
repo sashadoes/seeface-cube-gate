@@ -12,6 +12,8 @@
 //                                   account and hand the game a session token
 //   GET  /api/health
 //   GET  /api/stats  (header x-admin-key: ADMIN_KEY) → active players, retention, sources
+//   POST /api/feedback { stars, text?, ig?, nick?, lang?, minutes? } → { ok: true }
+//   GET  /api/feedback (header x-admin-key: ADMIN_KEY) → { count, avg, items } newest first
 //
 // MONGODB_URI   MongoDB Atlas (or any Mongo) connection string. If it's missing,
 //               sign-ups go to ./data/players.jsonl so the game can be tested locally.
@@ -43,6 +45,7 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS || "https://seeface1.world,http://l
 let players = null; // Mongo collection, or null = local file
 let accounts = null; // Mongo collections for accounts + sessions
 let sessions = null;
+let feedbackCol = null; // Mongo collection for feedback, or null = data/feedback.jsonl
 if (process.env.MONGODB_URI) {
   const client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();
@@ -55,6 +58,8 @@ if (process.env.MONGODB_URI) {
   await accounts.createIndex({ ig: 1 }, { unique: true, partialFilterExpression: { ig: { $type: "string" } } });
   await sessions.createIndex({ tokenHash: 1 }, { unique: true });
   await sessions.createIndex({ at: 1 }, { expireAfterSeconds: 180 * 24 * 3600 }); // sessions last 180 days
+  feedbackCol = client.db(process.env.MONGODB_DB || "seeface1").collection("feedback");
+  await feedbackCol.createIndex({ at: -1 });
   console.log("storage: MongoDB");
 } else {
   await mkdir("data", { recursive: true });
@@ -526,11 +531,15 @@ function summarise(docs, startKey) {
     retained_d30: kept(30),
   };
 }
-app.get("/api/stats", async (req, res) => {
+/** the owner's requests carry x-admin-key = ADMIN_KEY (no key set = owner routes off) */
+function isOwner(req) {
   const key = process.env.ADMIN_KEY;
   // compare fixed-length hashes so neither the key nor its length leaks through timing
   const given = createHash("sha256").update(req.get("x-admin-key") || "").digest();
-  if (!key || !timingSafeEqual(given, createHash("sha256").update(key).digest())) return res.status(404).end();
+  return Boolean(key) && timingSafeEqual(given, createHash("sha256").update(key).digest());
+}
+app.get("/api/stats", async (req, res) => {
+  if (!isOwner(req)) return res.status(404).end();
   try {
     const acc = await allDocs("accounts");
     const ply = await allDocs("players");
@@ -544,6 +553,55 @@ app.get("/api/stats", async (req, res) => {
     });
   } catch (e) {
     console.error("stats failed", e.message);
+    res.status(500).json({ ok: false });
+  }
+});
+
+// ------------------------------------------------------------------ feedback (asked once, after 15 min of play)
+// Only the owner reads it. No IPs, no emails: stars, one answer, and an optional
+// Instagram handle the player typed themselves.
+const IG_HANDLE = /^[a-z0-9._]{1,30}$/;
+const feedbackLimited = limiter(5, 60 * 60_000); // 5 / hour per IP
+app.post("/api/feedback", async (req, res) => {
+  if (feedbackLimited(req.ip)) return res.status(429).json({ ok: false, error: "slow down" });
+  const { stars, text, ig, nick, lang, minutes } = req.body || {};
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) return res.status(400).json({ ok: false, error: "stars" });
+  const handle = typeof ig === "string" ? ig.trim().replace(/^@/, "").toLowerCase() : "";
+  if (handle && !IG_HANDLE.test(handle)) return res.status(400).json({ ok: false, error: "ig" });
+  const doc = {
+    stars,
+    text: typeof text === "string" ? text.trim().slice(0, 600) : "",
+    ig: handle || null,
+    nick: typeof nick === "string" && NICK.test(nick) ? nick : null,
+    lang: typeof lang === "string" && /^[a-z]{2}$/.test(lang) ? lang : null,
+    minutes: Number.isFinite(minutes) ? Math.max(0, Math.min(100_000, Math.round(minutes))) : null,
+    at: new Date(),
+  };
+  try {
+    if (feedbackCol) await feedbackCol.insertOne(doc);
+    else await appendFile("data/feedback.jsonl", JSON.stringify(doc) + "\n");
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("feedback failed", e.message);
+    res.status(500).json({ ok: false });
+  }
+});
+app.get("/api/feedback", async (req, res) => {
+  if (!isOwner(req)) return res.status(404).end();
+  try {
+    let items;
+    if (feedbackCol) items = await feedbackCol.find({}, { projection: { _id: 0 } }).sort({ at: -1 }).limit(500).toArray();
+    else {
+      try {
+        items = (await readFile("data/feedback.jsonl", "utf8")).split("\n").filter(Boolean).map((l) => JSON.parse(l)).reverse().slice(0, 500);
+      } catch {
+        items = [];
+      }
+    }
+    const avg = items.length ? Math.round((items.reduce((s, f) => s + f.stars, 0) / items.length) * 10) / 10 : null;
+    res.json({ ok: true, count: items.length, avg, items });
+  } catch (e) {
+    console.error("feedback list failed", e.message);
     res.status(500).json({ ok: false });
   }
 });

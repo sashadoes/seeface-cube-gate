@@ -66,6 +66,7 @@ import { clearResume, markEntered, readResume, saveResume } from "./resume";
 import { DEFAULTS, hasSavedSettings, onSettings, setSettings, settings, type Settings } from "./settings";
 import { createPerf, detectTier } from "./perf";
 import { ITEMS, addItem, onBag, randomItem, readBag, type ItemId } from "./inventory";
+import { addPlay, feedbackDone, IG_HANDLE, sendFeedback } from "./feedback";
 import { track } from "../analytics";
 import "./Labyrinth.scss";
 
@@ -550,6 +551,41 @@ function Game({ nick }: { nick: string }) {
   const postsRef = useRef<ReturnType<typeof createPosts> | null>(null);
   const yawRef = useRef(0);
   const [composer, setComposer] = useState<null | { mode: "photo" | "draw"; img: string | null }>(null);
+
+  // feedback: asked once, after 15 minutes of play (summed over visits, only while on screen)
+  const [feedback, setFeedback] = useState<null | { stars: number; text: string; ig: string; state: "" | "busy" | "failed" }>(null);
+  const feedbackBusy = useRef(false); // another panel is open: wait, don't stack them
+  useEffect(() => {
+    const STEP = 5;
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      if (addPlay(STEP) && !feedbackBusy.current) {
+        clearInterval(timer);
+        setFeedback({ stars: 0, text: "", ig: currentAccount()?.instagram ?? "", state: "" });
+        track("feedback-asked");
+      }
+    }, STEP * 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const skipFeedback = () => {
+    feedbackDone("skipped");
+    track("feedback-skipped");
+    setFeedback(null);
+  };
+  const submitFeedback = async () => {
+    if (!feedback || !feedback.stars || feedback.state === "busy") return;
+    if (feedback.ig && !IG_HANDLE.test(feedback.ig.trim())) return;
+    setFeedback({ ...feedback, state: "busy" });
+    const ok = await sendFeedback({ stars: feedback.stars, text: feedback.text, ig: feedback.ig, nick, lang: lang() });
+    if (!ok) {
+      setFeedback((f) => f && { ...f, state: "failed" });
+      return;
+    }
+    feedbackDone("sent");
+    track(`feedback-sent-${feedback.stars}`);
+    setFeedback(null);
+    say(tr("thank you · we read every word"), true);
+  };
   const [caption, setCaption] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [viewing, setViewing] = useState<Post | null>(null);
@@ -642,6 +678,7 @@ function Game({ nick }: { nick: string }) {
   const [hud, setHud] = useState<Hud>({ event: null, holding: false, level: 0, light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
   const strikeRef = useRef<() => void>(() => {});
   const [shareState, setShareState] = useState<"" | "busy" | "done">("");
+  feedbackBusy.current = Boolean(composer || chatOpen || settingsOpen || bagOpen || marketTab || wishOpen || mapOpen || hud.dead);
 
   useEffect(() => {
     const el = host.current!;
@@ -2180,8 +2217,9 @@ function Game({ nick }: { nick: string }) {
             if (import.meta.env.DEV) (window as unknown as { __lastSnap: Blob }).__lastSnap = b; // for testing
             return shareSnapshot(b, inviteUrl);
           })
-          .then((how) => {
+          .then(({ how, copied }) => {
             track(`snapshot-${how}${eventKind ? "-event" : ""}`);
+            if (how === "shared" && copied) sayRef.current(tr("link copied · paste it into a link sticker on your story"), true);
             setSnapState("done");
             setTimeout(() => setSnapState(""), 2500);
           });
@@ -2215,8 +2253,9 @@ function Game({ nick }: { nick: string }) {
   const share = async () => {
     if (!hud.dead || shareState === "busy") return;
     setShareState("busy");
-    const how = await shareCard(hud.dead);
+    const { how, copied } = await shareCard(hud.dead);
     track(`share-card-${how}`);
+    if (how === "shared" && copied) say(tr("link copied · paste it into a link sticker on your story"), true);
     setShareState("done");
   };
 
@@ -2284,8 +2323,9 @@ function Game({ nick }: { nick: string }) {
             onClick={async () => {
               const c = clipBlob.current;
               if (!c) return;
-              const how = await shareClip(c.blob, c.url);
+              const { how, copied } = await shareClip(c.blob, c.url);
               track(`clip-${how}`);
+              if (how === "shared" && copied) say(tr("link copied · paste it into a link sticker on your story"), true);
               if (how !== "cancelled") setClipState("");
             }}
           >
@@ -2438,6 +2478,61 @@ function Game({ nick }: { nick: string }) {
           <button className="lab-wish-close" onClick={() => setWishOpen(false)} aria-label={tr("close")}>
             ×
           </button>
+        </div>
+      )}
+
+      {feedback && (
+        <div className="lab-settings lab-feedback" onPointerDown={stop} onPointerUp={stop}>
+          <form
+            className="lab-settings-box"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitFeedback();
+            }}
+          >
+            <p className="q">{tr("15 minutes in the labyrinth. how is it?")}</p>
+            <div className="stars" role="radiogroup" aria-label={tr("your rating")}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  role="radio"
+                  aria-checked={feedback.stars === n}
+                  aria-label={`${n} / 5`}
+                  className={n <= feedback.stars ? "on" : ""}
+                  onClick={() => setFeedback({ ...feedback, stars: n })}
+                >
+                  ✦
+                </button>
+              ))}
+            </div>
+            <label>
+              {tr("what would make you stay longer?")}
+              <input value={feedback.text} maxLength={600} onChange={(e) => setFeedback({ ...feedback, text: e.target.value })} />
+            </label>
+            <label>
+              {tr("your instagram (optional)")}
+              <input
+                value={feedback.ig}
+                maxLength={31}
+                placeholder="@"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className={feedback.ig && !IG_HANDLE.test(feedback.ig.trim()) ? "bad" : ""}
+                onChange={(e) => setFeedback({ ...feedback, ig: e.target.value })}
+              />
+            </label>
+            {feedback.state === "failed" && <p className="err">{tr("couldn't send · try again")}</p>}
+            <div className="row">
+              <button type="button" onClick={skipFeedback}>
+                {tr("not now")}
+              </button>
+              <button type="submit" className="send" disabled={!feedback.stars || feedback.state === "busy"}>
+                {feedback.state === "busy" ? "…" : tr("send ➝")}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

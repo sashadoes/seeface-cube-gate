@@ -262,3 +262,53 @@
     cursor: pointer;
   }
 }
+
+// feedback (private: needs ADMIN_KEY)
+.eye-fb {
+  padding: 8px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  user-select: text;
+
+  b {
+    font-weight: normal;
+    color: #ffe6b8;
+    margin-right: 8px;
+  }
+
+  .m {
+    font-style: italic;
+    font-size: 11px;
+    color: #8f897c;
+  }
+
+  a {
+    color: #cfc6b8;
+  }
+
+  p {
+    margin: 4px 0 0;
+    color: #e9e4da;
+  }
+}
+
+.eye-fb-out {
+  float: right;
+  font: italic 11px "Times New Roman", serif;
+  color: #8f897c;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.eye-mod input {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  font: 13px "Times New Roman", serif;
+  color: #e9e4da;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  user-select: text;
+}

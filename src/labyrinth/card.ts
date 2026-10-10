@@ -1,6 +1,8 @@
 // The share card: a dark, Story-sized (1080×1920) image of how far you got.
 // Shared through the phone's share sheet (Instagram, TikTok, WhatsApp…), or
 // downloaded on computers. This is the main way the game spreads.
+import { shareToStory } from "./instagram";
+
 
 export type RunResult = { metres: number; shards: number; depth: number; seconds: number; best: boolean };
 
@@ -79,19 +81,5 @@ export async function makeCard(r: RunResult): Promise<Blob> {
 export async function shareCard(r: RunResult) {
   const blob = await makeCard(r);
   const file = new File([blob], "seeface1-labyrinth.jpg", { type: "image/jpeg" });
-  const data = { files: [file], title: "seeface1", text: "seeface1.world/labyrinth" };
-  try {
-    if (navigator.canShare?.(data)) {
-      await navigator.share(data);
-      return "shared";
-    }
-  } catch {
-    return "cancelled";
-  }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "seeface1-labyrinth.jpg";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  return "downloaded";
+  return shareToStory(file, "can you go deeper?", `${location.origin}/labyrinth`);
 }

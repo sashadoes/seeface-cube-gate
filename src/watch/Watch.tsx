@@ -11,6 +11,7 @@ import { LEVELS, LEVEL_OFFSET, levelAtX, zoneAt } from "../labyrinth/zones";
 import { DEMONS, demonOf } from "../labyrinth/demons";
 import { cleanNick } from "../labyrinth/nick";
 import { MOD_PUBLIC_KEY, approvalText, type Post } from "../labyrinth/posts";
+import FeedbackList from "./FeedbackList";
 import "./Watch.scss";
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
@@ -531,6 +532,7 @@ export default function Watch() {
               </button>
             );
           })}
+          <FeedbackList />
           <div className="eye-foot">wish messages heard: {wishes.current} · keepers are not shown: they're not people</div>
         </aside>
       </section>

@@ -2,6 +2,8 @@
 // sound), branded with the logo, your name and your invite link, so friends
 // who open it land right next to you. Made in the browser with MediaRecorder;
 // MP4 where the browser can (iPhone, new Chrome), otherwise WebM.
+import { shareToStory } from "./instagram";
+
 export const CLIP_SECONDS = 6;
 const W = 720, H = 1280;
 
@@ -105,22 +107,8 @@ export function createClipper(audio: MediaStream[]) {
   return { frame, record, busy: () => !!active };
 }
 
-export async function shareClip(blob: Blob, inviteUrl: string) {
+export function shareClip(blob: Blob, inviteUrl: string) {
   const ext = blob.type.includes("mp4") ? "mp4" : "webm";
   const file = new File([blob], `seeface1-after-life.${ext}`, { type: blob.type });
-  const data = { files: [file], title: "seeface1", text: `meet me in the after life ${inviteUrl}` };
-  try {
-    if (navigator.canShare?.(data)) {
-      await navigator.share(data);
-      return "shared";
-    }
-  } catch {
-    return "cancelled";
-  }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = file.name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  return "downloaded";
+  return shareToStory(file, "meet me in the after life", inviteUrl);
 }

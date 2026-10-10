@@ -1,6 +1,7 @@
 // Snapshot: turns what you're seeing right now into a 9:16 image for Stories,
 // TikTok and Reels: the view, your nickname, where you are, the logo, and a
 // link that drops whoever opens it right next to you (invite link).
+import { shareToStory } from "./instagram";
 
 export type SnapInfo = { nick: string; place: string; event: string | null; inviteUrl: string };
 
@@ -87,21 +88,7 @@ export async function makeSnapshot(view: HTMLCanvasElement, info: SnapInfo): Pro
   return new Promise((res) => c.toBlob((b) => res(b!), "image/jpeg", 0.9));
 }
 
-export async function shareSnapshot(blob: Blob, inviteUrl: string) {
+export function shareSnapshot(blob: Blob, inviteUrl: string) {
   const file = new File([blob], "seeface1-snapshot.jpg", { type: "image/jpeg" });
-  const data = { files: [file], title: "seeface1", text: `find me in the labyrinth ${inviteUrl}` };
-  try {
-    if (navigator.canShare?.(data)) {
-      await navigator.share(data);
-      return "shared";
-    }
-  } catch {
-    return "cancelled";
-  }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "seeface1-snapshot.jpg";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  return "downloaded";
+  return shareToStory(file, "find me in the labyrinth", inviteUrl);
 }

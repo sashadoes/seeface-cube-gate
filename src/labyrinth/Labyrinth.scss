@@ -2299,3 +2299,102 @@
     cursor: default;
   }
 }
+
+// ---------------------------------------------------------------- feedback (once, after 15 min of play)
+.lab-feedback .lab-settings-box {
+  gap: 14px;
+  padding: 22px 20px 18px;
+  font-style: italic;
+
+  .q {
+    margin: 0;
+    font-size: 19px;
+    color: #fff6e2;
+    text-align: center;
+  }
+
+  .stars {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+
+    button {
+      width: 44px;
+      height: 44px;
+      font-size: 26px;
+      color: rgba(255, 255, 255, 0.22);
+      background: none;
+      border: 0;
+      cursor: pointer;
+      transition: color 0.15s, transform 0.15s;
+
+      &.on {
+        color: #ffe6b8;
+        text-shadow: 0 0 12px rgba(255, 230, 184, 0.7);
+      }
+
+      &:active {
+        transform: scale(0.9);
+      }
+    }
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    color: #a9a293;
+  }
+
+  input {
+    font: 16px "Times New Roman", serif; // 16 px: no zoom on iPhone
+    color: #e9e4da;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 10px 12px;
+    outline: none;
+
+    &:focus {
+      border-color: rgba(255, 255, 255, 0.35);
+    }
+
+    &.bad {
+      border-color: rgba(255, 140, 120, 0.6);
+    }
+  }
+
+  .err {
+    margin: 0;
+    font-size: 13px;
+    color: #ff9b8a;
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+
+    button {
+      flex: 1;
+      min-height: 44px;
+      font: italic 16px "Times New Roman", serif;
+      color: #a9a293;
+      background: none;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .send {
+      color: #fff6e2;
+      border-color: rgba(255, 255, 255, 0.3);
+
+      &:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+    }
+  }
+}
