@@ -9,18 +9,19 @@
 //   POST   /api/chamber/transcribe       raw audio → { text }. The audio is held in memory only and dropped
 //                                        right after; nothing is written anywhere. For browsers without speech recognition.
 //
-// TRANSCRIBE_API_KEY   key for an OpenAI-compatible /audio/transcriptions endpoint (without it: 503, the mic
-//                      only works where the browser itself can transcribe)
-// TRANSCRIBE_URL       default https://api.openai.com/v1/audio/transcriptions   TRANSCRIBE_MODEL  default whisper-1
+// The keys (ELEVENLABS_API_KEY, or TRANSCRIBE_API_KEY for an OpenAI-compatible endpoint) are read in ../voice.mjs.
+// Without either: 503, and the mic only works where the browser itself can transcribe.
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { architect, publicAsset } from "./chamber.mjs";
 import { newId } from "./store.mjs";
 import { SURFACE_PRESETS } from "./blueprint.mjs";
+import { transcribe, transcribeReady } from "../voice.mjs";
+
+export { transcribeReady };
 
 const LIMITS = { image: { bytes: 10 * 1024 * 1024, count: 12 }, audio: { bytes: 20 * 1024 * 1024, count: 3 } };
-export const transcribeReady = () => Boolean(process.env.TRANSCRIBE_API_KEY);
 const client = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
 /** What the bytes really are (never trust the Content-Type alone). */
@@ -153,20 +154,9 @@ export function mountUploads(app, { db, auth, limiter }) {
       if (!transcribeReady()) return res.status(503).json({ ok: false, error: "off" });
       if (transcribeLimited(req.arch.acc.nickLower)) return res.status(429).json({ ok: false, error: "slow down" });
       if (!audio?.length) return res.status(400).json({ ok: false, error: "empty" });
-      const type = String(req.get("content-type") || "audio/webm").split(";")[0];
-      const ext = { "audio/webm": "webm", "audio/mp4": "mp4", "audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/wav": "wav", "audio/x-m4a": "m4a" }[type] || "webm";
-      const form = new FormData();
-      form.append("file", new Blob([audio], { type }), `voice.${ext}`);
-      form.append("model", process.env.TRANSCRIBE_MODEL || "whisper-1");
-      const r = await fetch(process.env.TRANSCRIBE_URL || "https://api.openai.com/v1/audio/transcriptions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${process.env.TRANSCRIBE_API_KEY}` },
-        body: form,
-        signal: AbortSignal.timeout(30_000),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || typeof d.text !== "string") return res.status(502).json({ ok: false, error: "failed" });
-      res.json({ ok: true, text: d.text.trim().slice(0, 1200) });
+      const text = await transcribe(audio, req.get("content-type"));
+      if (text === null) return res.status(502).json({ ok: false, error: "failed" });
+      res.json({ ok: true, text: text.slice(0, 1200) });
     } catch (e) {
       next(e);
     } finally {

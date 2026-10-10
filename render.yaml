@@ -44,7 +44,10 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
-      # voice fallback for browsers without speech recognition (e.g. Instagram's in-app browser on iPhone):
-      # any OpenAI-compatible /audio/transcriptions endpoint; audio is never stored
+      # voice → text (the labyrinth's 🎙 chat + the Chamber) for browsers without their own speech recognition
+      # (e.g. Instagram's in-app browser on iPhone). ElevenLabs is preferred; audio is never stored.
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      # or any OpenAI-compatible /audio/transcriptions endpoint
       - key: TRANSCRIBE_API_KEY
         sync: false

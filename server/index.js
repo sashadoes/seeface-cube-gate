@@ -28,7 +28,8 @@ import { npcReady, talk } from "./npc/talk.mjs";
 import { openStore } from "./architects/store.mjs";
 import { mountArchitects } from "./architects/routes.mjs";
 import { mountChamber, llmReady } from "./architects/chamber.mjs";
-import { mountUploads, transcribeReady } from "./architects/uploads.mjs";
+import { mountUploads } from "./architects/uploads.mjs";
+import { transcribe, transcribeReady } from "./voice.mjs";
 import { mountAdmin } from "./architects/admin.mjs";
 
 const scrypt = promisify(scryptCb);
@@ -259,7 +260,7 @@ app.use((_req, res, next) => {
 // the characters' route carries a short conversation, so it gets a bigger body limit
 const json2kb = express.json({ limit: "2kb" });
 // the Architects' routes (application, chamber, uploads, admin) bring their own body parsers
-const OWN_BODY = /^\/api\/(npc\/talk$|architects\/|chamber(\/|$)|admin\/architects|rooms\/)/;
+const OWN_BODY = /^\/api\/(npc\/talk$|voice\/transcribe$|architects\/|chamber(\/|$)|admin\/architects|rooms\/)/;
 app.use((req, res, next) => (OWN_BODY.test(req.path) ? next() : json2kb(req, res, next)));
 app.use(
   cors({
@@ -270,7 +271,7 @@ app.use(
   })
 );
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, storage: players ? "mongodb" : "file", instagram: igReady(), npc: npcReady(), chamber: { llm: llmReady(), transcribe: transcribeReady() } }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, storage: players ? "mongodb" : "file", instagram: igReady(), npc: npcReady(), voice: transcribeReady(), chamber: { llm: llmReady(), transcribe: transcribeReady() } }));
 
 // ------------------------------------------------------------------ the labyrinth's characters (◇, written by Claude)
 // 12 lines / minute per IP; NPC_DAILY_CAP caps the whole day (see npc/talk.mjs)
@@ -282,6 +283,27 @@ app.post("/api/npc/talk", express.json({ limit: "8kb" }), async (req, res, next)
     res.status(status).json(data);
   } catch (err) {
     next(err);
+  }
+});
+
+// ------------------------------------------------------------------ the labyrinth's chat: say it, it appears as text
+// For browsers that can't turn speech into words themselves (e.g. Instagram's in-app browser on iPhone).
+// Raw audio in, { text } out. The audio lives only in this request: never stored, never logged.
+const voiceLimited = limiter(20, 60_000); // 20 messages / minute per IP
+app.post("/api/voice/transcribe", express.raw({ type: () => true, limit: "2mb" }), async (req, res, next) => {
+  let audio = Buffer.isBuffer(req.body) ? req.body : null;
+  try {
+    if (!transcribeReady()) return res.status(503).json({ ok: false, error: "off" });
+    if (voiceLimited(req.ip)) return res.status(429).json({ ok: false, error: "slow down" });
+    if (!audio?.length) return res.status(400).json({ ok: false, error: "empty" });
+    const text = await transcribe(audio, req.get("content-type"));
+    if (text === null) return res.status(502).json({ ok: false, error: "failed" });
+    res.json({ ok: true, text: text.slice(0, 400) });
+  } catch (err) {
+    next(err);
+  } finally {
+    audio = null;
+    req.body = null;
   }
 });
 

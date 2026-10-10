@@ -296,7 +296,7 @@
 .lab-actions {
   position: fixed;
   right: calc(16px + env(safe-area-inset-right));
-  bottom: calc(18px + env(safe-area-inset-bottom));
+  bottom: calc(196px + env(safe-area-inset-bottom)); // above the microphone
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
@@ -782,15 +782,20 @@
 // ---------------------------------------------------------------- chat with strangers
 .lab-chat {
   position: fixed;
-  left: 16px;
-  bottom: calc(84px + env(safe-area-inset-bottom));
+  left: calc(16px + env(safe-area-inset-left));
+  bottom: calc(76px + env(safe-area-inset-bottom)); // above the light ring and ◈
   z-index: 1001;
-  width: min(360px, calc(100vw - 110px));
+  width: min(380px, calc(100vw - 124px));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 3px;
   font: italic 15px "Times New Roman", serif;
+  pointer-events: none; // the world stays walkable between the lines
+
+  > * {
+    pointer-events: auto;
+  }
 
   // open: a panel over the bottom of the screen (full width on phones)
   &.open {
@@ -800,15 +805,20 @@
   }
 }
 
+// lines float over the world like a live stream's chat, then fade
 .lab-chat-line {
   all: unset;
+  position: relative;
   max-width: 100%;
-  padding: 4px 11px;
+  padding: 3px 10px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.26);
   color: #fff6e2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 10px rgba(0, 0, 0, 0.6);
   cursor: pointer;
-  animation: lab-chat-in 0.3s ease-out both;
+  animation:
+    lab-chat-in 0.3s ease-out both,
+    lab-chat-out 3s ease-in 13s forwards;
   overflow-wrap: anywhere;
 
   b {
@@ -825,25 +835,253 @@
   from { opacity: 0; transform: translateY(6px); }
 }
 
-// the big, obvious way in
-.lab-chat-open {
+@keyframes lab-chat-out {
+  to { opacity: 0; }
+}
+
+// what you're saying right now: the words appear as you speak
+.lab-chat-draft {
+  cursor: default;
+  padding-right: 34px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 230, 184, 0.35);
+  animation: lab-chat-in 0.2s ease-out both;
+
+  &.listening,
+  &.thinking {
+    color: #ffe9c4;
+  }
+
+  &.thinking {
+    opacity: 0.8;
+  }
+
+  .caret {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    margin-left: 2px;
+    vertical-align: -2px;
+    background: #ffcf8a;
+    animation: lab-caret 0.9s steps(1) infinite;
+  }
+}
+
+@keyframes lab-caret {
+  50% { opacity: 0; }
+}
+
+.lab-chat-draft-x {
+  all: unset;
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  width: 30px;
+  height: 30px;
+  margin-top: -15px;
+  text-align: center;
+  font: 20px/30px system-ui, sans-serif;
+  color: #fff6e2;
+  cursor: pointer;
+  font-style: normal;
+}
+
+// the moment before it sends: a thin line runs out (tap × to keep it to yourself)
+.lab-chat-draft-bar {
+  position: absolute;
+  left: 10px;
+  right: 34px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: #ffcf8a;
+  transform-origin: left;
+  animation: lab-draft-bar 1.1s linear forwards;
+}
+
+@keyframes lab-draft-bar {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+// ---------------------------------------------------------------- the microphone (bottom right)
+.lab-talk {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.lab-talk-small {
   all: unset;
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 44px;
-  padding: 0 18px;
-  color: #fff6e2;
-  font-size: 17px;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 230, 184, 0.45);
-  border-radius: 22px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 19px system-ui, sans-serif;
+  color: #f3efe6;
+  background: rgba(10, 10, 10, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   cursor: pointer;
-  box-shadow: 0 0 18px rgba(255, 230, 184, 0.08);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 
-  &:hover {
-    border-color: rgba(255, 230, 184, 0.8);
+  &:active {
+    transform: scale(0.92);
+  }
+
+  svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+}
+
+.lab-mic {
+  --level: 0;
+  all: unset;
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff6e2;
+  background: radial-gradient(circle at 50% 35%, rgba(255, 240, 210, 0.22), rgba(10, 10, 10, 0.4) 70%);
+  border: 1px solid rgba(255, 230, 184, 0.5);
+  box-shadow: 0 0 22px rgba(255, 220, 160, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+
+  svg {
+    width: 32px;
+    height: 32px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+
+  rect {
+    fill: currentColor;
+    fill-opacity: 0.15;
+  }
+
+  &:active {
+    transform: scale(0.94);
+  }
+
+  // listening: the button breathes, and a ring swells with your voice
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 207, 138, 0.7);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &.listening {
+    color: #120c05;
+    background: radial-gradient(circle at 50% 35%, #ffe2b0, #ffb860 75%);
+    box-shadow: 0 0 calc(24px + var(--level) * 40px) rgba(255, 190, 110, 0.65);
+
+    &::before {
+      opacity: 1;
+      transform: scale(calc(1.08 + var(--level) * 0.5));
+      transition: transform 0.08s;
+    }
+
+    &::after {
+      animation: lab-mic-wave 1.6s ease-out infinite;
+    }
+  }
+
+  &.thinking {
+    animation: lab-mic-think 0.9s ease-in-out infinite alternate;
+  }
+
+  &.sending {
+    color: #120c05;
+    background: #ffcf8a;
+  }
+}
+
+@keyframes lab-mic-wave {
+  from { opacity: 0.8; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.9); }
+}
+
+@keyframes lab-mic-think {
+  to { box-shadow: 0 0 34px rgba(255, 207, 138, 0.6); }
+}
+
+// ⋯ : everything that used to stand in a column on the right
+.lab-more {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+}
+
+.lab-more-sheet {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(160px + env(safe-area-inset-bottom));
+  min-width: 220px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 200px);
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: rgba(6, 5, 4, 0.72);
+  border: 1px solid rgba(255, 230, 184, 0.22);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font: italic 16px "Times New Roman", serif;
+  animation: lab-chat-in 0.18s ease-out both;
+
+  button {
+    all: unset;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: #fff6e2;
+    cursor: pointer;
+
+    &:active,
+    &:hover {
+      background: rgba(255, 240, 210, 0.08);
+    }
+  }
+
+  .g {
+    width: 22px;
+    text-align: center;
+    font: 18px system-ui, sans-serif;
+    color: #ffcf8a;
   }
 }
 
@@ -1016,6 +1254,30 @@
     opacity: 0.35;
     cursor: default;
   }
+}
+
+// the open chat's microphone (in place of ➝ while the box is empty)
+.lab-chat-mic {
+  display: grid;
+  place-items: center;
+
+  svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+  }
+
+  &.listening {
+    box-shadow: 0 0 18px rgba(255, 190, 110, 0.7);
+    animation: lab-mic-think 0.8s ease-in-out infinite alternate;
+  }
+}
+
+.lab-chat-row .lab-chat-draft {
+  animation: lab-chat-in 0.2s ease-out both;
 }
 
 .lab-emotes {
@@ -2037,6 +2299,7 @@
 // right-to-left languages: text runs the right way inside panels, the layout stays
 .lab-settings-box,
 .lab-chat,
+.lab-more-sheet,
 .lab-notice,
 .lab-gate,
 .lab-bag {
