@@ -96,8 +96,8 @@ const RUN = 9.0;
 const SHARDS_PER_DEPTH = 6;
 const GRACE = 15; // seconds before the Hollow starts moving
 const BEST_KEY = "seeface-lab-best";
-const STAMINA_DRAIN = 24; // per second while running
-const STAMINA_REGEN = 13;
+const STAMINA_DRAIN = 5; // per second while running (~20 s of sprint; was 24 = 4 s)
+const STAMINA_REGEN = 22;
 const isPhone = matchMedia("(pointer: coarse)").matches;
 const PROTECTED = 120; // seconds a newcomer can't be knifed
 const FOV = 72;
@@ -1707,6 +1707,7 @@ function Game({ nick }: { nick: string }) {
     world.scene.add(doppel);
     let doppelT = -1, mirrorT = 0;
     let floodGrace = 0; // seconds the water can't knock you again
+    let lensNow = 0;
 
     const frame = (now: number) => {
       // frame cap: 60–72 fps (120/144 Hz screens would double the GPU work), 30 on low;
@@ -1745,16 +1746,32 @@ function Game({ nick }: { nick: string }) {
         const dx = vel.x * dt, dz = vel.z * dt;
         const ox = pos.x, oz = pos.z;
         // walls, and the labyrinth's edge (a wall of static, it never moves you)
-        const step = (nx: number, nz: number) => free(nx, nz) && (inShip(pos.x, pos.z) || edge.allows(pos.x, pos.z, nx, nz));
-        if (step(pos.x + dx, pos.z)) pos.x += dx;
-        else {
-          if (Math.abs(vel.x) > 2) input.buzz();
-          vel.x *= -0.2; // bump off walls
-        }
-        if (step(pos.x, pos.z + dz)) pos.z += dz;
-        else {
-          if (Math.abs(vel.z) > 2) input.buzz();
-          vel.z *= -0.2;
+        const step = (nx: number, nz: number) => free(nx, nz) && (inShip(ox, oz) || edge.allows(ox, oz, nx, nz));
+        const want = Math.hypot(dx, dz);
+        if (want > 0 && step(ox + dx, oz + dz)) {
+          pos.x += dx;
+          pos.z += dz;
+        } else if (want > 0) {
+          // slide along the wall…
+          if (step(pos.x + dx, pos.z)) pos.x += dx;
+          if (step(pos.x, pos.z + dz)) pos.z += dz;
+          // …and glance off corners instead of getting caught on them
+          if (Math.hypot(pos.x - ox, pos.z - oz) < want * 0.5) {
+            for (const a of [0.45, -0.45, 0.9, -0.9]) {
+              const c = Math.cos(a), sn = Math.sin(a), k = Math.max(0.6, c);
+              const ndx = (dx * c - dz * sn) * k, ndz = (dx * sn + dz * c) * k;
+              if (step(ox + ndx, oz + ndz)) {
+                pos.x = ox + ndx;
+                pos.z = oz + ndz;
+                break;
+              }
+            }
+          }
+          // keep only the speed that really moved you (no bouncing back off walls)
+          const got = Math.hypot(pos.x - ox, pos.z - oz);
+          if (got < want * 0.3 && want / dt > 2) input.buzz();
+          vel.x = (pos.x - ox) / dt;
+          vel.z = (pos.z - oz) / dt;
         }
         const moved = Math.hypot(pos.x - ox, pos.z - oz);
 
@@ -1863,6 +1880,9 @@ function Game({ nick }: { nick: string }) {
       const strafe = vel.x * Math.cos(input.yaw) - vel.z * Math.sin(input.yaw);
       lean += (-strafe * 0.012 - Math.max(-2, Math.min(2, turn)) * 0.015 - lean) * Math.min(1, dt * 6);
       camera.rotation.set(input.pitch, input.yaw, lean, "YXZ");
+      // the wide lens curves a little more the faster you go
+      lensNow += ((settings().lens ? 0.24 + (speedNow / RUN) * 0.2 : 0) - lensNow) * Math.min(1, dt * 4);
+      fx.setLens(lensNow);
       // field of view opens up when you sprint
       const fovTarget = settings().fov + (speedNow / RUN) * 10;
       if (Math.abs(camera.fov - fovTarget) > 0.05) {
@@ -3307,6 +3327,7 @@ function Game({ nick }: { nick: string }) {
                     [
                       ["glow", "glow & light effects"],
                       ["cameraBob", "camera bob when walking"],
+                      ["lens", "wide lens (fisheye)"],
                       ["shake", "screen shake"],
                       ["flashes", "lightning & bright flashes"],
                     ] as const

@@ -9,7 +9,9 @@
 
 export const CELL = 4; // metres
 export const WALL_H = 3.4;
-const WALL_P = 0.45;
+// 0.45 until 2026-10-10 (owner: "prune the world", fewer dead ends). Lowering it only removes walls:
+// every corridor that was open stays open, and the maze stays connected.
+const WALL_P = 0.36;
 const REGION = 7;
 const ROOM = 3;
 

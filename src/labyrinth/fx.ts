@@ -23,17 +23,21 @@ const FilmShader = {
     tDiffuse: { value: null }, time: { value: 0 }, amount: { value: 1 }, signal: { value: 0 }, res: { value: new THREE.Vector2(1280, 720) },
     // the vibe (see vibes.ts)
     mono: { value: 0 }, tint: { value: new THREE.Vector3(1, 1, 1) }, contrast: { value: 1 }, split: { value: 0 }, lift: { value: 0 },
-    scan: { value: 0 }, bandAmt: { value: 0 }, chroma: { value: 0 }, grain: { value: 0.045 }, vig: { value: 0.9 }, fisheye: { value: 0 },
+    scan: { value: 0 }, bandAmt: { value: 0 }, chroma: { value: 0 }, grain: { value: 0.045 }, vig: { value: 0.9 }, fisheye: { value: 0 }, lens: { value: 0 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `
     uniform sampler2D tDiffuse; uniform float time; uniform float amount; uniform float signal; uniform vec2 res; varying vec2 vUv;
     uniform float mono; uniform vec3 tint; uniform float contrast; uniform float split; uniform float lift;
-    uniform float scan; uniform float bandAmt; uniform float chroma; uniform float grain; uniform float vig; uniform float fisheye;
+    uniform float scan; uniform float bandAmt; uniform float chroma; uniform float grain; uniform float vig; uniform float fisheye; uniform float lens;
     float rand(vec2 co){ return fract(sin(dot(co, vec2(12.9898, 78.233)) + time) * 43758.5453); }
     float hash(float n){ return fract(sin(n) * 43758.5453); }
     void main(){
       vec2 uv = vUv;
+      // a wide lens for everyone: the middle comes a little closer, the edges curve and rush past
+      // (the corners stay where they are, so no black borders). Wider while running.
+      vec2 lc = uv - 0.5;
+      uv = 0.5 + lc * (1.0 - lens * 0.5 + lens * dot(lc, lc));
       // a camera lens bulge (cctv)
       vec2 fc = uv - 0.5;
       uv = 0.5 + fc * (1.0 - fisheye * 0.3 + fisheye * dot(fc, fc));
@@ -180,6 +184,10 @@ export function createFx(renderer: THREE.WebGLRenderer, scene: THREE.Scene, came
       // phones get a cheaper glow (a third of the screen size)
       const k = matchMedia("(pointer: coarse)").matches ? 3 : 2;
       bloom.resolution.set(w / k, h / k);
+    },
+    /** the wide lens (0 = flat … ~0.45 = strong fisheye) */
+    setLens(v: number) {
+      film.uniforms.lens.value = v;
     },
     /** how close danger is (0..1): the picture tears and snows */
     setDanger(v: number) {

@@ -22,6 +22,7 @@ export type Settings = {
   fov: number; // 60–90
   glow: boolean; // glow, film look, light shafts, motes, trails, aurora
   cameraBob: boolean;
+  lens: boolean; // the wide (fisheye) lens
   shake: boolean;
   flashes: boolean; // lightning / rift flashes (off = calmer, safer for photosensitivity)
 };
@@ -43,6 +44,7 @@ export const DEFAULTS: Settings = {
   fov: 72,
   glow: true,
   cameraBob: true,
+  lens: true,
   shake: true,
   flashes: true,
 };

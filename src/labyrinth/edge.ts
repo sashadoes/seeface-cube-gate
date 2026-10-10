@@ -6,8 +6,9 @@
 // around its own entrance.
 import { LEVEL_OFFSET, levelAtX } from "./zones";
 
-const BASE = 70; // metres of labyrinth for one lonely person
-const PER_PERSON = 45; // more for each extra person
+// owner 2026-10-10: "users shouldn't feel blocked" → the edge starts far away (was 70 m + 45 per person)
+const BASE = 600; // metres of labyrinth for one lonely person
+const PER_PERSON = 60; // more for each extra person
 const MAX = 3000;
 
 export const edgeRadius = (online: number) => Math.min(MAX, BASE + PER_PERSON * Math.max(0, online - 1));
