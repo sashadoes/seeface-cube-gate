@@ -14,12 +14,13 @@ export const edgeRadius = (online: number) => Math.min(MAX, BASE + PER_PERSON * 
 
 export type EdgeState = { radius: number; fog: number; centre: { x: number; z: number } };
 
-export function createEdge() {
+/** minRadius: the edge never closes over players' opened places (plots.ts) */
+export function createEdge(minRadius: () => number = () => 0) {
   let radius = edgeRadius(1);
   let announced = radius;
 
   function update(px: number, pz: number, online: number, dt: number) {
-    const target = edgeRadius(online);
+    const target = Math.max(edgeRadius(online), minRadius());
     // grows quickly, shrinks slowly (nobody gets trapped by someone leaving)
     radius += (target - radius) * Math.min(1, dt * (target > radius ? 0.25 : 0.03));
     const cx = levelAtX(px) * LEVEL_OFFSET;

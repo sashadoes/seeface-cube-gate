@@ -126,7 +126,9 @@ export function createPresence(myId?: string): Presence {
     client.on("message", (topic, payload) => {
       const parts = topic.split("/");
       if (parts[3] === "world") {
-        if (payload.length > 600) return;
+        // pictures (posts, plot pictures) are bigger than ordinary world messages
+        const kind = parts[4];
+        if (payload.length > (kind === "post" || kind === "plotimg" ? 130_000 : kind === "plot" ? 2000 : 600)) return;
         try {
           const data = JSON.parse(payload.toString());
           if (data && typeof data === "object") worldFns.forEach((f) => f(parts.slice(4).join("/"), data));

@@ -10,7 +10,7 @@ export const ZONE_CELLS = 10;
 export const LEVEL_OFFSET = 100_000; // metres between the surface and each secret level
 export const WALL_VARIANTS = 4; // different image walls per zone
 
-export type ZoneKind = "monogram" | "pools" | "red" | "neon" | "photo" | "white" | "ash" | "deep";
+export type ZoneKind = "monogram" | "pools" | "red" | "neon" | "photo" | "white" | "ash" | "deep" | "archive";
 
 export type ZoneDef = {
   kind: ZoneKind;
@@ -41,6 +41,7 @@ export const ZONES: Record<ZoneKind, ZoneDef> = {
   white: { kind: "white", fog: 0xd2cfc7, fogDensity: 0.035, ambient: 0xfffcf4, ambientIntensity: 0.55, ceiling: 0xeeebe3, panel: 0xffffff, exposure: 0.95, wall: 0xf2eee6, floor: 0xcdc9c0, contrast: 0.45, bright: 1.6, logoChance: 0.35 },
   ash: { kind: "ash", fog: 0x0d0a08, fogDensity: 0.08, ambient: 0xff8a40, ambientIntensity: 0.1, ceiling: 0x1c1714, panel: 0xffa060, exposure: 1.2, wall: 0xa89c90, floor: 0x26211d, contrast: 1.3, bright: 1, logoChance: 0.35 },
   deep: { kind: "deep", fog: 0x021014, fogDensity: 0.07, ambient: 0x2ad8c0, ambientIntensity: 0.16, ceiling: 0x06232a, panel: 0x7cffe8, exposure: 1.25, wall: 0x5fc8c0, floor: 0x0d3a40, contrast: 1.1, bright: 0.9, logoChance: 0.27 },
+  archive: { kind: "archive", fog: 0x080e0d, fogDensity: 0.065, ambient: 0x9ba991, ambientIntensity: 0.12, ceiling: 0x111712, panel: 0xd7ff4f, exposure: 1.2, wall: 0x9ca58d, floor: 0x171d17, contrast: 1.35, bright: 0.84, logoChance: 0.12 },
 };
 
 const SURFACE: ZoneKind[] = ["monogram", "pools", "red", "neon", "photo", "white", "ash", "deep"];
@@ -63,6 +64,7 @@ export function zoneOfCell(i: number, j: number): ZoneDef {
   if (level > 0) return ZONES[LEVELS[level].zone];
   const zi = Math.floor(i / ZONE_CELLS), zj = Math.floor(j / ZONE_CELLS);
   if (zi === 0 && zj === 0) return ZONES.monogram; // everyone arrives in the monogram halls
+  if ((zi === 1 && zj === 0) || rnd(zi, zj, 71) < 0.12) return ZONES.archive; // first district is nearby; distant ones stay a shared surprise
   return ZONES[SURFACE[Math.floor(rnd(zi, zj, 70) * SURFACE.length)]];
 }
 
@@ -115,7 +117,7 @@ const FILE_LINES = [
   "the visitor asked to stay",
   "footage ends here",
 ];
-const STAMPS = ["CLASSIFIED", "REDACTED", "DO NOT SHARE", "FILE 1994", "NO SIGNAL", "EYES ONLY"];
+const STAMPS = ["UNINDEXED", "REDACTED", "DO NOT SHARE", "CACHE ONLY", "SOURCE UNKNOWN", "NO INDEX"];
 
 function seeded(n: number) {
   let a = Math.floor(n * 2 ** 31) || 1;
@@ -214,7 +216,7 @@ export function monoTexture(zone: ZoneDef, variant: number, opts: { floor?: bool
     if (zone.neon && !opts.floor) neonLines(g, s, (variant * 0.37) % 1);
     // about half the wall images carry a leaked page
     const page = rnd(variant, zone.kind.length, 73);
-    if (!opts.floor && page < 0.5) archivePage(g, s, page);
+    if (!opts.floor && page < (zone.kind === "archive" ? 0.92 : 0.5)) archivePage(g, s, page);
     // the logo: only on some walls, never the same strength
     const h = rnd(variant, zone.kind.length, opts.floor ? 77 : 71);
     if (!opts.floor && h < zone.logoChance) {

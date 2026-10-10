@@ -43,6 +43,7 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS || "https://seeface1.world,http://l
 let players = null; // Mongo collection, or null = local file
 let accounts = null; // Mongo collections for accounts + sessions
 let sessions = null;
+let showRequests = null; // artists asking for a show night (shows.ts)
 if (process.env.MONGODB_URI) {
   const client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();
@@ -51,6 +52,7 @@ if (process.env.MONGODB_URI) {
   await players.createIndex({ nick: 1 });
   accounts = client.db(process.env.MONGODB_DB || "seeface1").collection("accounts");
   sessions = client.db(process.env.MONGODB_DB || "seeface1").collection("sessions");
+  showRequests = client.db(process.env.MONGODB_DB || "seeface1").collection("show_requests");
   await accounts.createIndex({ nickLower: 1 }, { unique: true });
   await accounts.createIndex({ ig: 1 }, { unique: true, partialFilterExpression: { ig: { $type: "string" } } });
   await sessions.createIndex({ tokenHash: 1 }, { unique: true });
@@ -526,6 +528,71 @@ function summarise(docs, startKey) {
     retained_d30: kept(30),
   };
 }
+// ------------------------------------------------------------------ show requests (SEEFACE1 SHOWS)
+// An artist asks for a show night from the world guide. A request, never a
+// payment: the owner answers on Instagram. Listed for the owner with ADMIN_KEY.
+const PACKS = ["opening", "headliner", "residency"];
+const IG_HANDLE = /^[a-z0-9._]{1,30}$/;
+const PLOT_ID = /^r-?\d{1,3}_-?\d{1,3}$/;
+const showLimited = limiter(5, 60 * 60_000);
+const oneLine = (v, max) => (typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max) : "");
+app.post("/api/show-requests", async (req, res) => {
+  if (limited(req.ip) || showLimited(req.ip)) return res.status(429).json({ ok: false, error: "slow down" });
+  const b = req.body || {};
+  if (!PACKS.includes(b.pack)) return res.status(400).json({ ok: false, error: "pack" });
+  if (typeof b.ig !== "string" || !IG_HANDLE.test(b.ig)) return res.status(400).json({ ok: false, error: "ig" });
+  let email = null;
+  if (b.email !== undefined && b.email !== null && b.email !== "") {
+    if (typeof b.email !== "string" || !EMAIL.test(b.email.trim())) return res.status(400).json({ ok: false, error: "email" });
+    email = b.email.trim().toLowerCase();
+  }
+  const doc = {
+    pack: b.pack,
+    ig: b.ig,
+    nick: typeof b.nick === "string" && NICK.test(b.nick) ? b.nick : null,
+    email,
+    when: oneLine(b.when, 60),
+    about: oneLine(b.about, 300),
+    place: typeof b.place === "string" && PLOT_ID.test(b.place) ? b.place : null,
+    ipHash: createHash("sha256").update(`${process.env.IP_SALT || "seeface1"}:${req.ip}`).digest("hex").slice(0, 16),
+    at: new Date(),
+  };
+  try {
+    if (showRequests) await showRequests.insertOne(doc);
+    else await appendFile("data/show-requests.jsonl", JSON.stringify(doc) + "\n");
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("show request failed", e.message);
+    res.status(500).json({ ok: false });
+  }
+});
+
+const isAdmin = (req) => {
+  const key = process.env.ADMIN_KEY;
+  const given = createHash("sha256").update(req.get("x-admin-key") || "").digest();
+  return Boolean(key) && timingSafeEqual(given, createHash("sha256").update(key).digest());
+};
+app.get("/api/show-requests", async (req, res) => {
+  if (!isAdmin(req)) return res.status(404).end();
+  try {
+    let list;
+    if (showRequests) list = await showRequests.find({}, { projection: { _id: 0, ipHash: 0 } }).sort({ at: -1 }).limit(500).toArray();
+    else
+      list = (await readFile("data/show-requests.jsonl", "utf8").catch(() => ""))
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => {
+          const { ipHash: _, ...d } = JSON.parse(l);
+          return d;
+        })
+        .reverse();
+    res.json({ ok: true, requests: list });
+  } catch (e) {
+    console.error("show list failed", e.message);
+    res.status(500).json({ ok: false });
+  }
+});
+
 app.get("/api/stats", async (req, res) => {
   const key = process.env.ADMIN_KEY;
   // compare fixed-length hashes so neither the key nor its length leaks through timing

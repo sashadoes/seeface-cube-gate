@@ -58,7 +58,7 @@ function shipFree(x: number, z: number, r: number) {
 // around the entrance (so everyone finds them even when the labyrinth is
 // small); more are scattered further out. The dark room is secret: one door
 // only, disguised as a wall you can walk through.
-export type PlaceKind = "open" | "theater" | "mall" | "museum" | "market" | "dark" | "ritual" | "bazaar";
+export type PlaceKind = "open" | "theater" | "mall" | "museum" | "market" | "dark" | "ritual" | "bazaar" | "love";
 export const PLACE = 5; // cells per side (20 m)
 const NEAR_PLACES: Record<string, PlaceKind> = {
   "1,0": "museum",
@@ -70,6 +70,10 @@ const NEAR_PLACES: Record<string, PlaceKind> = {
   "-1,1": "ritual", // the hall of champions (there is only one)
   "1,-1": "bazaar", // the open market: players sell to each other
 };
+// monuments: one-of-a-kind places dedicated forever (owner, 2026-10-07)
+const MONUMENTS: Record<string, PlaceKind> = {
+  "-2,0": "love", // flounderlove's love fountain, two regions west of the entrance
+};
 const FAR_PLACES: PlaceKind[] = ["open", "theater", "mall", "museum", "market"];
 
 export function placeAt(I: number, J: number): PlaceKind | null {
@@ -77,6 +81,8 @@ export function placeAt(I: number, J: number): PlaceKind | null {
   if (inShip((I * REGION + 4) * CELL, (J * REGION + 4) * CELL)) return null;
   const near = NEAR_PLACES[`${I},${J}`];
   if (near) return near;
+  const monument = MONUMENTS[`${I},${J}`];
+  if (monument) return monument;
   if (Math.abs(I) <= 1 && Math.abs(J) <= 1) return null;
   const h = hash(I, J, 60);
   if (h < 0.015) return "dark";
@@ -204,12 +210,19 @@ const SOLID: Partial<Record<PlaceKind, [number, number, number, number][]>> = {
   ritual: [[9, 9, 11, 11], [16.12, 10.72, 16.72, 11.32], [14.30, 14.30, 14.90, 14.90], [10.72, 16.12, 11.32, 16.72], [6.75, 15.49, 7.35, 16.09], [3.91, 12.65, 4.51, 13.25], [3.28, 8.68, 3.88, 9.28], [5.10, 5.10, 5.70, 5.70], [8.68, 3.28, 9.28, 3.88], [12.65, 3.91, 13.25, 4.51], [15.49, 6.75, 16.09, 7.35]],
   // the open market: 12 stalls in a ring + the sign pillar in the middle
   bazaar: [[9.4, 9.4, 10.6, 10.6], [16.06, 11.11, 17.46, 12.51], [14.25, 14.25, 15.65, 15.65], [11.11, 16.06, 12.51, 17.46], [7.49, 16.06, 8.89, 17.46], [4.35, 14.25, 5.75, 15.65], [2.54, 11.11, 3.94, 12.51], [2.54, 7.49, 3.94, 8.89], [4.35, 4.35, 5.75, 5.75], [7.49, 2.54, 8.89, 3.94], [11.11, 2.54, 12.51, 3.94], [14.25, 4.35, 15.65, 5.75], [16.06, 7.49, 17.46, 8.89]],
+  // the love fountain: the heart basin + the dedication stone
+  love: [[7.6, 7.8, 12.4, 12.2], [9, 14.6, 11, 15.4]],
   // standing stones in the open
   open: [[5, 5, 6, 6], [14, 6, 15, 7], [9.5, 14, 10.5, 15]],
 };
 
+// solid furniture in players' built rooms (plots.ts registers it)
+let extraSolid: ((x: number, z: number, r: number) => boolean) | null = null;
+export const setExtraSolid = (f: typeof extraSolid) => (extraSolid = f);
+
 export function free(x: number, z: number, r = 0.35) {
   if (inShip(x, z)) return shipFree(x, z, r);
+  if (extraSolid?.(x, z, r)) return false;
   const i = Math.floor(x / CELL), j = Math.floor(z / CELL);
   const pl = placeOf(i, j);
   if (pl) {

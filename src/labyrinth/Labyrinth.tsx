@@ -37,9 +37,9 @@ import { relicMesh } from "./props";
 
 const PLACE_NAMES: Record<string, string> = {
   monogram: "the monogram halls", pools: "the pools", red: "the red corridors", neon: "the neon void",
-  photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep",
+  photo: "the photo garden", white: "the overexposed white", ash: "ash", deep: "the deep", archive: "the null index",
 };
-import { free, spawn, roomOf, safeSpot as roomCentreOf, CELL, inShip, placeCentre } from "./maze";
+import { free, spawn, roomOf, safeSpot as roomCentreOf, CELL, inShip, placeCentre, setExtraSolid } from "./maze";
 import type { WeatherKind } from "../marks/weather";
 import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
@@ -54,6 +54,9 @@ import { myVibe, trackVibe } from "./vibes";
 import { createImmersive } from "./immersive";
 import { LANGS, lang, setLang, t as tr, useLang } from "../i18n";
 import { createMarket, type Listing } from "./market";
+import { createPlots, districtOf, doorstep, parsePlotId, type Plots } from "./plots";
+import { createPlotLayer } from "./plotBuild";
+import { PlotPanel, type WorldTab } from "./PlotPanel";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions, setStalls } from "./places";
 import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
@@ -121,7 +124,7 @@ function LangPicker() {
 function NickGate({ onDone }: { onDone: (n: string) => void }) {
   useLang();
   // coming back? say so, and say where they'll continue
-  const [back] = useState(() => (new URLSearchParams(location.search).get("with") ? null : readResume()));
+  const [back] = useState(() => (new URLSearchParams(location.search).get("with") || new URLSearchParams(location.search).get("place") ? null : readResume()));
   // default for newcomers: face_ + 4 random digits (e.g. face_2492)
   const [v, setV] = useState(() => savedNick() ?? `face_${Math.floor(1000 + Math.random() * 9000)}`);
   const [bad, setBad] = useState(false);
@@ -520,6 +523,14 @@ function Game({ nick }: { nick: string }) {
   };
   const npcReplyRef = useRef(npcReply);
   npcReplyRef.current = npcReply;
+  // places of your own (plots.ts) + the world guide
+  const plotsRef = useRef<Plots | null>(null);
+  const [worldTab, setWorldTab] = useState<WorldTab | null>(null);
+  const [hereRoom, setHereRoom] = useState<{ I: number; J: number } | null>(null);
+  const [nearArchitect, setNearArchitect] = useState(false);
+  const [newPlaces, setNewPlaces] = useState(0);
+  const goRef = useRef<(x: number, z: number, yaw: number) => string | null>(() => null);
+  const guideRef = useRef<(x: number, z: number, name: string) => void>(() => {});
   // the open market
   const marketRef = useRef<ReturnType<typeof createMarket> | null>(null);
   const [atMarket, setAtMarket] = useState(false);
@@ -697,7 +708,15 @@ function Game({ nick }: { nick: string }) {
     presenceRef.current = presence;
     const others = createOthers(presence);
     const wishes = createWishes(presence);
-    const artLayer = createArt(wishes.roomSeed);
+    const plots = createPlots(presence, () => nick, {
+      // someone just opened their place: a quiet badge on the world guide (no notice: quiet screen)
+      opened: () => setNewPlaces((n) => n + 1),
+    });
+    plotsRef.current = plots;
+    const plotLayer = createPlotLayer(plots);
+    setExtraSolid(plotLayer.solidAt);
+    world.scene.add(plotLayer.group);
+    const artLayer = createArt(wishes.roomSeed, plotLayer.builtLight);
     wishes.onRoomChange((I, J) => artLayer.refresh(I, J));
     const props = createProps();
     const rifts = createRifts();
@@ -906,7 +925,9 @@ function Game({ nick }: { nick: string }) {
     enterStartLevel();
     markEntered();
     // coming back: continue where you were (unless a friend's invite or a level link says otherwise)
-    const back = !withId && !startLevel ? readResume() : null;
+    // a place link (?place=r3_-2): arrive at that room's door
+    const startPlace = parsePlotId(new URLSearchParams(location.search).get("place") ?? "");
+    const back = !withId && !startLevel && !startPlace ? readResume() : null;
     if (back && free(back.x, back.z)) {
       pos.x = back.x;
       pos.z = back.z;
@@ -921,6 +942,14 @@ function Game({ nick }: { nick: string }) {
       runTime = GRACE; // a few seconds to settle back in before anything hunts
       track("resumed");
       setTimeout(() => sayRef.current(tr("welcome back to the after life™ · {place}", { place: back.place })), 1700);
+    }
+    if (startPlace && districtOf(startPlace.I, startPlace.J)) {
+      const d = doorstep(startPlace.I, startPlace.J);
+      pos.x = d.x;
+      pos.z = d.z;
+      input.yaw = d.yaw;
+      hunter.reset(pos.x, pos.z);
+      track("place-link-opened");
     }
     // remember where you are, every few seconds and when you leave
     const remember = () => {
@@ -1364,8 +1393,9 @@ function Game({ nick }: { nick: string }) {
     let floodOn = false;
 
     // the edge: the labyrinth is as big as the crowd inside
-    const edge = createEdge();
+    const edge = createEdge(() => plots.reach());
     let edgeFog = 0, edgeWarned = false;
+    let hereKey = "", nearArch = false;
 
     // ---------------------------------------------------------------- teleport cards
     const trails: Trail[] = [];
@@ -1393,8 +1423,9 @@ function Game({ nick }: { nick: string }) {
         }
       }
     };
-    const teleport = (x: number, z: number, incognito: boolean): string | null => {
-      const cost = incognito ? INCOGNITO_COST : TELEPORT_COST;
+    /** free: the world guide's "go" (visiting places costs nothing while the opening lasts) */
+    const teleport = (x: number, z: number, incognito: boolean, free = false): string | null => {
+      const cost = free ? 0 : incognito ? INCOGNITO_COST : TELEPORT_COST;
       if (!alive) return tr("not now");
       if (readCards() < cost) return tr("you need {n} ⟡ · cards recharge while you play", { n: cost });
       if (inShip(pos.x, pos.z) || levelAtX(x) !== levelAtX(pos.x)) return tr("teleports don't work here");
@@ -1402,7 +1433,7 @@ function Game({ nick }: { nick: string }) {
       if (Math.hypot(x - e.centre.x, z - e.centre.z) > e.radius - 6) return tr("you can't travel past the edge");
       const spot = landingSpot(x, z);
       if (!spot) return tr("nowhere to land there");
-      addCards(-cost);
+      if (cost) addCards(-cost);
       const from = { x: pos.x, z: pos.z };
       pillar(from.x, from.z);
       pos.x = spot.x;
@@ -1445,6 +1476,12 @@ function Game({ nick }: { nick: string }) {
       lastTpNotice = Date.now();
       sayRef.current(d < 40 ? tr("{nick} appeared out of thin air near you", { nick: tp.nick }) : tr("{nick} teleported to {place}", { nick: tp.nick, place: tr(whereName(tp.tx, tp.tz)) }), true);
     });
+    goRef.current = (x, z, yaw) => {
+      const why = teleport(x, z, false, true);
+      if (!why) input.yaw = yaw;
+      return why;
+    };
+    guideRef.current = (x, z, name) => mapRef.current?.guide?.(x, z, name);
     Object.assign(mapRef.current!, {
       teleport,
       guide: (x: number, z: number, name: string) => {
@@ -1788,6 +1825,18 @@ function Game({ nick }: { nick: string }) {
         if (glimpseT <= 0) hunter.reset(pos.x, pos.z);
       }
       updatePillars(dt);
+      // players' places
+      plotLayer.update(pos.x, pos.z, t);
+      {
+        const r = roomOf(Math.floor(pos.x / CELL), Math.floor(pos.z / CELL));
+        const key = r && districtOf(r.I, r.J) ? `${r.I}:${r.J}` : "";
+        if (key !== hereKey) {
+          hereKey = key;
+          setHereRoom(key && r ? { I: r.I, J: r.J } : null);
+        }
+        const arch = npcs.near(pos.x, pos.z, 4) === "architect";
+        if (arch !== nearArch) setNearArchitect((nearArch = arch));
+      }
       // teleport cards charge only while you're in the game
       if (chargeCards(dt) && firstCard()) sayRef.current(tr("a teleport card ⟡ · open the map and tap where you want to be"), true);
       if (waypoint && Math.hypot(waypoint.x - pos.x, waypoint.z - pos.z) < 3) waypoint = null;
@@ -2081,7 +2130,7 @@ function Game({ nick }: { nick: string }) {
         wasAtMarket = nowAtMarket;
         setAtMarket(nowAtMarket);
       }
-      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && pl.inside?.kind !== "bazaar" && !inShip(pos.x, pos.z));
+      world.setCeiling(pl.inside?.kind !== "open" && pl.inside?.kind !== "ritual" && pl.inside?.kind !== "bazaar" && pl.inside?.kind !== "love" && !inShip(pos.x, pos.z));
       // the ritual: stand in the gold circle by the altar for 5 seconds
       if (pl.atAltar && alive) {
         if (ritualT === 0) sayRef.current(tr("stand still… the ritual has begun"));
@@ -2148,7 +2197,7 @@ function Game({ nick }: { nick: string }) {
       if (heldObj) heldObj.rotation.y += dt * 1.5;
 
       // light & effects; under open skies (and in the ship) the eye sees much further
-      const sky = inPlace?.kind === "open" || inPlace?.kind === "ritual" || inPlace?.kind === "bazaar" || inShip(pos.x, pos.z);
+      const sky = inPlace?.kind === "open" || inPlace?.kind === "ritual" || inPlace?.kind === "bazaar" || inPlace?.kind === "love" || inShip(pos.x, pos.z);
       const far = sky ? 500 : 80;
       if (camera.far !== far) {
         camera.far = far;
@@ -2205,6 +2254,7 @@ function Game({ nick }: { nick: string }) {
       window.removeEventListener("pointerdown", wake);
       window.removeEventListener("keydown", wake);
       window.removeEventListener("keydown", onKey);
+      setExtraSolid(null);
       presence.close();
       stopOnline();
       renderer.dispose();
@@ -2392,6 +2442,17 @@ function Game({ nick }: { nick: string }) {
         <button className="lab-btn bag" onClick={() => setBagOpen(true)} aria-label={tr("inventory")}>
           ◫{bagCount > 0 && <small>{bagCount}</small>}
         </button>
+        <button
+          className="lab-btn world"
+          onClick={() => {
+            setWorldTab(newPlaces ? "explore" : plotsRef.current?.mine() ? "explore" : "mine");
+            setNewPlaces(0);
+            track("world-open");
+          }}
+          aria-label={tr("places")}
+        >
+          ▦{newPlaces > 0 && <small>{newPlaces}</small>}
+        </button>
         <button className="lab-btn map" onClick={() => setMapOpen(true)} aria-label={tr("map")}>
           ◎{cards > 0 && <small>⟡{cards}</small>}
         </button>
@@ -2453,6 +2514,19 @@ function Game({ nick }: { nick: string }) {
             ×
           </button>
         </div>
+      )}
+      {plotsRef.current && (
+        <PlotPanel
+          plots={plotsRef.current}
+          here={hereRoom}
+          nearArchitect={nearArchitect}
+          nick={nick}
+          tab={worldTab}
+          setTab={setWorldTab}
+          go={(x, z, yaw) => goRef.current(x, z, yaw)}
+          guide={(x, z, name) => guideRef.current(x, z, name)}
+          say={(text) => say(text, true)}
+        />
       )}
       {atMarket && !marketTab && (
         <button className="lab-market-btn" onPointerDown={stop} onPointerUp={stop} onClick={() => setMarketTab("buy")}>

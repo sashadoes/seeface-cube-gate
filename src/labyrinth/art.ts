@@ -143,7 +143,8 @@ export type ArtLayer = {
 export type GalleryPiece = { id: string; img: string; nick: string };
 
 /** seedFor: a wished room image overrides the default one */
-export function createArt(seedFor: (I: number, J: number) => string | null = () => null): ArtLayer {
+/** built(I, J): a player's built room (plots.ts) has no installation, only its own light colour */
+export function createArt(seedFor: (I: number, J: number) => string | null = () => null, built: (I: number, J: number) => number | null = () => null): ArtLayer {
   const group = new THREE.Group();
   const rooms = Array.from({ length: 4 }, () => {
     const g = new THREE.Group();
@@ -234,6 +235,19 @@ export function createArt(seedFor: (I: number, J: number) => string | null = () 
         return;
       }
       const { I, J } = list[k];
+      const own = built(I, J);
+      if (own !== null) {
+        const key = `built:${I}:${J}:${own}`;
+        if (r.g.userData.key === key) return;
+        r.g.clear();
+        r.g.userData.key = key;
+        const c = roomCentre(I, J);
+        r.g.position.set(c.x, 0, c.z);
+        r.light.position.set(c.x, WALL_H - 0.6, c.z);
+        r.light.color.setHex(own);
+        r.art = null;
+        return;
+      }
       const override = seedFor(I, J);
       const key = `${I}:${J}:${override ?? ""}`;
       if (r.g.userData.key === key) return;
@@ -447,6 +461,32 @@ function makeZonePoster(kind: ZoneKind, k: number) {
       g.arc(r() * W, r() * H, 1 + r() * 3, 0, Math.PI * 2);
       g.fill();
     }
+  } else if (kind === "archive") {
+    bg("#080c09");
+    g.strokeStyle = "rgba(215,255,79,0.28)";
+    g.lineWidth = 1;
+    for (let y = 30; y < H; y += 28) {
+      g.beginPath();
+      g.moveTo(28, y);
+      g.lineTo(W - 28, y);
+      g.stroke();
+      if (r() > 0.25) {
+        g.fillStyle = `rgba(215,255,79,${0.22 + r() * 0.24})`;
+        g.fillRect(32, y - 13, 35 + r() * 120, 3);
+      }
+      if (r() > 0.45) {
+        g.fillStyle = "rgba(0,0,0,0.9)";
+        g.fillRect(170 + r() * 80, y - 9, 45 + r() * 150, 8);
+      }
+    }
+    g.strokeStyle = "rgba(215,255,79,0.82)";
+    g.strokeRect(27, 25, W - 54, H - 50);
+    g.fillStyle = "#d7ff4f";
+    g.shadowColor = "#d7ff4f";
+    g.shadowBlur = 15;
+    g.font = "italic 34px 'Times New Roman', serif";
+    g.fillText(k % 2 ? "NULL / INDEX" : "CACHE ONLY", 42, H - 45);
+    g.shadowBlur = 0;
   } else if (kind === "red") {
     // warm amber corridors: abstract stripes (no red-room curtains or zigzag floors)
     bg("#3a1a12");

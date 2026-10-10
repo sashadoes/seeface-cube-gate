@@ -99,6 +99,7 @@ export function createSound(): Sound {
       white: ["bandpass", 1600, 0.8],
       ash: ["bandpass", 1200, 0.5], // crunch
       deep: ["lowpass", 420, 3], // muffled
+      archive: ["bandpass", 680, 1.8], // a dry, close sound in the archive
     };
     const [type, freq, q] = tone[zone];
     f.type = type;

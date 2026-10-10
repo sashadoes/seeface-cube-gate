@@ -10,7 +10,8 @@ import { CELL, roomOf, wallEast, wallSouth } from "../labyrinth/maze";
 import { LEVELS, LEVEL_OFFSET, levelAtX, zoneAt } from "../labyrinth/zones";
 import { DEMONS, demonOf } from "../labyrinth/demons";
 import { cleanNick } from "../labyrinth/nick";
-import { MOD_PUBLIC_KEY, approvalText, type Post } from "../labyrinth/posts";
+import { MOD_PUBLIC_KEY, approvalText, verifySigned, type Post } from "../labyrinth/posts";
+import { IG, cleanText, plotApprovalText } from "../labyrinth/plots";
 import "./Watch.scss";
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
@@ -60,6 +61,23 @@ export default function Watch() {
   // posts waiting for approval (moderation)
   const posts = useRef(new Map<string, Post>());
   const approvedIds = useRef(new Set<string>());
+  // players' places: picture + instagram wait for approval (plots.ts)
+  type PlaceRow = { id: string; by: string; nick: string; name: string; ig: string; img: string; sig: string; ok: string };
+  const places = useRef(new Map<string, PlaceRow>());
+  const placeCheck = (id: string) => {
+    const r = places.current.get(id);
+    if (!r?.sig) return;
+    const text = plotApprovalText(r, r.img, r.ig);
+    void verifySigned(text, r.sig).then((ok) => {
+      r.ok = ok ? text : "";
+      setTick((n) => n + 1);
+    });
+  };
+  const placeRow = (id: string) => {
+    let r = places.current.get(id);
+    if (!r) places.current.set(id, (r = { id, by: "", nick: "", name: "", ig: "", img: "", sig: "", ok: "" }));
+    return r;
+  };
   const clientRef = useRef<ReturnType<typeof mqtt.connect> | null>(null);
   const [modKey, setModKey] = useState<{ priv: JsonWebKey; pub: JsonWebKey } | null>(() => {
     try {
@@ -116,6 +134,28 @@ export default function Watch() {
               if (typeof d.img === "string" && d.img.startsWith("data:image/jpeg;base64,")) posts.current.set(id, { ...d, id, nick: cleanNick(d.nick) ?? "someone" });
             } catch {
               posts.current.delete(id); // removed (empty retained message)
+            }
+            return;
+          }
+          if ((kind === "plot" || kind === "plotimg" || kind === "plotok") && id && /^r-?\d{1,3}_-?\d{1,3}$/.test(id)) {
+            try {
+              const d = JSON.parse(payload.toString());
+              const r = placeRow(id);
+              if (kind === "plot") {
+                if (d.gone) places.current.delete(id);
+                else {
+                  r.by = typeof d.by === "string" ? d.by.slice(0, 24) : "";
+                  r.nick = cleanNick(d.nick) ?? "someone";
+                  r.name = cleanText(d.d?.name, 24);
+                  r.ig = typeof d.d?.ig === "string" && IG.test(d.d.ig) ? d.d.ig : "";
+                }
+              }
+              if (kind === "plotimg") r.img = typeof d.img === "string" && d.img.startsWith("data:image/jpeg;base64,") ? d.img : "";
+              if (kind === "plotok") r.sig = typeof d.sig === "string" ? d.sig : "";
+              placeCheck(id);
+              setTick((n) => n + 1);
+            } catch {
+              // ignore garbage
             }
             return;
           }
@@ -393,6 +433,27 @@ export default function Watch() {
     approvedIds.current.add(p.id);
     setTick((n) => n + 1);
   }
+  async function approvePlace(r: PlaceRow) {
+    if (!modKey || !clientRef.current) return;
+    const key = await crypto.subtle.importKey("jwk", modKey.priv, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+    const text = plotApprovalText(r, r.img, r.ig);
+    const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(text)));
+    r.sig = btoa(String.fromCharCode(...sig));
+    r.ok = text;
+    clientRef.current.publish(`${LAB}/world/plotok/${r.id}`, JSON.stringify({ sig: r.sig }), { retain: true, qos: 1 });
+    setTick((n) => n + 1);
+  }
+  function removePlacePicture(r: PlaceRow) {
+    clientRef.current?.publish(`${LAB}/world/plotimg/${r.id}`, JSON.stringify({ none: 1 }), { retain: true, qos: 1 });
+    r.img = "";
+    setTick((n) => n + 1);
+  }
+  function removePlace(r: PlaceRow) {
+    clientRef.current?.publish(`${LAB}/world/plot/${r.id}`, JSON.stringify({ gone: 1 }), { retain: true, qos: 1 });
+    clientRef.current?.publish(`${LAB}/world/plotimg/${r.id}`, JSON.stringify({ none: 1 }), { retain: true, qos: 1 });
+    places.current.delete(r.id);
+    setTick((n) => n + 1);
+  }
   function remove(p: Post) {
     clientRef.current?.publish(`${LAB}/world/post/${p.id}`, "", { retain: true, qos: 1 });
     clientRef.current?.publish(`${LAB}/world/ok/${p.id}`, "", { retain: true, qos: 1 });
@@ -506,6 +567,34 @@ export default function Watch() {
                 </div>
               </div>
             ))}
+          {(() => {
+            const waiting = [...places.current.values()].filter((r) => r.by && (r.img || r.ig) && r.ok !== plotApprovalText(r, r.img, r.ig));
+            return (
+              <>
+                <div className="eye-list-head">places waiting · {waiting.length} · {[...places.current.values()].filter((r) => r.by).length} claimed</div>
+                {waiting.map((r) => (
+                  <div key={r.id} className="eye-post">
+                    {r.img ? <img src={r.img} alt="" /> : <span />}
+                    <div>
+                      <b>{r.name || "(not built)"}</b> by @{r.nick}
+                      <br />
+                      <small>
+                        {r.ig ? (
+                          <a href={`https://instagram.com/${r.ig}`} target="_blank" rel="noopener noreferrer">ig @{r.ig}</a>
+                        ) : "no instagram"}{" "}
+                        · room {r.id}
+                      </small>
+                    </div>
+                    <div className="row">
+                      <button disabled={!modKey} onClick={() => void approvePlace(r)}>approve</button>
+                      {r.img && <button onClick={() => removePlacePicture(r)}>remove picture</button>}
+                      <button onClick={() => removePlace(r)}>take the room</button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            );
+          })()}
           <div className="eye-list-head">
             players · {online.length} live · {list.length - online.length} recently left · relay {relay}
           </div>

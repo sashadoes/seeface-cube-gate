@@ -20,21 +20,31 @@ export const MOD_PUBLIC_KEY: JsonWebKey | null = null;
 export type Post = { id: string; img: string; cap: string; nick: string; by: string; x: number; z: number; ry: number; t: number; agreed?: number };
 
 export async function verifyApproval(post: Post, sig: string) {
+  return verifySigned(approvalText(post), sig);
+}
+
+/** was this text signed by the moderator? */
+export async function verifySigned(text: string, sig: string) {
   if (!MOD_PUBLIC_KEY) return false;
   try {
     const key = await crypto.subtle.importKey("jwk", MOD_PUBLIC_KEY, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
     const raw = Uint8Array.from(atob(sig), (c) => c.charCodeAt(0));
-    return crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, raw, new TextEncoder().encode(approvalText(post)));
+    return crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, raw, new TextEncoder().encode(text));
   } catch {
     return false;
   }
 }
 
+/** a short digest of a picture (what the moderator's signature covers) */
+export function imgDigest(img: string) {
+  let h = 0;
+  for (let k = 0; k < img.length; k += 7) h = (Math.imul(h, 31) + img.charCodeAt(k)) | 0;
+  return h;
+}
+
 /** what the moderator signs: the post id + a digest of its picture and words */
 export function approvalText(p: Post) {
-  let h = 0;
-  for (let k = 0; k < p.img.length; k += 7) h = (Math.imul(h, 31) + p.img.charCodeAt(k)) | 0;
-  return `${p.id}|${h}|${p.cap}`;
+  return `${p.id}|${imgDigest(p.img)}|${p.cap}`;
 }
 
 /** a picture file → a small JPEG (max 320 px) as a data URL */

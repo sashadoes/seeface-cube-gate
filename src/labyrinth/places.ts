@@ -8,6 +8,7 @@
 //   the museum      – exhibits floating under glass, photos in frames, labels
 //   the supermarket – aisles of colourful products, checkouts, buzzing tubes
 //   the dark room   – secret: a fake wall for a door, near-total dark, one cube
+//   the love fountain – a monument to flounderlove, forever: a heart fountain under the stars
 import * as THREE from "three";
 import { CELL, PLACE, WALL_H, darkDoorSide, placeAt, placeOf, type PlaceKind } from "./maze";
 import { relicMesh } from "./props";
@@ -24,6 +25,7 @@ export const PLACE_NAMES: Record<PlaceKind, string> = {
   dark: "the dark room",
   ritual: "the hall of champions",
   bazaar: "the open market",
+  love: "flounderlove's love fountain",
 };
 
 // ------------------------------------------------------------------ the market's stalls (fed by market.ts)
@@ -761,6 +763,204 @@ function buildBazaar(g: THREE.Group, b: Built) {
   b.spots.push({ x: 10, y: 3.2, z: 10, color: 0xffd8a0, intensity: 16 }, { x: 4, y: 3, z: 16, color: 0xffb0c0, intensity: 6 }, { x: 16, y: 3, z: 4, color: 0xffe0a0, intensity: 6 });
 }
 
+// ------------------------------------------------------------------ the love fountain
+// A monument dedicated forever to the player flounderlove (owner, 2026-10-07).
+// Open sky, a heart-shaped fountain, hearts rising from the water, their name
+// glowing above the walls and a dedication stone. Rose and blush, never red.
+const LOVE_NAME = "flounderlove";
+
+function heartShape(s: number) {
+  const sh = new THREE.Shape();
+  for (let k = 0; k <= 64; k++) {
+    const a = (k / 64) * Math.PI * 2;
+    const x = 16 * Math.sin(a) ** 3;
+    const y = 13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a) + 2.5;
+    if (k === 0) sh.moveTo(x * s, y * s);
+    else sh.lineTo(x * s, y * s);
+  }
+  return sh;
+}
+
+function heartTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const x = c.getContext("2d")!;
+  x.font = "48px serif";
+  x.textAlign = "center";
+  x.textBaseline = "middle";
+  x.fillStyle = "#ffd6e6";
+  x.shadowColor = "#ff8fbf";
+  x.shadowBlur = 14;
+  x.fillText("♥", 32, 34);
+  return new THREE.CanvasTexture(c);
+}
+
+function buildLove(g: THREE.Group, b: Built, r: () => number) {
+  // blush stone floor scattered with petals
+  const fc = document.createElement("canvas");
+  fc.width = fc.height = 512;
+  const fx2 = fc.getContext("2d")!;
+  fx2.fillStyle = "#2a1c22";
+  fx2.fillRect(0, 0, 512, 512);
+  fx2.strokeStyle = "rgba(255,200,220,0.08)";
+  fx2.lineWidth = 2;
+  for (let k = 0; k <= 512; k += 64) {
+    fx2.strokeRect(k, 0, 64, 512);
+    fx2.strokeRect(0, k, 512, 64);
+  }
+  for (let k = 0; k < 260; k++) {
+    fx2.save();
+    fx2.translate(r() * 512, r() * 512);
+    fx2.rotate(r() * Math.PI);
+    fx2.fillStyle = `rgba(255,${140 + r() * 70},${180 + r() * 40},${0.35 + r() * 0.45})`;
+    fx2.beginPath();
+    fx2.ellipse(0, 0, 3 + r() * 3, 1.5 + r() * 2, 0, 0, Math.PI * 2);
+    fx2.fill();
+    fx2.restore();
+  }
+  const ft = new THREE.CanvasTexture(fc);
+  ft.colorSpace = THREE.SRGBColorSpace;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(L, L), new THREE.MeshStandardMaterial({ map: ft, roughness: 0.35, metalness: 0.15 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(L / 2, 0.02, L / 2);
+  g.add(floor);
+
+  // the sky: stars and a pale pink moon
+  const n = 420, sp = new Float32Array(n * 3);
+  for (let k = 0; k < n; k++) {
+    const a = r() * Math.PI * 2, e = 0.15 + r() * 1.3, d = 40;
+    sp.set([L / 2 + Math.cos(a) * Math.cos(e) * d, 6 + Math.sin(e) * d, L / 2 + Math.sin(a) * Math.cos(e) * d], k * 3);
+  }
+  const sg = new THREE.BufferGeometry();
+  sg.setAttribute("position", new THREE.BufferAttribute(sp, 3));
+  g.add(new THREE.Points(sg, new THREE.PointsMaterial({ map: DOT, size: 0.5, color: 0xffe6f0, transparent: true, depthWrite: false, fog: false })));
+  const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: 0xffd8e6, fog: false, depthWrite: false }));
+  moon.scale.set(8, 8, 1);
+  moon.position.set(L / 2 - 12, 28, L / 2 - 16);
+  g.add(moon);
+
+  // the heart fountain (maze.ts SOLID: 7.6–12.4 × 7.8–12.2); its point faces the stone
+  const marble = mat(0xf2dce4, 0x2a1018, 0.4, 0.3);
+  const basin = new THREE.Mesh(new THREE.ExtrudeGeometry(heartShape(0.15), { depth: 0.6, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 2 }), marble);
+  basin.rotation.x = -Math.PI / 2;
+  basin.position.set(10, 0, 10);
+  g.add(basin);
+  const water = new THREE.Mesh(
+    new THREE.ShapeGeometry(heartShape(0.13)),
+    new THREE.MeshStandardMaterial({ color: 0xffa8cc, roughness: 0.05, metalness: 0.4, emissive: 0x5a1838, emissiveIntensity: 1, transparent: true, opacity: 0.85 }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(10, 0.68, 10);
+  g.add(water);
+  // the column and the floating heart above it
+  const rose = mat(0xe8b4a0, 0x3a1a10, 0.5, 0.25);
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.3, 1.4, 16), rose);
+  col.position.set(10, 1.3, 10);
+  g.add(col);
+  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.16, 1.4, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe0ee, transparent: true, opacity: 0.55, depthWrite: false }));
+  jet.position.set(10, 2.6, 10);
+  g.add(jet);
+  const heart = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(heartShape(0.045), { depth: 0.25, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.05, bevelSegments: 3 }),
+    new THREE.MeshStandardMaterial({ color: 0xff8fbf, roughness: 0.2, metalness: 0.3, emissive: 0xff4f9a, emissiveIntensity: 1.4 }),
+  );
+  heart.geometry.center();
+  const heartPivot = new THREE.Group();
+  heartPivot.position.set(10, 3.9, 10);
+  heartPivot.add(heart);
+  g.add(heartPivot);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: 0xff9fca, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  halo.scale.setScalar(3.4);
+  halo.position.set(10, 3.9, 10);
+  g.add(halo);
+
+  // hearts rising from the water and fading into the sky
+  const HEART = heartTexture();
+  const rising: THREE.Sprite[] = [];
+  for (let k = 0; k < 26; k++) {
+    const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: HEART, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    h.userData = { a: r() * Math.PI * 2, rad: 0.4 + r() * 1.4, p: r(), sp: 0.12 + r() * 0.1 };
+    rising.push(h);
+    g.add(h);
+  }
+
+  // rose bushes in the corners, benches facing the fountain
+  const leaf = mat(0x2f5a3a, 0x0a1a10, 0.4, 0.8);
+  const bloom = mat(0xffa8cc, 0x5a1838, 0.8, 0.5);
+  for (const [x, z] of [[3, 3], [17, 3], [3, 17], [17, 17]]) {
+    const bush = new THREE.Mesh(new THREE.SphereGeometry(0.9, 14, 12), leaf);
+    bush.position.set(x, 0.7, z);
+    g.add(bush);
+    for (let k = 0; k < 9; k++) {
+      const f = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), bloom);
+      const a = r() * Math.PI * 2, e = r() * 1.2;
+      f.position.set(x + Math.cos(a) * Math.cos(e) * 0.9, 0.7 + Math.sin(e) * 0.9, z + Math.sin(a) * Math.cos(e) * 0.9);
+      g.add(f);
+    }
+  }
+  const wood = mat(0x3a2a24, 0, 0, 0.7);
+  for (const [x, z] of [[5, 10], [15, 10]]) box(g, 0.6, 0.45, 2.2, x, 0.23, z, wood);
+
+  // the dedication stone (maze.ts SOLID: 9–11 × 14.6–15.4), readable from both sides
+  box(g, 2, 1.3, 0.8, 10, 0.65, 15, mat(0x3a2c32, 0, 0, 0.6));
+  const sc = document.createElement("canvas");
+  sc.width = 512;
+  sc.height = 320;
+  const sx = sc.getContext("2d")!;
+  sx.fillStyle = "#1c1418";
+  sx.fillRect(0, 0, 512, 320);
+  sx.strokeStyle = "rgba(232,180,160,0.7)";
+  sx.lineWidth = 4;
+  sx.strokeRect(10, 10, 492, 300);
+  sx.textAlign = "center";
+  sx.fillStyle = "#e8b4a0";
+  sx.font = "28px 'Times New Roman', serif";
+  sx.fillText("THE LOVE FOUNTAIN", 256, 62);
+  sx.fillStyle = "#ffd6e6";
+  sx.font = "italic 64px 'Times New Roman', serif";
+  sx.shadowColor = "#ff8fbf";
+  sx.shadowBlur = 16;
+  sx.fillText(LOVE_NAME, 256, 150, 470);
+  sx.shadowBlur = 0;
+  sx.fillStyle = "#cfb6be";
+  sx.font = "italic 30px 'Times New Roman', serif";
+  sx.fillText("dedicated forever", 256, 214);
+  sx.fillText("in the labyrinth · ♥", 256, 254);
+  const st = new THREE.CanvasTexture(sc);
+  st.colorSpace = THREE.SRGBColorSpace;
+  for (const side of [-1, 1]) {
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.125), new THREE.MeshBasicMaterial({ map: st, toneMapped: false }));
+    plate.position.set(10, 0.66, 15 + side * 0.41);
+    plate.rotation.y = side < 0 ? Math.PI : 0;
+    g.add(plate);
+  }
+
+  // the name glows above the north wall, seen from far under the open sky
+  const name = sign(g, `♥ ${LOVE_NAME} ♥`, 12, 2.4, 10, 7.2, 0.6, 0, { w: 1024, h: 205, color: "#ffc4dc", glow: true, font: "italic 120px 'Times New Roman', serif" });
+  (name.material as THREE.MeshBasicMaterial).fog = false;
+  const nameGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: 0xff7fb5, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.35, fog: false }));
+  nameGlow.scale.set(16, 5, 1);
+  nameGlow.position.set(10, 7.2, 0.4);
+  g.add(nameGlow);
+
+  b.anim.push((t) => {
+    heartPivot.rotation.y = t * 0.6;
+    heartPivot.position.y = 3.9 + Math.sin(t * 1.2) * 0.15;
+    const beat = 1 + Math.max(0, Math.sin(t * 5.2)) ** 8 * 0.12; // a slow heartbeat
+    heartPivot.scale.setScalar(beat);
+    (halo.material as THREE.SpriteMaterial).opacity = 0.45 + (beat - 1) * 3;
+    jet.scale.y = 1 + Math.sin(t * 6) * 0.08;
+    for (const h of rising) {
+      const u = h.userData, f = (u.p + t * u.sp) % 1;
+      h.position.set(10 + Math.cos(u.a + t * 0.3) * u.rad * (1 + f), 0.8 + f * 7, 10 + Math.sin(u.a + t * 0.3) * u.rad * (1 + f));
+      h.scale.setScalar(0.25 + f * 0.35);
+      (h.material as THREE.SpriteMaterial).opacity = Math.sin(f * Math.PI) * 0.9;
+    }
+    (nameGlow.material as THREE.SpriteMaterial).opacity = 0.28 + Math.sin(t * 1.4) * 0.08;
+  });
+  b.spots.push({ x: 10, y: 4.5, z: 10, color: 0xff9fca, intensity: 22 }, { x: 4, y: 3, z: 15, color: 0xffd8b8, intensity: 8 }, { x: 16, y: 3, z: 5, color: 0xffc0e0, intensity: 8 });
+}
+
 const BUILD: Record<PlaceKind, (g: THREE.Group, b: Built, r: () => number) => void> = {
   open: buildOpen,
   theater: buildTheater,
@@ -770,6 +970,7 @@ const BUILD: Record<PlaceKind, (g: THREE.Group, b: Built, r: () => number) => vo
   dark: (g, b) => buildDark(g, b),
   ritual: (g, b) => buildRitual(g, b),
   bazaar: (g, b) => buildBazaar(g, b),
+  love: buildLove,
 };
 
 // ------------------------------------------------------------------ the layer
