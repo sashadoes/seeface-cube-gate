@@ -847,6 +847,135 @@
   }
 }
 
+// voice: talk button beside the chat, who's speaking, who's in the wave
+.lab-chat-btns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lab-voice {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 16px;
+  color: #fff6e2;
+  font-size: 17px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 230, 184, 0.45);
+  border-radius: 22px;
+  cursor: pointer;
+  white-space: nowrap;
+  animation: lab-chat-in 0.3s ease-out both;
+
+  &.live {
+    border-color: #ffcf8a;
+    background: rgba(60, 34, 8, 0.7);
+    box-shadow: 0 0 18px rgba(255, 207, 138, 0.25);
+  }
+
+  &.live.speaking {
+    box-shadow: 0 0 26px rgba(255, 207, 138, 0.6);
+  }
+
+  &.vent {
+    cursor: default;
+    color: #d9cfbd;
+    border-style: dashed;
+  }
+}
+
+.lab-voice-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ffcf8a;
+  box-shadow: 0 0 8px #ffcf8a;
+  animation: lab-voice-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes lab-voice-pulse {
+  50% { opacity: 0.35; }
+}
+
+.lab-voice-count {
+  all: unset;
+  min-width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  border-radius: 22px;
+  text-align: center;
+  line-height: 44px;
+  color: #ffcf8a;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 230, 184, 0.3);
+  cursor: pointer;
+}
+
+.lab-voice-now {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 3px 11px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #d9cfbd;
+  font-size: 14px;
+
+  b {
+    font-weight: normal;
+    color: #ffcf8a;
+
+    &::before {
+      content: "◉ ";
+      font-style: normal;
+    }
+  }
+
+  .ears {
+    color: #c9b8ff;
+  }
+}
+
+.lab-voice-list {
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff6e2;
+  min-width: 180px;
+
+  > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+
+    > span {
+      font-style: normal;
+      color: #a9a293;
+    }
+
+    &.speaking > span {
+      color: #ffcf8a;
+    }
+  }
+
+  button {
+    all: unset;
+    margin-left: auto;
+    padding: 4px 10px;
+    border: 1px solid rgba(255, 230, 184, 0.35);
+    border-radius: 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+}
+
 .lab-chat-icon {
   font-style: normal;
   color: #ffcf8a;
@@ -1385,6 +1514,11 @@
   .err {
     color: #ff8a7a;
     font-size: 14px;
+  }
+
+  .note {
+    font-size: 14px;
+    color: #a9a293;
   }
 }
 

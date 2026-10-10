@@ -41,6 +41,8 @@ export type Peer = {
   nick: string;
   /** colour of the relic they're carrying (0 = none) */
   held: number;
+  /** their microphone is on (voice) */
+  mic: boolean;
   last: number;
   signal: number; // timestamp of their last light signal
 };
@@ -50,7 +52,7 @@ export type Presence = {
   peers: Map<string, Peer>;
   /** everyone in the labyrinth (beacons every 5 s), including people far away */
   far: Map<string, FarPeer>;
-  send: (s: { x: number; z: number; yaw: number; light: number; nick: string; held?: number }) => void;
+  send: (s: { x: number; z: number; yaw: number; light: number; nick: string; held?: number; mic?: boolean }) => void;
   signal: () => void;
   onSignal: (fn: (p: Peer) => void) => void;
   online: () => number;
@@ -75,6 +77,9 @@ export type Presence = {
   /** tell everyone you teleported (not sent when travelling incognito) */
   teleported: (from: { x: number; z: number }, to: { x: number; z: number }, nick: string) => void;
   onTeleport: (fn: (t: Teleport) => void) => void;
+  /** voice handshake: a small message to one person near you (never retained) */
+  direct: (to: string, data: object) => void;
+  onDirect: (fn: (from: Peer, data: Record<string, unknown>) => void) => void;
   close: () => void;
 };
 
@@ -95,13 +100,14 @@ export function createPresence(myId?: string): Presence {
   const sayFns: ((from: Peer, text: string) => void)[] = [];
   const emoteFns: ((from: Peer, kind: Emote) => void)[] = [];
   const tpFns: ((t: Teleport) => void)[] = [];
+  const directFns: ((from: Peer, data: Record<string, unknown>) => void)[] = [];
   let lastTp = 0;
   let lastSay = 0, lastEmote = 0;
   let lastCall = 0;
   let client: MqttClient | null = null;
   let relay = 0;
   let lastSend = 0;
-  let pending: { x: number; z: number; yaw: number; light: number; nick: string; held?: number } | null = null;
+  let pending: { x: number; z: number; yaw: number; light: number; nick: string; held?: number; mic?: boolean } | null = null;
 
   function connect() {
     client = mqtt.connect(RELAYS[relay], {
@@ -115,7 +121,7 @@ export function createPresence(myId?: string): Presence {
     client.on("connect", () => {
       subscribedAreas = new Set();
       lastArea = "";
-      client!.subscribe([`${ROOT}/where/+`, `${ROOT}/sig/+`, `${ROOT}/bye/+`, `${ROOT}/world/#`, `${ROOT}/hit/${me}`, `${ROOT}/kill/${me}`, `${ROOT}/call/${me}`, `${ROOT}/say/+`, `${ROOT}/emo/+`, `${ROOT}/tp/+`]);
+      client!.subscribe([`${ROOT}/where/+`, `${ROOT}/sig/+`, `${ROOT}/bye/+`, `${ROOT}/world/#`, `${ROOT}/hit/${me}`, `${ROOT}/kill/${me}`, `${ROOT}/call/${me}`, `${ROOT}/say/+`, `${ROOT}/emo/+`, `${ROOT}/tp/+`, `${ROOT}/rtc/${me}`]);
     });
     client.on("error", () => {
       // try the next relay
@@ -145,6 +151,18 @@ export function createPresence(myId?: string): Presence {
             if (text) sayFns.forEach((f) => f(from, text));
           }
           if (parts[3] === "emo" && (EMOTES as readonly string[]).includes(d.k)) emoteFns.forEach((f) => f(from, d.k));
+        } catch {
+          // ignore garbage
+        }
+        return;
+      }
+      if (parts[3] === "rtc") {
+        // only from someone actually walking near you
+        if (payload.length > 9000) return;
+        try {
+          const d = JSON.parse(payload.toString());
+          const from = typeof d.f === "string" ? peers.get(d.f) : undefined;
+          if (from && d && typeof d === "object") directFns.forEach((f) => f(from, d));
         } catch {
           // ignore garbage
         }
@@ -207,9 +225,10 @@ export function createPresence(myId?: string): Presence {
         // names are checked again here: never trust what another client sends
         const nick = cleanNick(m.n) ?? "wanderer";
         const held = finite(m.h, 0x1000000) ? Math.max(0, Math.round(m.h as number)) : 0;
+        const mic = m.v === 1;
         const p = peers.get(id);
-        if (p) Object.assign(p, { x: m.x, z: m.z, yaw: m.y, light: m.l, nick, held, last: Date.now() });
-        else peers.set(id, { id, x: m.x as number, z: m.z as number, yaw: m.y as number, light: m.l as number, nick, held, last: Date.now(), signal: 0 });
+        if (p) Object.assign(p, { x: m.x, z: m.z, yaw: m.y, light: m.l, nick, held, mic, last: Date.now() });
+        else peers.set(id, { id, x: m.x as number, z: m.z as number, yaw: m.y as number, light: m.l as number, nick, held, mic, last: Date.now(), signal: 0 });
       }
       if (kind === "where" && finite(m.x) && finite(m.z)) {
         far.set(id, { id, nick: cleanNick(m.n) ?? "wanderer", x: m.x as number, z: m.z as number, last: Date.now() });
@@ -250,9 +269,9 @@ export function createPresence(myId?: string): Presence {
   let lastBeacon = 0;
   function flush() {
     if (!pending || !client?.connected) return;
-    const { x, z, yaw, light, nick, held } = pending;
+    const { x, z, yaw, light, nick, held, mic } = pending;
     follow(x, z);
-    client.publish(`${ROOT}/pos/${areaOf(x, z)}/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0 }));
+    client.publish(`${ROOT}/pos/${areaOf(x, z)}/${me}`, JSON.stringify({ x: +x.toFixed(2), z: +z.toFixed(2), y: +yaw.toFixed(2), l: Math.round(light), n: nick, h: held ?? 0, ...(mic ? { v: 1 } : {}) }));
     if (Date.now() - lastBeacon > BEACON_MS) {
       lastBeacon = Date.now();
       client.publish(`${ROOT}/where/${me}`, JSON.stringify({ x: Math.round(x), z: Math.round(z), n: nick }));
@@ -327,6 +346,13 @@ export function createPresence(myId?: string): Presence {
     },
     onTeleport(fn) {
       tpFns.push(fn);
+    },
+    direct(to, data) {
+      if (!/^[a-z0-9]{1,16}$/.test(to)) return;
+      client?.publish(`${ROOT}/rtc/${to}`, JSON.stringify({ ...data, f: me }));
+    },
+    onDirect(fn) {
+      directFns.push(fn);
     },
     publishWorld(path, data) {
       client?.publish(`${ROOT}/world/${path}`, JSON.stringify(data), { retain: true, qos: 1 });

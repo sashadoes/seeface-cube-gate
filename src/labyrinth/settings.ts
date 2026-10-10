@@ -9,6 +9,7 @@ export type Settings = {
   radio: number; // the Hollow's static
   voices: number; // sirens, the Pop Queen's tune, choirs
   records: number; // gramophones + radio music
+  talk: number; // people's voices (voice chat)
   // game
   showNames: boolean;
   showChat: boolean;
@@ -33,6 +34,7 @@ export const DEFAULTS: Settings = {
   radio: 1,
   voices: 1,
   records: 0.9,
+  talk: 1,
   showNames: true,
   showChat: true,
   showHints: true,

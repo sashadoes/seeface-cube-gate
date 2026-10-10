@@ -57,6 +57,7 @@ import { createMarket, type Listing } from "./market";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions, setStalls } from "./places";
 import { createChampions, playerId } from "./champions";
 import { createGramophones } from "./gramophone";
+import { createVents, createVoice, type Voice, type VoiceView } from "./voice";
 import { EFFECTS, RECORDS, type FxId, type RecordId } from "./music";
 import { STATIONS, createStations } from "./stations";
 import { createAfterlife, ORDER_COST } from "./afterlife";
@@ -476,6 +477,37 @@ function Game({ nick }: { nick: string }) {
   const chatInput = useRef<HTMLInputElement>(null);
   const logEnd = useRef<HTMLDivElement>(null);
   const muted = useRef(new Set<string>());
+  // voice: hear everyone in your room (or right next to you), tap "talk" to be heard
+  const voiceRef = useRef<Voice | null>(null);
+  const [voice, setVoice] = useState<VoiceView>({ where: "none", mic: false, speaking: false, people: [], around: 0, ears: 0, vent: 0 });
+  const [voiceAsk, setVoiceAsk] = useState(false); // the one-time "18+ · how voice works" sheet
+  const [voiceList, setVoiceList] = useState(false);
+  const toggleTalk = async (agreed = false) => {
+    const v = voiceRef.current;
+    if (!v) return;
+    if (v.mic()) {
+      v.mute();
+      return;
+    }
+    let ok = agreed;
+    try {
+      if (agreed) localStorage.setItem("seeface-voice-ok", "1");
+      ok ||= localStorage.getItem("seeface-voice-ok") === "1";
+    } catch {
+      // storage blocked: ask every visit
+    }
+    if (!ok) {
+      setVoiceAsk(true);
+      return;
+    }
+    setVoiceAsk(false);
+    const r = await v.talk();
+    if (r === "ok") track("voice-talk");
+    else if (r === "denied") say(tr("the microphone is blocked. allow it in your browser."), true);
+    else if (r === "unsupported") say(tr("voice doesn't work in this browser"), true);
+  };
+  const toggleTalkRef = useRef(toggleTalk);
+  toggleTalkRef.current = toggleTalk;
   const lineKey = useRef(0);
   const addLine = (l: Omit<Line, "key">) => {
     const line = { ...l, key: ++lineKey.current };
@@ -489,6 +521,7 @@ function Game({ nick }: { nick: string }) {
   }, [chatOpen, log.length]);
   const muteLine = (l: Line) => {
     muted.current.add(l.id);
+    voiceRef.current?.drop(l.id);
     setChat((c) => c.filter((x) => x.id !== l.id));
     setLog((c) => c.filter((x) => x.id !== l.id));
     setLineMenu(null);
@@ -706,6 +739,11 @@ function Game({ nick }: { nick: string }) {
     inputRef.current = input;
     const radio = createRadio();
     const sound = createSound();
+    // voice: rooms are waves, meeting someone opens one, vents let you overhear a room
+    const voice = createVoice(presence, sound.ctx, { isMuted: (id) => muted.current.has(id), onChange: setVoice });
+    voiceRef.current = voice;
+    const vents = createVents();
+    world.scene.add(vents.group);
     // the daily dream drop: new objects + a dream event every day (public/dream/today.json)
     const dreamFx = document.createElement("div");
     dreamFx.className = "lab-dream-fx";
@@ -740,6 +778,7 @@ function Game({ nick }: { nick: string }) {
       if (e.code === "KeyF") strikeRef.current();
       if (e.code === "KeyG") dropRef.current();
       if (e.code === "KeyP") snapRef.current();
+      if (e.code === "KeyV") void toggleTalkRef.current();
     };
     window.addEventListener("keydown", onKey);
     const wake = () => {
@@ -1216,6 +1255,7 @@ function Game({ nick }: { nick: string }) {
     const sfx: [Howl, number][] = [[spinSfx, 0.5], [shardSfx, 0.6], [shiftSfx, 0.7], [caughtSfx, 0.8], [signalSfx, 0.35], [meetSfx, 0.5]];
     const offSettings = onSettings((st) => {
       sound.setVolumes(st);
+      voice.setVolume(st.talk * st.master);
       radio.setVolume(st.radio * st.master);
       sfx.forEach(([h, base]) => h.volume(base * st.effects * st.master));
       perf.setQuality(pixelRatio(st.quality), st.quality);
@@ -1663,7 +1703,9 @@ function Game({ nick }: { nick: string }) {
       renderer.toneMappingExposure += ((inPlace?.kind === "dark" ? 0.12 : world.zone().exposure) - renderer.toneMappingExposure) * Math.min(1, dt * 1.5);
 
       // other wanderers
-      presence.send({ x: pos.x, z: pos.z, yaw: input.yaw, light, nick, held: held ? held.colour : 0 });
+      presence.send({ x: pos.x, z: pos.z, yaw: input.yaw, light, nick, held: held ? held.colour : 0, mic: voice.mic() });
+      voice.update(pos.x, pos.z, dt);
+      vents.update(pos.x, pos.z, () => voice.ventsNear(pos.x, pos.z), voice.charge(), t);
       wishes.update(pos.x, pos.z, dt);
       const meet = others.update(dt, t, pos.x, pos.z);
       if (meet.nearest < 4 && !metSomeone) {
@@ -2205,6 +2247,8 @@ function Game({ nick }: { nick: string }) {
       window.removeEventListener("pointerdown", wake);
       window.removeEventListener("keydown", wake);
       window.removeEventListener("keydown", onKey);
+      voice.close();
+      voiceRef.current = null;
       presence.close();
       stopOnline();
       renderer.dispose();
@@ -2751,6 +2795,22 @@ function Game({ nick }: { nick: string }) {
         </div>
       )}
 
+      {voiceAsk && (
+        <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
+          <div className="lab-bag-title">◉ {tr("talk with your voice")}</div>
+          <div className="lab-soul">
+            <p>{tr("everyone in the same room hears you live, and you hear them. in the corridors, only people right next to you.")}</p>
+            <p>{tr("walls have ears: someone may be listening through a vent. you'll see when they are.")}</p>
+            <p>{tr("only for 18+. be kind. tap the number next to talk to mute someone.")}</p>
+            <p className="note">{tr("your voice goes straight between devices, never recorded. the people you talk with can see your network address.")}</p>
+            <div className="row">
+              <button onClick={() => void toggleTalk(true)}>{tr("i'm 18+, let me talk")}</button>
+              <button onClick={() => setVoiceAsk(false)}>{tr("not now")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {shop && (
         <div className="lab-bag" onPointerDown={stop} onPointerUp={stop}>
           <div className="lab-bag-title">◇ {npcName(shop)}</div>
@@ -2891,6 +2951,7 @@ function Game({ nick }: { nick: string }) {
                       ["ambience", "ambience · rain, wind, thunder"],
                       ["voices", "voices · sirens, songs, choirs"],
                       ["records", "gramophones & radio music"],
+                      ["talk", "people talking · voice"],
                       ["radio", "the radio · the Hollow's static"],
                     ] as const
                   ).map(([k, label]) => (
@@ -2949,6 +3010,7 @@ function Game({ nick }: { nick: string }) {
                     <span>{tr("G · drop a relic")}</span>
                     <span>{tr("P · snapshot")}</span>
                     <span>{tr("T / enter · talk")}</span>
+                    <span>V · {tr("talk with your voice")}</span>
                     <span>{tr("esc · settings")}</span>
                   </div>
                 </>
@@ -3098,10 +3160,52 @@ function Game({ nick }: { nick: string }) {
                 <b>{l.mine ? tr("you") : l.nick}</b> {l.text}
               </button>
             ))}
-            <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label={tr("open chat")}>
-              <span className="lab-chat-icon">❝</span> {tr("chat")}
-              {unread > 0 && <span className="lab-chat-badge">{unread > 9 ? "9+" : unread}</span>}
-            </button>
+            {voiceList && voice.people.length > 0 && (
+              <div className="lab-voice-list">
+                {voice.people.map((p) => (
+                  <div key={p.id} className={p.speaking ? "speaking" : ""}>
+                    <span>{p.mic ? "●" : "○"}</span> {p.nick}
+                    <button onClick={() => muteLine({ key: 0, id: p.id, nick: p.nick, text: "" })}>{tr("mute")}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(voice.people.some((p) => p.speaking) || voice.ears > 0 || voice.where === "vent") && (
+              <div className="lab-voice-now">
+                {voice.where === "vent" && voice.vent < 1 && <span>{tr("lean in…")}</span>}
+                {voice.people.filter((p) => p.speaking).map((p) => (
+                  <b key={p.id}>{p.nick}</b>
+                ))}
+                {voice.ears > 0 && <span className="ears">{tr("someone is listening through the wall")}</span>}
+              </div>
+            )}
+            <div className="lab-chat-btns">
+              <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label={tr("open chat")}>
+                <span className="lab-chat-icon">❝</span> {tr("chat")}
+                {unread > 0 && <span className="lab-chat-badge">{unread > 9 ? "9+" : unread}</span>}
+              </button>
+              {(voice.where !== "none" || voice.mic) &&
+                (voice.where === "vent" ? (
+                  <span className="lab-voice vent">⁂ {tr("listening")}</span>
+                ) : (
+                  <button className={"lab-voice" + (voice.mic ? " live" : "") + (voice.speaking ? " speaking" : "")} onClick={() => void toggleTalk()} aria-pressed={voice.mic}>
+                    {voice.mic ? (
+                      <>
+                        <span className="lab-voice-dot" /> {tr("live · tap to mute")}
+                      </>
+                    ) : (
+                      <>
+                        <span className="lab-chat-icon">◉</span> {tr("talk")}
+                      </>
+                    )}
+                  </button>
+                ))}
+              {voice.people.length > 0 && voice.where !== "vent" && (
+                <button className="lab-voice-count" onClick={() => setVoiceList((v) => !v)} aria-label={tr("who's in the voice")}>
+                  {voice.people.length}
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>
