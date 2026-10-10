@@ -15,6 +15,7 @@ import { track } from "../../analytics";
 import { initMystery, mysteryStep, buzz } from "./mystery";
 import { initAlive } from "./alive";
 import { enterDigit } from "./gate";
+import { startPrelaunch } from "./prelaunch";
 
 import "./CubeStyle.scss";
 
@@ -337,6 +338,8 @@ muteWhenHidden();
 
 export default function Cube() {
   useEffect(() => {
+    // the cube's real job on arrival: load the world while it's being played with
+    startPrelaunch();
     var events = new Events();
     events.add = function (obj) {
       obj.events = {};

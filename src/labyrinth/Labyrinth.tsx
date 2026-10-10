@@ -125,9 +125,21 @@ function readBest() {
 
 /** Every player picks a nickname before entering. */
 /** A nickname is mandatory on every entry (pre-filled with the last one). */
+// Through the cube's gate the world starts at once (the cube already loaded it):
+// your saved name, your account's, or a new face_1234. The name / account screen
+// is there on every later visit (and ⚙ is always reachable in the world).
+function gateNick(): string | null {
+  if (new URLSearchParams(location.search).get("from") !== "gate") return null;
+  const n = currentAccount()?.nick ?? savedNick() ?? `face_${Math.floor(1000 + Math.random() * 9000)}`;
+  saveNick(n);
+  void registerPlayer({ nick: n, consent: false, ref: new URLSearchParams(location.search).get("with") ?? undefined });
+  track("nick-auto-gate");
+  return n;
+}
+
 export default function Labyrinth() {
   useLang();
-  const [nick, setNick] = useState<string | null>(null);
+  const [nick, setNick] = useState<string | null>(gateNick);
   if (!nick) return <NickGate onDone={setNick} />;
   return <Game nick={nick} />;
 }
@@ -774,6 +786,10 @@ function Game({ nick }: { nick: string }) {
   const [snapState, setSnapState] = useState<"" | "busy" | "done">("");
   const [transit, setTransit] = useState<number | null>(null); // teleport progress 0–1
   const [gfxCheck, setGfxCheck] = useState<CheckState | null>(null); // the device check screen
+  // the arrival light: through the cube's gate you land out of white; on a first
+  // visit it stays a little hazy while the device is measured behind it
+  const [arrive, setArrive] = useState<"in" | "out" | "gone">(() => (new URLSearchParams(location.search).get("from") === "gate" ? "in" : "gone"));
+  const arriveFrom = useRef(1); // the haze's opacity when it starts lifting
   const gfxCheckRef = useRef<() => void>(() => {});
   const gfxPickRef = useRef<(tier: Tier, how: "recommended" | "manual") => void>(() => {});
   const [hud, setHud] = useState<Hud>({ event: null, holding: false, level: 0, light: 100, stamina: 100, shards: 0, depth: 0, danger: 0, near: false, online: 1, met: false, blood: readBlood(), knife: false, dead: null, killedBy: null });
@@ -806,6 +822,7 @@ function Game({ nick }: { nick: string }) {
     const fx = createFx(renderer, world.scene, camera, myVibe());
     const stopVibe = trackVibe();
     const perf = createPerf(renderer, world.scene, (pr) => fx.setPixelRatio(pr));
+    world.setUploader((t) => renderer.initTexture(t));
     // first visit: a guess right away, then the device check screen (graphics.ts) picks for real
     const device = describeDevice(renderer);
     if (!hasSavedSettings()) setSettings({ quality: device.hint });
@@ -1398,25 +1415,50 @@ function Game({ nick }: { nick: string }) {
     });
 
     // ---------------------------------------------------------------- the device check (first visit)
-    // ~2.5 s on the HIGH look (not saved) measuring the real frame rate, then a
-    // suggestion; the world keeps running behind the dimmed screen.
-    const runCheck = async () => {
+    // ~2.5 s on the HIGH look (not saved) measuring the real frame rate.
+    // First visit: silent, hidden behind the arrival light (no dialog; the
+    // recommended tier is simply used, ⚙ settings → graphics can change it).
+    // From settings ("check my device again"): the screen with the suggestion.
+    const runCheck = async (silent: boolean) => {
       if (checking) return;
       checking = true;
-      setGfxCheck({ phase: "checking", device: device.label });
+      if (!silent) setGfxCheck({ phase: "checking", device: device.label });
       await new Promise((r) => setTimeout(r, 900)); // let the first shaders compile
       perf.setQuality(pixelRatio("high"), "high");
       fx.setEnabled(settings().glow);
+      // a tab sent to the background mid-check stops drawing: that's not the device's speed
+      let hidden = document.hidden;
+      const onVis = () => (hidden ||= document.hidden);
+      document.addEventListener("visibilitychange", onVis);
       const fps = await perf.bench(2500);
+      document.removeEventListener("visibilitychange", onVis);
       checking = false;
+      const recommended = decideTier(device, fps);
+      if (silent && (hidden || fps < 8)) {
+        // not a real measurement: keep the device guess, measure again next visit
+        const st = settings();
+        perf.setQuality(pixelRatio(st.quality), st.quality);
+        fx.setEnabled(st.glow && profile(st.quality).post);
+        track(hidden ? "gfx-check-hidden" : "gfx-check-implausible");
+        arriveFrom.current = 0.22;
+        setArrive("out");
+        return;
+      }
+      if (silent) {
+        saveGraphics({ device: device.label, recommended, fps: Math.round(fps), chosen: "auto", at: Date.now() });
+        setSettings({ quality: recommended }); // also puts the right look back (onSettings)
+        track(`gfx-check-auto-${recommended}`);
+        arriveFrom.current = 0.22; // the haze has settled by now
+        setArrive("out");
+        return;
+      }
       const st = settings();
       perf.setQuality(pixelRatio(st.quality), st.quality);
       fx.setEnabled(st.glow && profile(st.quality).post);
-      const recommended = decideTier(device, fps);
       setGfxCheck({ phase: "result", device: device.label, recommended, fps: Math.round(fps) });
       track(`gfx-check-${recommended}`);
     };
-    gfxCheckRef.current = () => void runCheck();
+    gfxCheckRef.current = () => void runCheck(false);
     gfxPickRef.current = (tier, how) => {
       setGfxCheck((c) => {
         if (c?.phase === "result") saveGraphics({ device: c.device, recommended: c.recommended, fps: c.fps, chosen: how, at: Date.now() });
@@ -1425,7 +1467,10 @@ function Game({ nick }: { nick: string }) {
       setSettings({ quality: tier });
       track(`gfx-${how}-${tier}`);
     };
-    const checkTimer = readGraphics() ? 0 : window.setTimeout(runCheck, 1200);
+    const firstCheck = !readGraphics();
+    const checkTimer = firstCheck ? window.setTimeout(() => void runCheck(true), 150) : 0;
+    // the arrival light lifts right away when there's nothing to measure
+    const arriveTimer = firstCheck ? 0 : window.setTimeout(() => setArrive("out"), 250);
 
     // safety net: still too slow at the lowest sharpness → one tier down, and say so
     perf.onStruggle(() => {
@@ -1605,7 +1650,9 @@ function Game({ nick }: { nick: string }) {
         }
       }
     };
-    let trip: { from: { x: number; z: number }; spot: { x: number; z: number }; incognito: boolean; start: number; loaded: boolean; shown: number } | null = null;
+    // `uploads`: the destination's textures, put on the graphics chip a few per frame while
+    // nothing is drawn; `loaded` once they're all there (the pictures are in and uploaded)
+    let trip: { from: { x: number; z: number }; spot: { x: number; z: number }; incognito: boolean; start: number; loaded: boolean; shown: number; uploads: THREE.Texture[] | null } | null = null;
     const teleport = (x: number, z: number, incognito: boolean): string | null => {
       const cost = incognito ? INCOGNITO_COST : TELEPORT_COST;
       if (!alive) return tr("not now");
@@ -1629,8 +1676,8 @@ function Game({ nick }: { nick: string }) {
       // closing the tab mid-trip still lands you there next time (the card is spent)
       saveResume({ x: spot.x, z: spot.z, yaw: +input.yaw.toFixed(3), light: Math.round(light), shards, depth, metres: Math.round(metres), place: whereName(spot.x, spot.z) });
       presence.peek(spot.x, spot.z);
-      const tr0 = { from, spot, incognito, start: performance.now(), loaded: false, shown: -1 };
-      world.prepare(spot.x, spot.z).then(() => (tr0.loaded = true));
+      const tr0: NonNullable<typeof trip> = { from, spot, incognito, start: performance.now(), loaded: false, shown: -1, uploads: null };
+      world.prepare(spot.x, spot.z).then((texs) => (tr0.uploads = texs));
       trip = tr0;
       setTransit(0);
       track("teleport-start");
@@ -1871,6 +1918,7 @@ function Game({ nick }: { nick: string }) {
       }
 
       world.update(pos.x, pos.z, t, dt);
+      if (alive) world.lookAhead(pos.x, pos.z, vel.x, vel.z);
       residents.update(dt, t, { px: pos.x, pz: pos.z, light });
       artLayer.update(pos.x, pos.z, dt);
       props.update(pos.x, pos.z, t);
@@ -2443,12 +2491,21 @@ function Game({ nick }: { nick: string }) {
       }
       fx.setDanger(alive ? lastDanger : 0);
       fx.update(dt, t, { x: pos.x, z: pos.z, moving: Math.hypot(vel.x, vel.z) > 0.6, sky, zoneTint: world.zone().panel });
-      if (idle < 30_000) perf.frame(dtReal, camera); // idle frames are slow on purpose: don't let them count
+      // idle frames are slow on purpose, and in transit nothing is drawn: don't let them count
+      if (idle < 30_000 && !trip) perf.frame(dtReal, camera);
       sweep(world.scene);
       immersive.update(dt, perf.info().scale, alive ? lastDanger : 0);
       renderer.info.reset();
       if (trip) {
-        // ---------------- teleport transit: the screen covers everything, so nothing is drawn
+        // ---------------- teleport transit: the screen covers everything, so nothing is drawn;
+        // the free graphics chip takes the destination's textures, two per frame
+        if (trip.uploads) {
+          for (let k = 0; k < 2 && trip.uploads.length; k++) renderer.initTexture(trip.uploads.pop()!);
+          if (!trip.uploads.length) {
+            trip.uploads = null;
+            trip.loaded = true;
+          }
+        }
         const waited = performance.now() - trip.start;
         const time = Math.min(1, waited / TELEPORT_DURATION_MS);
         // time carries the bar to 90%; the last 10% is the destination actually loading.
@@ -2515,6 +2572,7 @@ function Game({ nick }: { nick: string }) {
       offSettings();
       overlay?.dispose();
       clearTimeout(checkTimer);
+      clearTimeout(arriveTimer);
       inputEvents.forEach((e) => window.removeEventListener(e, poke));
       clearInterval(rememberTimer);
       window.removeEventListener("pagehide", remember);
@@ -3501,6 +3559,8 @@ function Game({ nick }: { nick: string }) {
       )}
 
       {transit !== null && <Transit progress={transit} />}
+
+      {arrive !== "gone" && <div className={`lab-arrive ${arrive}`} style={{ ["--from" as string]: arriveFrom.current }} aria-hidden onAnimationEnd={(e) => e.animationName === "lab-arrive-out" && setArrive("gone")} />}
 
       {gfxCheck && (
         <Suspense fallback={null}>

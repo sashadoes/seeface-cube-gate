@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { CELL, WALL_H, hasPanel, inShip, placeAt, roomCentre, roomOf, wallEast, wallSouth, rnd } from "./maze";
 import type { Weather } from "../marks/weather";
 import { createRelief } from "./relief";
-import { WALL_VARIANTS, textureReady, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, ZONE_CELLS, type ZoneDef } from "./zones";
+import { WALL_VARIANTS, pictureMs, textureReady, zoneAt, zoneFloorMaterial, zoneOfCell, zoneWallMaterial, ZONE_CELLS, type ZoneDef } from "./zones";
 import { MAX_VIEW, profile } from "./tiers";
 import { release } from "./gpu";
 
@@ -40,8 +40,12 @@ export type World = {
   setEdgeFog: (f: number) => void;
   /** location textures currently on the graphics chip / known (perf overlay) */
   zoneInfo: () => { kinds: string[]; resident: number; parked: number };
-  /** load these locations' textures now (teleport destination); resolves when they're ready */
-  prepare: (x: number, z: number) => Promise<void>;
+  /** load these locations' textures now (teleport destination); resolves with them once their pictures are in */
+  prepare: (x: number, z: number) => Promise<THREE.Texture[]>;
+  /** walking: start loading the locations ahead of you, and put back on the graphics chip the ones you're about to see */
+  lookAhead: (px: number, pz: number, vx: number, vz: number) => void;
+  /** how to put a texture on the graphics chip ahead of time (renderer.initTexture) */
+  setUploader: (fn: (t: THREE.Texture) => void) => void;
   /** free every location texture not on screen right now (after a teleport) */
   parkNow: () => void;
 };
@@ -453,7 +457,9 @@ export function createWorld(): World {
     for (const [key, m] of wallMeshes) if (m.visible) kinds.add(key.split(":")[0]);
     return { kinds: [...kinds], resident, parked: parked.size };
   }
-  // Teleport: build the destination's location textures and wait for the pictures
+  // Teleport: build the destination's location textures and wait for the pictures;
+  // the locations around it start loading too (not waited for), so the first
+  // steps after arriving don't walk into grey walls.
   function prepare(x: number, z: number) {
     const ci = Math.floor(x / CELL), cj = Math.floor(z / CELL);
     const zones = new Map<string, ZoneDef>();
@@ -462,16 +468,78 @@ export function createWorld(): World {
       zones.set(zn.kind, zn);
     }
     const waits: Promise<void>[] = [];
+    const texs: THREE.Texture[] = [];
+    const keep = (t: THREE.Texture | null) => {
+      if (!t) return;
+      texs.push(t);
+      waits.push(textureReady(t));
+    };
+    const now = performance.now();
     for (const zn of zones.values()) {
       warmZone(zn);
       kindsSeen.set(zn.kind, zn);
-      for (let v = 0; v < WALL_VARIANTS; v++) waits.push(textureReady(zoneWallMaterial(zn, v).map));
-      waits.push(textureReady(zoneFloorMaterial(zn).map));
+      for (let v = 0; v < WALL_VARIANTS; v++) {
+        keep(zoneWallMaterial(zn, v).map);
+        // about to be seen: don't let the next rebuild park it again
+        const m = wallMeshes.get(`${zn.kind}:${v}`);
+        if (m) m.userData.used = now;
+      }
+      keep(zoneFloorMaterial(zn).map);
+      floorUsed.set(zn.kind, now);
     }
-    return Promise.all(waits).then(() => undefined);
+    prefetchAround(ci, cj, profile().view);
+    return Promise.all(waits).then(() => texs);
   }
 
-  return { scene, update, zoneInfo, prepare, parkNow: () => park(performance.now(), 0), setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => {
+  // ---------------------------------------------------------------- walking ahead
+  // Every half second while walking: look along where you're heading (and a
+  // little to each side). Locations within reach start downloading; parked ones
+  // you're about to see go back on the graphics chip a few frames early, so
+  // turning a corner never hitches on a texture upload. The reach grows with
+  // the network: if pictures take 3 s to arrive, we start ~6 cells earlier.
+  let upload: (t: THREE.Texture) => void = () => {};
+  let aheadAt = 0;
+  function lookAhead(px: number, pz: number, vx: number, vz: number) {
+    const now = performance.now();
+    const speed = Math.hypot(vx, vz);
+    if (now - aheadAt < 500 || speed < 0.5) return;
+    aheadAt = now;
+    const view = profile().view;
+    const extra = Math.min(8, Math.round(pictureMs() / 500)); // ~1 cell per half second of waiting
+    const ci = px / CELL, cj = pz / CELL;
+    const hx = vx / speed, hz = vz / speed;
+    const kinds = new Map<string, { zone: ZoneDef; near: boolean }>();
+    for (const turn of [0, -0.45, 0.45]) {
+      const c = Math.cos(turn), sn = Math.sin(turn);
+      const dx = hx * c - hz * sn, dz = hx * sn + hz * c;
+      for (let r = view; r <= view + 4 + extra; r += 2) {
+        const zone = zoneOfCell(Math.floor(ci + dx * r), Math.floor(cj + dz * r));
+        const near = r <= view + 3;
+        const had = kinds.get(zone.kind);
+        if (!had || (near && !had.near)) kinds.set(zone.kind, { zone, near });
+      }
+    }
+    for (const { zone, near } of kinds.values()) {
+      kindsSeen.set(zone.kind, zone);
+      if (!prefetched.has(zone.kind)) {
+        prefetched.add(zone.kind);
+        warmZone(zone);
+      }
+      if (!near) continue;
+      // about to come into view: back on the chip, and marked as used so park() leaves it
+      for (let v = 0; v < WALL_VARIANTS; v++) {
+        const m = wallMeshes.get(`${zone.kind}:${v}`);
+        if (m) m.userData.used = now;
+        const t = zoneWallMaterial(zone, v).map;
+        if (t && parked.delete(t)) upload(t);
+      }
+      floorUsed.set(zone.kind, now);
+      const ft = zoneFloorMaterial(zone).map;
+      if (ft && parked.delete(ft)) upload(ft);
+    }
+  }
+
+  return { scene, update, zoneInfo, prepare, lookAhead, setUploader: (fn: (t: THREE.Texture) => void) => (upload = fn), parkNow: () => park(performance.now(), 0), setWeather, nearestCube, spinCube, isLit, setDepth, zone: () => currentZone, setEdgeFog: (f: number) => (edgeFog = f), setWet: (w: number) => {
     wet = w;
     relief.setWet(w);
   }, setFlashes: (on: boolean) => (flashesOn = on), setSpace: (on: boolean) => (space = on), setCeiling: (on: boolean) => {
