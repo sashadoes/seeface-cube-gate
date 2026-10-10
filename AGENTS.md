@@ -126,6 +126,7 @@ is done, copy `src/components/cube/*` back into
 - Agents run through `.github/workflows/claude.yml` when someone writes `@claude` in an issue or PR.
 - One issue = one PR. Keep PRs focused, and run `npm run build` (and `npm run typecheck` once it's green) before you push.
 - Don't edit `reference/`.
+- **Branches & releases (owner, 2026-10-10): read `docs/RELEASES.md`.** `main` = seeface.world (only the owner merges, via a release PR from `develop`); `develop` = dev.seeface.world (the test site, Cloudflare Pages); every `feature/*` / `fix/*` branch gets its own Cloudflare preview link. Branch off `develop`, push as you go, send the owner the link, PR into `develop`. **Never push to `main`.** Test builds (`VITE_STAGE=test`, `src/stage.ts`) are a separate world on the relay (`seeface1-test/…`), marked test, no GoatCounter, no service worker, noindex.
 - **Deploys:** every push/merge to `main` builds and publishes to https://seeface.world (the main domain since 2026-10-09; the old seeface1.world redirects here from the `sashadoes/seeface-world-redirect` repo) via `.github/workflows/deploy.yml` (GitHub Pages). Keep `main` green: a broken build means a broken live site. `public/CNAME` holds the domain; don't delete it.
 - **Open branch:** `feature/win-form` has the win check + Instagram winner form (Web3Forms key still missing, not wired into `App.tsx`).
 

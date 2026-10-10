@@ -6,12 +6,13 @@
 import type { MqttClient } from "mqtt";
 import { cleanNick } from "./nick";
 import { filterMark } from "../marks/filter";
+import { IS_TEST, RELAY } from "../stage";
 
 export const EMOTES = ["stare", "spin", "melt", "float", "scream"] as const;
 export type Emote = (typeof EMOTES)[number];
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
-const ROOT = "seeface1/lab/v1";
+const ROOT = `${RELAY}/lab/v1`;
 // phones send a little less often (battery, data)
 const SEND_HZ = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches ? 4 : 6;
 // interest areas: you only receive the positions of people in your 64 m square
@@ -26,7 +27,7 @@ const FAR_STALE_MS = 16000;
 const SENDER: "r" | "d" | "b" =
   typeof navigator !== "undefined" && (navigator.webdriver || /Headless/i.test(navigator.userAgent))
     ? "b"
-    : !import.meta.env.DEV && typeof location !== "undefined" && /(^|\.)seeface1?\.world$/.test(location.hostname)
+    : !import.meta.env.DEV && !IS_TEST && typeof location !== "undefined" && /(^|\.)seeface1?\.world$/.test(location.hostname)
       ? "r"
       : "d";
 const areaOf = (x: number, z: number) => `${Math.floor(x / AREA_M)}_${Math.floor(z / AREA_M)}`;

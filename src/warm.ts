@@ -3,6 +3,8 @@
 // first-frame files in the background, so entering the labyrinth (and every
 // repeat visit) is almost instant. Nothing heavy is fetched on a save-data or
 // slow connection; the worker still caches whatever the visitor loads anyway.
+import { IS_TEST } from "./stage";
+
 type Conn = { saveData?: boolean; effectiveType?: string };
 
 export function slowConnection() {
@@ -21,7 +23,8 @@ const whenIdle = (fn: () => void) => {
 const NO_WARM = /^\/(the-eye|architects|chamber|admin|room)(\/|$)/;
 
 export function startWarm() {
-  if (!import.meta.env.PROD || !("serviceWorker" in navigator) || NO_WARM.test(location.pathname)) return;
+  // the test site never caches: every push should show up on the next reload
+  if (!import.meta.env.PROD || IS_TEST || !("serviceWorker" in navigator) || NO_WARM.test(location.pathname)) return;
   whenIdle(async () => {
     try {
       await navigator.serviceWorker.register("/sw.js");

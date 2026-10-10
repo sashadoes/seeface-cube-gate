@@ -13,9 +13,10 @@
 // TEMPORARY TRANSPORT: the public relay, like everything else; it moves to our
 // own server with the same message shape.
 import { shareRetained } from "./online";
+import { RELAY } from "./stage";
 
 // dev builds use their own topic so testing never shows up on the live /the-eye
-export const JOURNAL_TOPIC = import.meta.env.DEV ? "seeface1/dev/v1/stat" : "seeface1/lab/v1/stat";
+export const JOURNAL_TOPIC = import.meta.env.DEV ? "seeface1/dev/v1/stat" : `${RELAY}/lab/v1/stat`;
 const KEY = "sf1.journal";
 const NICK_KEY = "seeface-lab-nick";
 const VIBE_KEY = "seeface-vibe";
