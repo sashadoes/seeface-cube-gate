@@ -53,7 +53,8 @@ import { createShip } from "./ship";
 import { createNotes, type Note } from "./notes";
 import { createFx } from "./fx";
 import { myVibe, trackVibe } from "./vibes";
-import { createImmersive } from "./immersive";
+import { createImmersive, setHeadphones } from "./immersive";
+import { createSoundscape } from "./soundscape";
 import { LANGS, lang, setLang, t as tr, useLang } from "../i18n";
 import { createMarket, type Listing } from "./market";
 import { createPlaces, PLACE_NAMES as PLACE_TITLES, setChampions, setStalls } from "./places";
@@ -756,6 +757,8 @@ function Game({ nick }: { nick: string }) {
     inputRef.current = input;
     const radio = createRadio();
     const sound = createSound();
+    // zone beds, 3D drips/birds/embers around you, and the reward ladder
+    const scape = createSoundscape(sound);
     // the teleport campaign: Ministry broadcast booths + the little helpers
     const ministry = createMinistry(sound);
     const helpers = createHelpers(sound);
@@ -1278,6 +1281,8 @@ function Game({ nick }: { nick: string }) {
     inputEvents.forEach((e) => window.addEventListener(e, poke, { passive: true }));
     const offSettings = onSettings((st) => {
       sound.setVolumes(st);
+      scape.setHeadphones(st.headphones);
+      setHeadphones(st.headphones);
       radio.setVolume(st.radio * st.master);
       sfx.forEach(([h, base]) => h.volume(base * st.effects * st.master));
       const pf = profile(st.quality);
@@ -1448,7 +1453,7 @@ function Game({ nick }: { nick: string }) {
       if (r.quest) {
         earn(r.quest.reward, "quest");
         sayRef.current(tr("quest done: {text} · +{reward} ◈", { text: tr(r.quest.text), reward: r.quest.reward }));
-        sound.chime();
+        scape.reward("quest");
         track(`quest-${r.quest.kind}`);
         const ql = questsRef.current!.list();
         setQuestList((prev) => (JSON.stringify(prev) === JSON.stringify(ql) ? prev : ql));
@@ -1591,7 +1596,7 @@ function Game({ nick }: { nick: string }) {
       trails: () => trails,
     } satisfies Partial<MapSource>);
     if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { helpers, ministry });
-    if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails, dream });
+    if (import.meta.env.DEV) Object.assign((window as unknown as { __lab: object }).__lab, { teleport, trails, dream, scape, sound });
     // twists: unpredictable things that happen to you
     const twists = createTwists();
     const doppel = new THREE.Sprite(new THREE.SpriteMaterial({ map: demonTexture(demonOf(presence.me)), transparent: true, depthWrite: false, opacity: 0 }));
@@ -1680,11 +1685,12 @@ function Game({ nick }: { nick: string }) {
             hold(pk.colour!, pk.shape!);
             quest("relic");
             found();
-            sound.chime();
+            scape.reward("relic");
             track("relic-picked");
           } else if (pk.kind === "money") {
             earn(1, "money");
             spinSfx.play();
+            scape.reward("coin");
           } else if (!hasKnife) {
             hasKnife = true;
             track("knife-found");
@@ -1703,6 +1709,7 @@ function Game({ nick }: { nick: string }) {
           if (metres > nextBloodAt) {
             nextBloodAt += 100;
             earn(1, "walk");
+            scape.reward("walk");
           }
           bob += moved * (running ? 1.5 : 1.8);
           walkedSfx += moved;
@@ -1769,6 +1776,7 @@ function Game({ nick }: { nick: string }) {
       artLayer.update(pos.x, pos.z, dt);
       props.update(pos.x, pos.z, t);
       dream.update(pos.x, pos.z, t, dt, !!eventKind);
+      scape.update(dt, pos.x, pos.z, world.zone().kind, !!roomOf(Math.floor(pos.x / CELL), Math.floor(pos.z / CELL)));
       if (dream.event()?.gravity === "low") lowGravT = Math.max(lowGravT, 0.5);
       const gift = alive ? dream.touch(pos.x, pos.z) : null;
       if (gift === "blood1" || gift === "blood3") earn(gift === "blood3" ? 3 : 1, "dream");
@@ -2091,6 +2099,7 @@ function Game({ nick }: { nick: string }) {
           earn(1, "shard");
           quest("shards");
           shardSfx.play();
+          scape.reward("shard");
           track(`shard-${Math.min(shards, 60)}`);
           try {
             navigator.vibrate?.([20, 40, 80]);
@@ -2102,6 +2111,7 @@ function Game({ nick }: { nick: string }) {
             earn(3, "depth");
             world.setDepth(depth);
             shiftSfx.play();
+            scape.reward("depth");
             track(`depth-${Math.min(depth, 20)}`);
             el.classList.remove("shift");
             void el.offsetWidth;
@@ -3143,6 +3153,10 @@ function Game({ nick }: { nick: string }) {
                       <i>{Math.round(st[k] * 100)}</i>
                     </label>
                   ))}
+                  <label className="toggle">
+                    <span>{tr("🎧 headphones · hear sounds all around you")}</span>
+                    <input type="checkbox" checked={st.headphones} onChange={(e) => setSettings({ headphones: e.target.checked })} />
+                  </label>
                   <p className="note">{tr("the background music has its own switch, top left (♪ on / off).")}</p>
                 </>
               )}

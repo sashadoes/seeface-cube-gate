@@ -9,6 +9,7 @@ export type Settings = {
   radio: number; // the Hollow's static
   voices: number; // sirens, the Pop Queen's tune, choirs
   records: number; // gramophones + radio music
+  headphones: boolean; // 3D (HRTF) placement of sounds: above, behind, all around
   // game
   showNames: boolean;
   showChat: boolean;
@@ -33,6 +34,7 @@ export const DEFAULTS: Settings = {
   radio: 1,
   voices: 1,
   records: 0.9,
+  headphones: false,
   showNames: true,
   showChat: true,
   showHints: true,

@@ -8,8 +8,13 @@
 import * as THREE from "three";
 
 let hrtf = false;
+let phones = false;
 /** gramophones ask this when they start a record */
-export const useHrtf = () => hrtf;
+export const useHrtf = () => hrtf || phones;
+/** the player said they wear headphones: 3D sound on any device */
+export const setHeadphones = (v: boolean) => {
+  phones = v;
+};
 
 export function createImmersive(renderer: THREE.WebGLRenderer, scene: THREE.Scene, lantern: THREE.SpotLight, audio: { ctx: AudioContext; out: AudioNode }) {
   let on = false;

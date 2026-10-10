@@ -34,7 +34,15 @@ export function createSound(): Sound {
   const ctx = new Ctx();
   const master = ctx.createGain();
   master.gain.value = 0.9;
-  master.connect(ctx.destination);
+  // a gentle limiter at the very end: many sounds at once (a reward streak in the
+  // rain next to a gramophone) never clip or crackle, they just sit a bit lower
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -10;
+  limiter.knee.value = 8;
+  limiter.ratio.value = 6;
+  limiter.attack.value = 0.004;
+  limiter.release.value = 0.25;
+  master.connect(limiter).connect(ctx.destination);
   // groups the player can turn up/down in the settings
   const bus = () => {
     const g = ctx.createGain();
@@ -322,7 +330,7 @@ export function createSound(): Sound {
     },
     tap() {
       const d = ctx.createMediaStreamDestination();
-      master.connect(d);
+      limiter.connect(d);
       return d.stream;
     },
   };
