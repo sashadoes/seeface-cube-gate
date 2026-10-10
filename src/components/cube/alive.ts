@@ -3,7 +3,9 @@
 // cube's rotation engine (viewport) and the pointer, then drives:
 //
 //   cube  – breathing, floating, a heartbeat glow, leaning toward / away from
-//           the pointer (curious or shy personality), twitches when ignored
+//           the pointer (curious or shy personality), twitches when ignored;
+//           the glow charges up white while the world loads (prelaunch.ts)
+//           and, once it's ready, breathes slow and warm: the next spin opens
 //   walls – tunnel speed + direction follow the spin, colours follow the tilt,
 //           everything dims and slows when the visitor goes idle, violent spins
 //           sometimes swap in a newly generated image
@@ -12,6 +14,7 @@
 import { randomIntFromInterval as rnd } from "../helper.js";
 import { memory } from "./memory";
 import { getTrance, MAX_TRANCE } from "./trance";
+import { onPrelaunch } from "./prelaunch";
 
 
 type Viewport = {
@@ -49,6 +52,8 @@ let speedMul = 1; // set by mystery events
 let lastTwitch = 0;
 let swapping = false;
 let t0 = performance.now();
+let charge = 0, chargeTarget = 0; // 0..1 how much of the world is loaded (eased)
+let ready = false;
 
 // Per-visit personality: randomised once, sometimes flips.
 const persona = {
@@ -130,7 +135,14 @@ function frame(now: number) {
     const g = Math.round(lerp(220, 40, energy));
     const b = Math.round(lerp(255, 60, energy));
     const a = (0.25 + thump * 0.45) * (1 - idle * 0.7);
-    cube.style.filter = `drop-shadow(0 0 ${glow.toFixed(1)}px rgba(${r},${g},${b},${a.toFixed(2)}))`;
+    // the charge: a second, steady white-gold halo that grows as the world loads;
+    // when it's ready it breathes slowly (the cube is waiting for your next spin)
+    charge = lerp(charge, chargeTarget, Math.min(1, dt * 2.5)); // time-based: same feel at any frame rate
+    const wait = ready ? 0.7 + 0.3 * Math.sin((now / 1400) * Math.PI) : 1;
+    const ca = charge * 0.65 * wait;
+    const cg = 4 + charge * 26 * wait;
+    const halo = ca > 0.01 ? ` drop-shadow(0 0 ${cg.toFixed(1)}px rgba(255,244,214,${ca.toFixed(2)}))` : "";
+    cube.style.filter = `drop-shadow(0 0 ${glow.toFixed(1)}px rgba(${r},${g},${b},${a.toFixed(2)}))${halo}`;
 
     // ignored for a while → it fidgets on its own
     if (idle > 0.3 && now - lastTwitch > rnd(2500, 6000)) {
@@ -185,6 +197,10 @@ export function initAlive(opts: { viewport: Viewport }) {
   // JS drives the tunnel now; switch off the CSS pan animation
   walls.forEach((w) => (w.style.animation = "none"));
   setWallImage(seedImage());
+  onPrelaunch((s) => {
+    chargeTarget = s.progress;
+    ready = s.ready;
+  });
 
   window.addEventListener("mousemove", onPointer, { passive: true });
   window.addEventListener("touchmove", onPointer, { passive: true });

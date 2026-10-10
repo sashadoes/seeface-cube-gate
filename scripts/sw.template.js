@@ -4,8 +4,8 @@
 //   · picsum wall/floor/art images      → cache first (only proper CORS answers), max PICS_MAX
 //   · pages (HTML)                      → network first, the cached copy when offline
 //   · everything else (/api, /the-eye, /dream, music, videos, analytics) → untouched
-// "warm" (sent by the page when the browser is idle and the connection is good)
-// downloads the labyrinth's first-frame files at low priority.
+// "warm" (sent by the cube page right away, other pages when the browser is
+// idle) downloads the labyrinth's first-frame files at low priority.
 const VERSION = "__VERSION__";
 const WARM = __WARM__;
 const ASSETS = `sf-assets-${VERSION}`;
@@ -29,24 +29,44 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+// The cube page asks for progress ("warm-progress" {done, total}) so the cube can
+// charge up while it downloads, and "warmed" when it's all there. `images: false`
+// (slow / save-data connections) skips the wall pictures but still fetches the
+// code and sounds, which the labyrinth needs anyway.
 let warming = null;
+let progress = { done: 0, total: 0 };
+const watchers = new Set();
+const tell = (msg) => watchers.forEach((c) => c.postMessage(msg));
 self.addEventListener("message", (e) => {
-  if (e.data?.type !== "warm" || warming) return;
-  warming = (async () => {
-    for (const url of WARM) {
-      const req = new Request(url, url.startsWith("http") ? { mode: "cors", credentials: "omit" } : {});
-      const cache = await caches.open(cacheFor(new URL(req.url)));
-      if (await cache.match(req)) continue;
-      try {
-        // one at a time and low priority, so the page itself never waits
-        const res = await fetch(req, { priority: "low" });
-        if (keepable(res)) await cache.put(req, res);
-      } catch {
-        // offline or blocked: try again on the next visit
+  if (e.data?.type !== "warm") return;
+  if (e.source) {
+    watchers.add(e.source);
+    e.source.postMessage({ type: "warm-progress", ...progress });
+  }
+  if (!warming) {
+    const list = e.data.images === false ? WARM.filter((u) => !u.startsWith("http")) : WARM;
+    progress = { done: 0, total: list.length };
+    warming = (async () => {
+      for (const url of list) {
+        const req = new Request(url, url.startsWith("http") ? { mode: "cors", credentials: "omit" } : {});
+        const cache = await caches.open(cacheFor(new URL(req.url)));
+        if (!(await cache.match(req))) {
+          try {
+            // one at a time and low priority, so the page itself never waits
+            const res = await fetch(req, { priority: "low" });
+            if (keepable(res)) await cache.put(req, res);
+          } catch {
+            // offline or blocked: try again on the next visit
+          }
+        }
+        progress.done++;
+        tell({ type: "warm-progress", ...progress });
       }
-    }
-    if (e.source) e.source.postMessage({ type: "warmed", version: VERSION });
-  })();
+      tell({ type: "warmed", version: VERSION });
+      watchers.clear();
+      warming = null; // a later visit's message re-checks (all cache hits: instant)
+    })();
+  }
   e.waitUntil(warming);
 });
 

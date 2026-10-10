@@ -3,7 +3,7 @@
 // The tier itself lives in settings.quality like before.
 import type { Tier } from "./tiers";
 
-export type GraphicsCheck = { device: string; recommended: Tier; fps: number; chosen: "recommended" | "manual"; at: number };
+export type GraphicsCheck = { device: string; recommended: Tier; fps: number; chosen: "recommended" | "manual" | "auto"; at: number };
 
 const KEY = "seeface-graphics";
 

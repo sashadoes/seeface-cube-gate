@@ -218,8 +218,10 @@ export function monoTexture(zone: ZoneDef, variant: number, opts: { floor?: bool
   tiny.src = url(32);
   const img = new Image();
   img.crossOrigin = "anonymous";
+  const asked = performance.now();
   img.onload = async () => {
     full = true;
+    notePicture(performance.now() - asked);
     g.filter = `grayscale(1) contrast(${zone.contrast}) brightness(${zone.bright * (opts.floor ? 0.75 : 1)})`;
     g.drawImage(img, 0, 0, s, s);
     g.filter = "none";
@@ -248,6 +250,14 @@ export function monoTexture(zone: ZoneDef, variant: number, opts: { floor?: bool
   img.src = url(512); // always 512: the same file the Service Worker keeps for every tier
   return t;
 }
+
+// How long a wall picture really takes to arrive here (eased average, ms): the
+// walk-ahead preloading (world.ts lookAhead) reaches further on a slow network.
+let picMsAvg = 600;
+function notePicture(ms: number) {
+  picMsAvg = picMsAvg * 0.7 + Math.min(ms, 20_000) * 0.3;
+}
+export const pictureMs = () => picMsAvg;
 
 /** Resolves once a location texture's full picture is in (see monoTexture). */
 export const textureReady = (t: THREE.Texture | null | undefined): Promise<void> => (t?.userData.ready as Promise<void> | undefined) ?? Promise.resolve();

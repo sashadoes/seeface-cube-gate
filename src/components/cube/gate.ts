@@ -1,17 +1,20 @@
 // The gate: the cube page is the way into the 3D labyrinth.
 // Two ways in (never explained on screen):
-//   · play: every spin, tap, touch or key press counts, and after a random
-//     10–20 of them (new number every visit, ~15 on average) the gate opens.
+//   · play: while you play with the cube it loads the world (prelaunch.ts) and
+//     charges up. Once it's ready (and you've touched it at least
+//     MIN_ACTIONS times), your next spin, tap or key press opens the gate.
 //   · or the code 1 9 9 4 opens it at once: spun in (digits count across the
 //     4-digit line resets, symbol faces are skipped) or typed on a keyboard.
-// The room glitches, the cube rushes at you, a light tears open with the logo
-// burning through, and you fall into /labyrinth.
-import { Howl } from "howler";
+// The cube's click doubles and rises (portal.ts) while the room glitches, the
+// cube rushes at you, rings burst on every click, a light tears open with the
+// logo burning through, and you fall into /labyrinth.
 import { track } from "../../analytics";
+import { prelaunchState } from "./prelaunch";
+import { playPortal, IMPACT_S } from "./portal";
 import "./Gate.scss";
 
 const GATE_CODE = "1994";
-const ACTIONS_TO_ENTER = 10 + Math.floor(Math.random() * 11); // 10–20
+const MIN_ACTIONS = 3;
 let opening = false;
 let digits = "";
 let typed = "";
@@ -20,8 +23,9 @@ let actions = 0;
 function act() {
   if (opening || location.pathname !== "/") return;
   actions += 1;
-  if (actions >= ACTIONS_TO_ENTER) {
+  if (actions >= MIN_ACTIONS && prelaunchState().ready) {
     track("gate-actions");
+    track(`gate-after-${actions <= 5 ? "3-5" : actions <= 12 ? "6-12" : "13+"}`);
     setTimeout(openGate, 700); // let the last spin land first
   }
 }
@@ -53,13 +57,7 @@ export function openGate() {
   if (opening) return;
   opening = true;
   track("gate-opened");
-  new Howl({ src: ["/sounds/BellClick1.mp3"], volume: 0.8 }).play();
-  setTimeout(() => new Howl({ src: ["/sounds/MagicClick1.mp3"], volume: 0.8 }).play(), 700);
-  try {
-    navigator.vibrate?.([60, 40, 60, 40, 400]);
-  } catch {
-    // unsupported
-  }
+  if (!prelaunchState().ready) track("gate-before-ready"); // the code, typed before it loaded
 
   // 1. the room glitches
   document.body.classList.add("gate-glitch");
@@ -72,7 +70,30 @@ export function openGate() {
   tear.innerHTML = '<div class="gate-light"></div><img src="/imgs/seeface-logo-transparent.png" alt="" />';
   document.body.appendChild(tear);
 
+  // every doubled click: a ring bursts out of the cube and the phone ticks
+  playPortal((k) => {
+    const ring = document.createElement("i");
+    ring.className = "gate-ring";
+    ring.style.setProperty("--k", String(k));
+    tear.appendChild(ring);
+    setTimeout(() => ring.remove(), 1200);
+    try {
+      navigator.vibrate?.(8 + k * 2);
+    } catch {
+      // unsupported
+    }
+  });
+  // the impact: white-out and one long buzz
+  setTimeout(() => {
+    tear.classList.add("gate-impact");
+    try {
+      navigator.vibrate?.([0, 30, 380]);
+    } catch {
+      // unsupported
+    }
+  }, IMPACT_S * 1000);
+
   setTimeout(() => {
     location.href = "/labyrinth?from=gate";
-  }, 3200);
+  }, IMPACT_S * 1000 + 900);
 }

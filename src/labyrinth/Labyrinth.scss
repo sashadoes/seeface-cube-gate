@@ -2592,3 +2592,32 @@
     color: #b9a0ff;
   }
 }
+
+// the arrival light (from the cube's gate): you land out of the same white the
+// gate burned to. "in" holds a soft haze (the first-visit device check runs
+// behind it, ~3.5 s), "out" lifts it. Opacity only, so it costs nothing.
+.lab-arrive {
+  position: fixed;
+  inset: 0;
+  z-index: 1400; // over the HUD, under the teleport transit
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, #fff 0%, #fff8ec 45%, #e9e0ff 100%);
+
+  &.in {
+    animation: lab-arrive-in 3.2s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  }
+
+  &.out {
+    animation: lab-arrive-out 1.4s ease-out forwards;
+  }
+}
+
+@keyframes lab-arrive-in {
+  0% { opacity: 1; }
+  100% { opacity: 0.22; }
+}
+
+@keyframes lab-arrive-out {
+  0% { opacity: var(--from, 0.22); }
+  100% { opacity: 0; }
+}

@@ -65,3 +65,43 @@ body.gate-glitch #wrapper {
   55% { opacity: 1; }
   100% { opacity: 1; transform: scale(1.6); filter: drop-shadow(0 0 60px #fff) brightness(3); }
 }
+
+// the doubled clicks (portal.ts): a ring bursts from the centre on each, bigger
+// and brighter as they close in
+.gate-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40vmin;
+  height: 40vmin;
+  margin: -20vmin 0 0 -20vmin;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 248, 230, 0.9);
+  box-shadow: 0 0 24px rgba(255, 240, 210, 0.7), inset 0 0 24px rgba(200, 184, 255, 0.5);
+  opacity: 0;
+  animation: gate-ring 1.1s cubic-bezier(0.1, 0.6, 0.3, 1) forwards;
+}
+
+@keyframes gate-ring {
+  0% { transform: scale(0.2); opacity: calc(0.35 + var(--k) * 0.06); }
+  100% { transform: scale(calc(2.4 + var(--k) * 0.25)); opacity: 0; }
+}
+
+// the impact: everything burns to white; the labyrinth opens out of the same white
+.gate-tear.gate-impact::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: gate-white 0.5s ease-out forwards;
+}
+
+@keyframes gate-white {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gate-ring { display: none; }
+}
