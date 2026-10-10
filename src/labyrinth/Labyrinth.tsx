@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Howl } from "howler";
 import { createWorld } from "./world";
+import { dictate, voiceAvailable, type DictateFail, type Dictation } from "./dictate";
 import { createInput, type Input } from "./controls";
 import { createHunter } from "./hunter";
 import { createResidents } from "./residents";
@@ -391,6 +392,7 @@ function Game({ nick }: { nick: string }) {
     };
   }, []);
   const [wishOpen, setWishOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   // meeting someone from the map: who you're walking to, and messages like "x is coming to find you"
   const meetRef = useRef<string | null>(null);
@@ -510,7 +512,8 @@ function Game({ nick }: { nick: string }) {
     setChat((c) => [...c.slice(-4), line]);
     setLog((c) => [...c.slice(-59), line]);
     if (!l.mine && !chatOpenRef.current) setUnread((n) => n + 1);
-    setTimeout(() => setChat((c) => c.filter((x) => x.key !== line.key)), 25_000);
+    // floats like a live stream's chat: fades out by itself (the CSS fade ends at 16 s)
+    setTimeout(() => setChat((c) => c.filter((x) => x.key !== line.key)), 16_000);
   };
   useEffect(() => {
     if (chatOpen) logEnd.current?.scrollIntoView({ block: "end" });
@@ -615,11 +618,113 @@ function Game({ nick }: { nick: string }) {
         const heard = aiRef.current?.hear(text, here.x, here.z);
         if (heard) setTimeout(() => addLine({ id: `ai-${heard.name}`, nick: `◇ ${heard.name}`, text: heard.reply }), 1400);
       }
-      if (said === undefined) setDraft("");
-      chatInput.current?.focus(); // stay in the conversation
+      if (said === undefined) {
+        setDraft("");
+        chatInput.current?.focus(); // stay in the conversation (typed lines only: never pop the keyboard up after speaking)
+      }
       track("chat-said");
     } else say(tr("that can't be said here (or slow down)"), true);
   };
+  // ---------------------------------------------------------------- say it, it appears as text
+  // Tap 🎙 and talk: the words appear as you speak, quiet for ~1.4 s sends them (a short moment to ✕ first).
+  type Voice = { phase: "off" | "listening" | "thinking" | "sending"; text: string };
+  const [voice, setVoice] = useState<Voice>({ phase: "off", text: "" });
+  const [voiceLevel, setVoiceLevel] = useState(0);
+  const [voiceOk, setVoiceOk] = useState<boolean | null>(null);
+  const dictRef = useRef<Dictation | null>(null);
+  const sendTimer = useRef(0);
+  const spoken = useRef<string[]>([]); // lines still waiting for the chat's 2.5 s pace
+  const spokenTimer = useRef(0);
+  useEffect(() => {
+    void voiceAvailable().then(setVoiceOk);
+  }, []);
+  useEffect(() => {
+    if (chatOpen && voice.phase !== "off") logEnd.current?.scrollIntoView({ block: "end" });
+  }, [chatOpen, voice.phase]);
+  /** a long sentence goes out as several chat lines (each ≤ 80 letters), at the chat's own pace */
+  const sendSpoken = (text: string) => {
+    const words = text.replace(/\s+/g, " ").trim().split(" ");
+    let line = "";
+    for (const wd of words) {
+      if (line && (line + " " + wd).length > 80) {
+        spoken.current.push(line);
+        line = "";
+      }
+      line = line ? `${line} ${wd}` : wd.slice(0, 80);
+    }
+    if (line) spoken.current.push(line);
+    const next = () => {
+      const l = spoken.current.shift();
+      if (!l) return void (spokenTimer.current = 0);
+      sendChatRef.current(l);
+      spokenTimer.current = window.setTimeout(next, 2600);
+    };
+    if (!spokenTimer.current) next();
+  };
+  const voiceFail = (why: DictateFail) => {
+    dictRef.current = null;
+    setVoice({ phase: "off", text: "" });
+    setVoiceLevel(0);
+    if (why === "nothing") say(tr("couldn't hear that. tap 🎙 and talk."), true);
+    else if (why === "blocked") say(tr("the microphone is blocked. allow it for this page, or tap ⌨ to type."), true);
+    else if (why === "off") {
+      setVoiceOk(false);
+      say(tr("voice isn't available here. tap ⌨ to type."), true);
+    } else say(tr("the voice got lost. try again."), true);
+    track(`voice-fail-${why}`);
+  };
+  const startVoice = () => {
+    if (dictRef.current) return dictRef.current.finish(); // tapping again = send now
+    if (voice.phase === "sending") return sendVoiceNow();
+    setVoice({ phase: "listening", text: "" });
+    track("voice-start");
+    dictRef.current = dictate({
+      onText: (text) => setVoice({ phase: "listening", text }),
+      onLevel: setVoiceLevel,
+      onThinking: () => setVoice((v) => ({ ...v, phase: "thinking" })),
+      onDone: (text) => {
+        dictRef.current = null;
+        setVoiceLevel(0);
+        setVoice({ phase: "sending", text });
+        window.clearTimeout(sendTimer.current);
+        sendTimer.current = window.setTimeout(sendVoiceNowRef.current, 1100);
+      },
+      onFail: voiceFail,
+    });
+  };
+  const sendVoiceNow = () => {
+    window.clearTimeout(sendTimer.current);
+    setVoice((v) => {
+      if (v.phase === "sending" && v.text) {
+        sendSpoken(v.text);
+        track("voice-said");
+      }
+      return { phase: "off", text: "" };
+    });
+  };
+  const sendVoiceNowRef = useRef(sendVoiceNow);
+  sendVoiceNowRef.current = sendVoiceNow;
+  const cancelVoice = () => {
+    dictRef.current?.cancel();
+    dictRef.current = null;
+    window.clearTimeout(sendTimer.current);
+    setVoice({ phase: "off", text: "" });
+    setVoiceLevel(0);
+    track("voice-cancel");
+  };
+  const startVoiceRef = useRef(startVoice);
+  startVoiceRef.current = startVoice;
+  const sendChatRef = useRef(sendChat);
+  sendChatRef.current = sendChat;
+  useEffect(
+    () => () => {
+      dictRef.current?.cancel();
+      window.clearTimeout(sendTimer.current);
+      window.clearTimeout(spokenTimer.current);
+    },
+    []
+  );
+
   const emote = (k: Emote) => {
     presenceRef.current?.emote(k);
     questRef.current("emote");
@@ -791,6 +896,7 @@ function Game({ nick }: { nick: string }) {
         e.preventDefault();
         setChatOpen(true);
       }
+      if (e.code === "KeyV") startVoiceRef.current();
       if (e.code === "KeyF") strikeRef.current();
       if (e.code === "KeyG") dropRef.current();
       if (e.code === "KeyP") snapRef.current();
@@ -2554,82 +2660,54 @@ function Game({ nick }: { nick: string }) {
         <i className="ai"> · ◇ {(aiRef.current?.count() ?? 6) + (npcRef.current?.count() ?? 0)}</i>
       </div>
 
-      {/* thumb controls (phones) + signal / invite (everyone) */}
+      {/* the right thumb: only what this moment needs (strike, drop), and everything else behind ⋯.
+          The microphone and the chat live with the chat (bottom). */}
       <div className="lab-actions" onPointerDown={stop} onPointerUp={stop}>
-        <button className="lab-btn invite" onClick={() => (clipSupported() ? setInviteMenu((m) => !m) : void invite())} aria-label={tr("invite a friend")}>
-          {invited ? "✓" : "⊕"}
-        </button>
         {hud.knife && (
           <button className="lab-btn knife" onClick={() => strikeRef.current()} aria-label={tr("strike")}>
             †
           </button>
         )}
-        {isPhone && (
-          <button
-            className="lab-btn jump"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              if (inputRef.current) inputRef.current.jumpPressed = true;
-            }}
-            aria-label={tr("jump")}
-          >
-            ⤒
-          </button>
-        )}
-        <button
-          className={"lab-btn snap" + (hud.event ? " event" : "")}
-          onClick={() => snapRef.current()}
-          aria-label={tr("snapshot")}
-          disabled={snapState === "busy"}
-        >
-          {snapState === "done" ? "✓" : "⊡"}
-        </button>
         {hud.holding && (
           <button className="lab-btn drop" onClick={() => dropRef.current()} aria-label={tr("drop the relic")}>
             ⤓
           </button>
         )}
-        <button
-          className="lab-btn bag"
-          onClick={() => {
-            setNotesOpen(notesRef.current?.inbox().length ? "inbox" : "write");
-            notesRef.current?.markRead();
-          }}
-          aria-label={tr("notes")}
-        >
-          ✉{(notesRef.current?.unread() ?? 0) > 0 && <small>{notesRef.current?.unread()}</small>}
-        </button>
-        <button className="lab-btn post" onClick={() => setComposer({ mode: "photo", img: null })} aria-label={tr("post a photo or drawing on the wall")}>
-          ⊞
-        </button>
-        <button className="lab-btn bag" onClick={() => setBagOpen(true)} aria-label={tr("inventory")}>
-          ◫{bagCount > 0 && <small>{bagCount}</small>}
-        </button>
-        <button className="lab-btn map" onClick={() => setMapOpen(true)} aria-label={tr("map")}>
-          ◎{cards > 0 && <small>⟡{cards}</small>}
-        </button>
-        {hud.blood >= WISH_COST && (
-          <button className="lab-btn wish" onClick={() => setWishOpen(true)} aria-label={tr("make a wish")}>
-            ✦
-          </button>
-        )}
-        <button className="lab-btn signal" onClick={() => signalRef.current()} aria-label={tr("signal")}>
-          ✺
-        </button>
-        {isPhone && (
-          <button
-            className={"lab-btn run" + (hud.stamina < 30 ? " tired" : "")}
-            onPointerDown={hold(true)}
-            onPointerUp={hold(false)}
-            onPointerCancel={hold(false)}
-            onPointerLeave={hold(false)}
-            aria-label={tr("run")}
-            style={{ "--stamina": `${hud.stamina}%` } as React.CSSProperties}
-          >
-            ➶
-          </button>
-        )}
       </div>
+
+      {moreOpen && (
+        <div className="lab-more" onPointerDown={stop} onPointerUp={stop} onClick={() => setMoreOpen(false)}>
+          <div className="lab-more-sheet" onClick={(e) => e.stopPropagation()}>
+            {(
+              [
+                ["◎", tr("map") + (cards > 0 ? ` · ⟡${cards}` : ""), () => setMapOpen(true)],
+                [invited ? "✓" : "⊕", tr("invite a friend"), () => (clipSupported() ? setInviteMenu((m) => !m) : void invite())],
+                ["⊡", tr("snapshot"), () => snapRef.current()],
+                ["✉", tr("notes") + ((notesRef.current?.unread() ?? 0) > 0 ? ` · ${notesRef.current?.unread()}` : ""), () => {
+                  setNotesOpen(notesRef.current?.inbox().length ? "inbox" : "write");
+                  notesRef.current?.markRead();
+                }],
+                ["⊞", tr("post a photo or drawing on the wall"), () => setComposer({ mode: "photo", img: null })],
+                ["◫", tr("inventory") + (bagCount > 0 ? ` · ${bagCount}` : ""), () => setBagOpen(true)],
+                ...(hud.blood >= WISH_COST ? [["✦", tr("make a wish"), () => setWishOpen(true)] as const] : []),
+                ["✺", tr("signal"), () => signalRef.current()],
+                ...(isPhone ? [["⤒", tr("jump"), () => inputRef.current && (inputRef.current.jumpPressed = true)] as const] : []),
+              ] as const
+            ).map(([g, label, go]) => (
+              <button
+                key={g}
+                onClick={() => {
+                  setMoreOpen(false);
+                  go();
+                }}
+              >
+                <span className="g">{g}</span>
+                <span className="l">{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {wishOpen && (
         <div className="lab-wish" onPointerDown={stop} onPointerUp={stop}>
@@ -3319,6 +3397,18 @@ function Game({ nick }: { nick: string }) {
                   )}
                 </div>
               ))}
+              {voice.phase !== "off" && (
+                <div className="lab-chat-row mine">
+                  <div className={"lab-chat-line lab-chat-draft " + voice.phase}>
+                    {voice.text || (voice.phase === "thinking" ? tr("turning your voice into words…") : tr("listening…"))}
+                    {voice.phase === "listening" && <span className="caret" />}
+                    <button className="lab-chat-draft-x" onClick={cancelVoice} aria-label={tr("cancel")}>
+                      ×
+                    </button>
+                    {voice.phase === "sending" && <span className="lab-chat-draft-bar" />}
+                  </div>
+                </div>
+              )}
               <div ref={logEnd} />
             </div>
             <div className="lab-quick">
@@ -3335,10 +3425,20 @@ function Game({ nick }: { nick: string }) {
                 sendChat();
               }}
             >
-              <input ref={chatInput} autoFocus value={draft} maxLength={80} enterKeyHint="send" onChange={(e) => setDraft(e.target.value)} placeholder={tr("type a message…")} />
-              <button type="submit" className="lab-chat-send" disabled={!draft.trim()} aria-label={tr("send")}>
-                ➝
-              </button>
+              {/* phones with a voice: no keyboard popping up by itself; the 🎙 is the way to talk */}
+              <input ref={chatInput} autoFocus={!isPhone || voiceOk === false} value={draft} maxLength={80} enterKeyHint="send" onChange={(e) => setDraft(e.target.value)} placeholder={tr("type a message…")} />
+              {!draft.trim() && voiceOk !== false ? (
+                <button type="button" className={"lab-chat-send lab-chat-mic " + voice.phase} onClick={startVoice} aria-label={voice.phase === "off" ? tr("speak") : tr("send")} aria-pressed={voice.phase !== "off"}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+                  </svg>
+                </button>
+              ) : (
+                <button type="submit" className="lab-chat-send" disabled={!draft.trim()} aria-label={tr("send")}>
+                  ➝
+                </button>
+              )}
             </form>
             <div className="lab-emotes">
               {EMOTES.map((k) => (
@@ -3355,13 +3455,50 @@ function Game({ nick }: { nick: string }) {
                 <b>{l.mine ? tr("you") : l.nick}</b> {l.text}
               </button>
             ))}
-            <button className="lab-chat-open" onClick={() => setChatOpen(true)} aria-label={tr("open chat")}>
-              <span className="lab-chat-icon">❝</span> {tr("chat")}
-              {unread > 0 && <span className="lab-chat-badge">{unread > 9 ? "9+" : unread}</span>}
-            </button>
+            {voice.phase !== "off" && (
+              <div className={"lab-chat-line lab-chat-draft " + voice.phase}>
+                <b>{tr("you")}</b>{" "}
+                {voice.text || (voice.phase === "thinking" ? tr("turning your voice into words…") : tr("listening…"))}
+                {voice.phase === "listening" && <span className="caret" />}
+                <button className="lab-chat-draft-x" onClick={cancelVoice} aria-label={tr("cancel")}>
+                  ×
+                </button>
+                {voice.phase === "sending" && <span className="lab-chat-draft-bar" />}
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {/* say it, it appears as text: one big microphone; typing and everything else are small */}
+      {!chatOpen && (
+        <div className="lab-talk" onPointerDown={stop} onPointerUp={stop}>
+          <button className="lab-talk-small" onClick={() => setMoreOpen((o) => !o)} aria-label={tr("more")}>
+            ⋯
+          </button>
+          <button className="lab-talk-small" onClick={() => setChatOpen(true)} aria-label={tr("open chat")}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="6.5" width="18" height="11" rx="2" />
+              <path d="M6.5 10h1M10 10h1M13.5 10h1M17 10h.5M6.5 13.5h1M9.5 14h5M17 13.5h.5" />
+            </svg>
+            {unread > 0 && <span className="lab-chat-badge">{unread > 9 ? "9+" : unread}</span>}
+          </button>
+          {voiceOk !== false && (
+            <button
+              className={"lab-mic " + voice.phase}
+              style={{ "--level": voiceLevel } as React.CSSProperties}
+              onClick={startVoice}
+              aria-label={voice.phase === "off" ? tr("speak") : tr("send")}
+              aria-pressed={voice.phase !== "off"}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
 
       {transit !== null && <Transit progress={transit} />}
 
