@@ -15,10 +15,11 @@ import { JOURNAL_TOPIC, type Journal } from "../insight";
 import { validJournal } from "./insights";
 import Players from "./Players";
 import "./Watch.scss";
+import { RELAY } from "../stage";
 
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
-const SITE = "seeface1/site/v1/here";
-const LAB = "seeface1/lab/v1";
+const SITE = `${RELAY}/site/v1/here`;
+const LAB = `${RELAY}/lab/v1`;
 const ALIVE_MS = 25_000;
 const STALE_MS = 6_000;
 const TRAIL_KEEP_MS = 15 * 60_000; // trails of people who left stay for 15 min

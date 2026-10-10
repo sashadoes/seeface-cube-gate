@@ -5,8 +5,10 @@
 // moves to our own server before launch). The MQTT library is loaded lazily so
 // the cube page stays fast.
 
+import { RELAY } from "./stage";
+
 const RELAYS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
-const TOPIC = "seeface1/site/v1/here";
+const TOPIC = `${RELAY}/site/v1/here`;
 const PULSE_MS = 10_000;
 const ALIVE_MS = 25_000;
 
