@@ -45,6 +45,7 @@ import { skyAt, SKY_NOTICE } from "./sky";
 import { createFlood } from "./flood";
 import { createHazards } from "./hazards";
 import { createAi, type AiResidents } from "./ai";
+import { createSasha } from "./sasha";
 import { NPC_ITEMS, brokeLine, createNpcs, keepsakes, lorePages, LORE, npcName, own, shopOf, type NpcId, type NpcReply, type Npcs } from "./npcs";
 import { createPosts, shrink, wallAhead, type Post } from "./posts";
 import { createShip } from "./ship";
@@ -1120,6 +1121,7 @@ function Game({ nick }: { nick: string }) {
         gramos: () => gramos,
         ai: () => ai,
         npcs: () => npcs,
+        sasha: () => sasha,
         perf,
       };
 
@@ -1283,6 +1285,8 @@ function Game({ nick }: { nick: string }) {
     const npcs = createNpcs();
     npcRef.current = npcs;
     world.scene.add(npcs.group);
+    const sasha = createSasha(() => sound.chime());
+    world.scene.add(sasha.group);
     // what the characters give: lore pages, a free tape, an "accidental" capsule
     npcGiveRef.current = (item) => {
       if (item === "mystery_capsule") addItem(randomItem(1));
@@ -1899,6 +1903,7 @@ function Game({ nick }: { nick: string }) {
       gramos.update(pos.x, pos.z, t);
       ai.update(dt, pos.x, pos.z);
       npcs.update(dt, pos.x, pos.z);
+      sasha.update(dt, pos.x, pos.z);
       posts.update(pos.x, pos.z);
       notes.update(pos.x, pos.z, t);
       ship.update(pos.x, pos.z, t);
